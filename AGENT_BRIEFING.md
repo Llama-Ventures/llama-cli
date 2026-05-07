@@ -35,7 +35,7 @@ Conversation produces value → that value flows somewhere. This is not optional
 | Brief blocks (text / link / embed / callout) | Pipeline | `llama brief add-text` / `add-link` / `add-callout` |
 | Insights, decisions, framework improvements | Wiki | `llama wiki save` (with attribution — see below) |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
-| Cross-team mentions | Inbox + email | `llama post <dealId> "@<persona> ..."` — server fires email + UI badge to the recipient |
+| Cross-team mentions | Inbox + email | `llama post <dealId> "@<teammate> ..."` — server fires email + UI badge to the recipient |
 
 ### Attribution format (required for wiki writes)
 
