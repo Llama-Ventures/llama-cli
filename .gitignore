@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+.omc/
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+.npm/
+*.tgz
