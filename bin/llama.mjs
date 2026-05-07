@@ -296,7 +296,12 @@ Setup:
   llama pitch start --name "Your Name" --email "you@company.com"
 
 Single message (non-interactive):
-  llama pitch say "We're building an AI dev tool for X..."
+  llama pitch say 'We have $8k MRR and 5 design partners'
+
+  ⚠ Tip: wrap pitch text in SINGLE quotes ('...') if it contains
+  characters like $, \`, or !. Double quotes let the shell expand
+  variables — e.g. "$8k MRR" becomes "k MRR" because $8 is empty.
+  Interactive REPL (\`llama pitch\`) doesn't have this problem.
 
 Upload a file (deck / pitch / one-pager):
   llama pitch upload ./deck.pdf
@@ -365,13 +370,23 @@ Caps (server-enforced):
   }
 
   if (action === "upload") {
-    const filePath = rest[0];
+    const { flags, positional } = parseFlags(rest);
+    const filePath = positional[0];
     if (!filePath) {
       throw new Error("pitch upload: file path required. Example: llama pitch upload ./deck.pdf");
     }
     process.stderr.write(`Uploading ${filePath}...\n`);
     const result = await uploadExternalFile(filePath);
-    print(result);
+    if (flags.json) {
+      print(result);
+    } else {
+      // Friendly default — drop server-internal fields (drive_file_id /
+      // sha256 / file_id). Founders just want "did it work + what does
+      // the agent do next." Pass --json for the full payload.
+      const sizeKb = (result.size / 1024).toFixed(1);
+      console.log(`✓ Uploaded ${result.filename} (${sizeKb} KB).`);
+      console.log(`  The intake agent can now reference this file in your pitch.`);
+    }
     return;
   }
 
