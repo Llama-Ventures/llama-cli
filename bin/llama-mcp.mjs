@@ -11,6 +11,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getAuthHeaders, readBriefing, request } from "../lib/client.mjs";
+import {
+  clearExternalSession,
+  getExternalSessionStatus,
+  sendExternalMessage,
+  startExternalSession,
+  uploadExternalFile,
+} from "../lib/external.mjs";
 
 // Wrap a request() call into the MCP CallToolResult shape. Catches errors
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
@@ -373,6 +380,169 @@ server.registerTool(
       };
     }
     return callApi(method, path, body);
+  }
+);
+
+// ============================================================
+// External pitch (founder intake) — no Llama Command token required
+// ============================================================
+//
+// These tools let an MCP-native agent (Claude Code / Cursor / OpenClaw /
+// Codex / etc.) help its user pitch a company to Llama Ventures by relaying
+// the conversation through our /api/external/* surface. True A2A: the
+// founder's agent talks to ours, structured intake gets captured, and a
+// 12-dimension verdict is returned.
+//
+// Anti-abuse caps are server-enforced (5 sessions/IP/day, 3/email/day,
+// 30min idle, 100 msg cap, 1M token cap, global daily cap). The MCP tools
+// surface those rejections as text back to the agent.
+
+function asTextResult(text, isError = false) {
+  return {
+    content: [{ type: "text", text }],
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
+server.registerTool(
+  "pitch_start",
+  {
+    description:
+      "Start a new pitch session with Llama Ventures' intake agent. Use this " +
+      "when a founder (the user) wants to pitch their company to Llama. " +
+      "Requires their name + email. Returns a session_id; the conversation " +
+      "is then maintained via pitch_send_message until the agent finalizes. " +
+      "Caps (server-enforced): 5 sessions/IP/day, 3 sessions/email/day, " +
+      "30min idle timeout. No Llama Command token needed.",
+    inputSchema: {
+      name: z.string().describe("the founder's full name (max 100 chars)"),
+      email: z.string().describe("the founder's email (deliverable, not a disposable domain)"),
+    },
+  },
+  async ({ name, email }) => {
+    try {
+      const session = await startExternalSession({ name, email });
+      return asTextResult(
+        JSON.stringify(
+          {
+            session_id: session.session_id,
+            name: session.name,
+            email: session.email,
+            started_at: session.started_at,
+            note: "Session active. Use pitch_send_message to relay the founder's pitch to Llama's intake agent. Use pitch_upload_file to attach decks / one-pagers. The intake agent will auto-finalize once it has enough signal.",
+          },
+          null,
+          2
+        )
+      );
+    } catch (err) {
+      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
+  }
+);
+
+server.registerTool(
+  "pitch_send_message",
+  {
+    description:
+      "Relay a message from the founder to Llama Ventures' intake agent. " +
+      "Returns the intake agent's reply. The intake agent will ask follow-up " +
+      "questions, request files (use pitch_upload_file), and eventually " +
+      "auto-finalize the pitch — at which point the response includes " +
+      "`finalize_payload` with a confirmation_summary and a 12-dimension " +
+      "verdict (overall green/yellow/red + per-dimension notes).",
+    inputSchema: {
+      message: z.string().describe("the founder's message (max 8000 chars)"),
+    },
+  },
+  async ({ message }) => {
+    try {
+      const result = await sendExternalMessage(message);
+      const out = {
+        text: result.text,
+        finalized: result.finalized,
+        finalize_payload: result.finalize_payload,
+      };
+      return asTextResult(JSON.stringify(out, null, 2));
+    } catch (err) {
+      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
+  }
+);
+
+server.registerTool(
+  "pitch_upload_file",
+  {
+    description:
+      "Attach a file (deck, one-pager, deck PDF, screenshot, etc.) to the " +
+      "active pitch session. Server allows pdf / pptx / ppt / docx / doc / " +
+      "xlsx / xls / png / jpg / webp / heic / heif / txt / md, max 50 MB, " +
+      "10 files per session. Returns a drive_file_id; the intake agent will " +
+      "pick the file up via list_uploaded_files / read_uploaded_file on its " +
+      "next turn (so call pitch_send_message with a one-line note like " +
+      "'I just uploaded our pitch deck' so the agent knows to look).",
+    inputSchema: {
+      path: z.string().describe("absolute or relative filesystem path to the file"),
+    },
+  },
+  async ({ path: filePath }) => {
+    try {
+      const result = await uploadExternalFile(filePath);
+      return asTextResult(JSON.stringify(result, null, 2));
+    } catch (err) {
+      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
+  }
+);
+
+server.registerTool(
+  "pitch_status",
+  {
+    description:
+      "Show the current pitch session state — session_id, started_at, idle " +
+      "minutes, finalized flag. Useful when the agent isn't sure if a " +
+      "session is still active.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const status = getExternalSessionStatus();
+      return asTextResult(JSON.stringify(status, null, 2));
+    } catch (err) {
+      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
+  }
+);
+
+server.registerTool(
+  "pitch_finalize",
+  {
+    description:
+      "Clear the local pitch session state. Note: this does not force the " +
+      "server-side intake agent to finalize — the agent decides that on its " +
+      "own once the pitch is sufficient. Use this for cleanup after a session " +
+      "ends, or to abandon a session early. The server-side session will " +
+      "naturally expire after 30min of idle.",
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      const before = getExternalSessionStatus();
+      clearExternalSession();
+      return asTextResult(
+        JSON.stringify(
+          {
+            cleared: before.active,
+            previous_session: before.active ? before : null,
+            note: "Local pitch session state cleared. Server-side session may still be active for ~30min until idle timeout.",
+          },
+          null,
+          2
+        )
+      );
+    } catch (err) {
+      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
   }
 );
 
