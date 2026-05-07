@@ -1,0 +1,8 @@
+.github/
+.gitignore
+.vscode/
+.idea/
+node_modules/
+*.tgz
+*.log
+.env*

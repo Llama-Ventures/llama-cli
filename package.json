@@ -1,0 +1,35 @@
+{
+  "name": "@llamaventures/cli",
+  "version": "1.0.0",
+  "description": "Llama Ventures CLI + MCP server. Internal team tool for command.llamaventures.vc.",
+  "type": "module",
+  "bin": {
+    "llama": "./bin/llama.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/SoujiOkita98/llama-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SoujiOkita98/llama-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SoujiOkita98/llama-cli/issues"
+  },
+  "keywords": [
+    "llama-ventures",
+    "cli"
+  ],
+  "author": "Llama Ventures, Inc.",
+  "publishConfig": {
+    "access": "public"
+  }
+}
