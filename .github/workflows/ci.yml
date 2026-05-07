@@ -36,7 +36,7 @@ jobs:
       - name: MCP server module loads cleanly
         run: node --check bin/llama-mcp.mjs
 
-      - name: MCP server boots + lists 16 tools
+      - name: MCP server boots + lists 20 tools
         run: |
           OUT=$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1.0.0"}}}' \
@@ -50,6 +50,7 @@ jobs:
           echo "$OUT" | grep -q '"name":"brief_add_text"'
           echo "$OUT" | grep -q '"name":"wiki_search"'
           echo "$OUT" | grep -q '"name":"timeline"'
+          echo "$OUT" | grep -q '"name":"pitch_start"'
           echo "$OUT" | grep -q '"name":"llama_api"'
 
       - name: Pack tarball + verify file allowlist
