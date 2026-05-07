@@ -4,7 +4,8 @@
   "description": "Llama Ventures CLI + MCP server. Internal team tool for command.llamaventures.vc.",
   "type": "module",
   "bin": {
-    "llama": "./bin/llama.mjs"
+    "llama": "./bin/llama.mjs",
+    "llama-mcp": "./bin/llama-mcp.mjs"
   },
   "files": [
     "bin/",
@@ -26,10 +27,15 @@
   },
   "keywords": [
     "llama-ventures",
-    "cli"
+    "cli",
+    "mcp",
+    "modelcontextprotocol"
   ],
   "author": "Llama Ventures, Inc.",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0"
   }
 }
