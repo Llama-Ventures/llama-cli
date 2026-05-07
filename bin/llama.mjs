@@ -148,10 +148,10 @@ auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
 Deals:
-  llama deal create "Company" --source <persona> --description "..." --website https://...
+  llama deal create "Company" --source <name> --description "..." --website https://...
   llama deal show <dealId>
   llama deal update <dealId> <field> <value>
-  llama deal search <query> [--founder name] [--owner <persona>] [--status Diligence]
+  llama deal search <query> [--founder name] [--owner <user-key>] [--status Diligence]
                             [--theirStage Raising] [--stage Seed]
                             [--limit 200] [--offset 0]
   llama deal list [--owner ...] [--status ...] [...same flags as search]
@@ -209,8 +209,8 @@ Brief blocks:
 
   Common flags on every add-*:
     --source-section <key>   Target a structured section (team, highlights, recommendation,
-                             gavin_analysis, kyle_analysis, ...). Without this, blocks land
-                             in "_other" at the bottom of the TOC. AI writers want this.
+                             <persona>_analysis, ...). Without this, blocks land in "_other"
+                             at the bottom of the TOC. AI writers want this.
     --reply-to <blockId>     Make the block a reply to <blockId>. Snapshots parent's heading
                              + 200-char excerpt into meta so the back-link survives parent
                              edits/deletes. Renders as an amber strip with a jump-link.
@@ -221,7 +221,7 @@ Brief blocks:
 Brief / persona refresh + agent-run revert:
   llama deal refresh-brief <dealId> [--force]                  # re-eval stale sections
                                                                 # --force = every unlocked watcher-managed section
-  llama deal refresh-persona <dealId> <persona>                # <persona>|<persona>|<persona>|<persona>|<persona>|<persona>|<persona>|<persona>|<persona>
+  llama deal refresh-persona <dealId> <persona-key>            # server validates persona key
   llama deal revert-run <dealId> <runId> --section <key>       # legacy 4-section model only
                                                                 # section: company|team|highlights|recommendation
 
@@ -494,10 +494,49 @@ async function main() {
   // agent reads it once and internalises the Llama Ventures workflow
   // contract. Same content the `agent_briefing` MCP prompt returns.
   // Also: `llama agent onboard` (two-word form) for symmetry.
+  //
+  // Gated behind /api/me — without valid credentials we print a short
+  // bootstrap stub instead. Stops unauthenticated callers from harvesting
+  // internal command surface / workflow conventions just by running the
+  // public CLI.
   if (
     area === "agent-onboard" ||
     (area === "agent" && (action === "onboard" || action === "briefing"))
   ) {
+    const headers = await getAuthHeaders();
+    if (Object.keys(headers).length === 0) {
+      console.log(
+`Llama Ventures team onboarding requires credentials.
+
+Team member?
+  - Run \`gcloud auth login\` with your @llamaventures.vc account, OR
+  - Mint a token at https://command.llamaventures.vc/settings/tokens
+    then \`llama token set <llc_...>\`.
+  Re-run \`llama agent-onboard\` after — the workflow contract will print.
+
+Founder or external visitor (no Llama account)?
+  Run \`llama pitch start --name "Your Name" --email "you@company.com"\`
+  to chat with our intake agent — no token required.`
+      );
+      return;
+    }
+    try {
+      await request("GET", "/api/me");
+    } catch (e) {
+      const msg = e?.message || "";
+      if (msg.includes("Error[UNAUTHORIZED]") || msg.includes("Error[NO_AUTH]")) {
+        console.log(
+`Llama Ventures team onboarding requires valid credentials.
+
+Server rejected the credentials we sent. Re-mint at
+https://command.llamaventures.vc/settings/tokens, run
+\`llama token set <llc_...>\`, then re-run \`llama agent-onboard\`.`
+        );
+        process.exitCode = 1;
+        return;
+      }
+      throw e;
+    }
     process.stdout.write(readBriefing());
     return;
   }
@@ -872,18 +911,14 @@ async function main() {
   }
 
   // ----- Persona refresh: re-run a single persona-watcher -----
-  // Persona names (NOT skill slugs): <persona> / <persona> / <persona> / <persona> / <persona> /
-  // <persona> / <persona> / <persona> / <persona>. Returns runId or null (debounced /
-  // deal inactive). Used by /admin and the per-block "重新生成" flow.
+  // Persona keys are validated server-side. Returns runId or null
+  // (debounced / deal inactive). Used by /admin and the per-block
+  // "重新生成" flow.
   if (area === "deal" && action === "refresh-persona") {
     const dealId = rest[0];
     const persona = rest[1];
-    const valid = ["<persona>", "<persona>", "<persona>", "<persona>", "<persona>", "<persona>", "<persona>", "<persona>", "<persona>"];
     if (!dealId || !persona) {
-      throw new Error(`Usage: llama deal refresh-persona <dealId> <persona>\n  persona: ${valid.join("|")}`);
-    }
-    if (!valid.includes(persona)) {
-      throw new Error(`Unknown persona "${persona}". Use: ${valid.join(", ")}`);
+      throw new Error(`Usage: llama deal refresh-persona <dealId> <persona-key>`);
     }
     print(await request(
       "POST",
@@ -1098,7 +1133,7 @@ async function main() {
     const meta = { updated_at: new Date().toISOString(), updated_by: "cli", by_agent: false };
 
     // --source-section <key>: target a structured section (e.g. team /
-    // highlights / gavin_analysis). Without this, blocks land in the
+    // highlights / <persona>_analysis). Without this, blocks land in the
     // "_other" group at the bottom of the TOC. AI writers want this
     // virtually always — without it they cannot contribute to existing
     // structured sections.
@@ -1257,8 +1292,8 @@ async function main() {
   // ----- Admin (system admin only) -----
   // System-admin gated commands — server enforces via isSystemAdmin()
   // checking LLAMA_COMMAND_ADMIN_EMAILS env. Non-admin tokens get 403.
-  // CLI doesn't pre-check; if you can't run these, ask <persona> to mint
-  // you an admin token (rare — most ops should never need this surface).
+  // CLI doesn't pre-check; if you can't run these, ask the system admin
+  // to mint you an admin token (rare — most ops should never need this surface).
   //
   // The three event feeds map 1:1 to the /admin web console tabs:
   //   - auth-events  : signin / token / impersonation audit (security)

@@ -308,9 +308,9 @@ server.registerTool(
   "post",
   {
     description:
-      "Post a message to a deal's timeline. Message can include @-mentions (e.g. " +
-      "@<persona>, @gavin@llamaventures.vc) — the system fires email + inbox notifications " +
-      "to mentioned users.",
+      "Post a message to a deal's timeline. Message can include @-mentions " +
+      "(e.g. @<first-name> or @<email@llamaventures.vc>) — the system fires " +
+      "email + inbox notifications to mentioned users.",
     inputSchema: {
       dealId: z.string(),
       message: z.string(),
@@ -563,14 +563,39 @@ server.registerPrompt(
       "reference, and boundaries. Read this once, internalise it, operate " +
       "accordingly. Same content as `llama agent-onboard` from the CLI.",
   },
-  async () => ({
-    messages: [
-      {
-        role: "user",
-        content: { type: "text", text: readBriefing() },
-      },
-    ],
-  })
+  async () => {
+    // Gate the briefing behind a /api/me check so unauthenticated MCP
+    // clients can't harvest internal workflow / command surface just by
+    // requesting the prompt. Mirrors the CLI gate in bin/llama.mjs.
+    const headers = await getAuthHeaders();
+    let stub = null;
+    if (Object.keys(headers).length === 0) {
+      stub =
+        "Llama Ventures team onboarding requires credentials.\n\n" +
+        "Team member: run `gcloud auth login` with your @llamaventures.vc " +
+        "account, or mint a token at " +
+        "https://command.llamaventures.vc/settings/tokens and run " +
+        "`llama token set <llc_...>`. Then re-request this prompt.\n\n" +
+        "Founder / external visitor: use the `pitch_*` tools — no token required.";
+    } else {
+      try {
+        await request("GET", "/api/me");
+      } catch (err) {
+        stub =
+          "Llama Ventures team onboarding requires valid credentials. " +
+          "Server rejected the credentials we sent. Re-mint at " +
+          "https://command.llamaventures.vc/settings/tokens.";
+      }
+    }
+    return {
+      messages: [
+        {
+          role: "user",
+          content: { type: "text", text: stub ?? readBriefing() },
+        },
+      ],
+    };
+  }
 );
 
 // ============================================================
