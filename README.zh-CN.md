@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/llama-ventures-logo.svg" alt="Llama Ventures" width="280">
+</p>
+
 <h1 align="center">@llamaventures/cli</h1>
 
 <p align="center">
