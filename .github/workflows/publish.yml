@@ -26,7 +26,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 24 ships with npm 11.5.1+, required for the new OIDC
+          # handshake that Trusted Publishers needs. Node 20/22<14 ships
+          # npm 10, which silently fails the handshake → registry treats
+          # the request as anonymous → misleading 404 on PUT. See
+          # npm/cli#8730, npm/cli#8678.
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies (frozen lockfile)
