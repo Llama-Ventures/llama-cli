@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-publish  # gates on environment-protection rules
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Check out the exact commit the release tag points at, not main.
           ref: ${{ github.event.release.tag_name }}
