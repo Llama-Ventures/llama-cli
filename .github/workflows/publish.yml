@@ -1,0 +1,48 @@
+name: Publish
+
+# Triggered when a GitHub Release is published. The release tag (e.g.
+# v1.0.0) determines which commit is published; the version in
+# package.json must match. We publish via npm Trusted Publishers (OIDC) —
+# no NPM_TOKEN is stored in repo secrets, no npm-level credential is
+# available to leak from CI even briefly.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write  # required for npm OIDC -> Trusted Publishers exchange
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish  # gates on environment-protection rules
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the exact commit the release tag points at, not main.
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies (frozen lockfile)
+        run: npm ci
+
+      - name: Sanity — package.json version matches release tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.release.tag_name }}"
+          # Strip leading 'v' if present
+          TAG="${TAG#v}"
+          if [ "$PKG_VERSION" != "$TAG" ]; then
+            echo "ERROR: package.json version ($PKG_VERSION) != release tag ($TAG)"
+            exit 1
+          fi
+          echo "OK: $PKG_VERSION matches release tag"
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
