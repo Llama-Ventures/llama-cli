@@ -1,22 +1,68 @@
-# @llamaventures/cli
+<h1 align="center">@llamaventures/cli</h1>
 
-Llama Ventures team CLI + MCP server for
-[command.llamaventures.vc](https://command.llamaventures.vc).
+<p align="center">
+  <strong>The Llama Ventures CLI &amp; MCP server.</strong><br/>
+  One <code>npm install</code>, one auth chain, two interfaces — humans and AI agents
+  talk to <a href="https://command.llamaventures.vc">command.llamaventures.vc</a>
+  through the same client.
+</p>
 
-> Public source for low-friction install. **Not an open-source product** —
-> requires a Llama Ventures team account to do anything useful. See
-> [Authenticate](#authenticate).
+<p align="center">
+  <a href="https://www.npmjs.com/package/@llamaventures/cli"><img alt="npm" src="https://img.shields.io/npm/v/@llamaventures/cli?label=npm&color=cb3837&logo=npm&logoColor=white"></a>
+  <a href="https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://docs.npmjs.com/trusted-publishers"><img alt="Provenance" src="https://img.shields.io/badge/provenance-signed-2e8b57?logo=npm"></a>
+  <a href="https://nodejs.org/"><img alt="Node" src="https://img.shields.io/node/v/@llamaventures/cli?color=339933&logo=nodedotjs&logoColor=white"></a>
+  <a href="https://modelcontextprotocol.io"><img alt="MCP 2024-11-05" src="https://img.shields.io/badge/MCP-2024--11--05-7d3aed"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
 
-[![CI](https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml)
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#authenticate">Authenticate</a> ·
+  <a href="#cli-tour">CLI</a> ·
+  <a href="#mcp-server">MCP</a> ·
+  <a href="#external-pitch-no-llama-account-required">External pitch</a> ·
+  <a href="AGENT_BRIEFING.md">Agent briefing</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-## What this ships
+> **Public source for low-friction install. Not an open-source product.**
+> Most operations require a Llama Ventures team account
+> ([gavin@llamaventures.vc](mailto:gavin@llamaventures.vc) mints tokens). The one
+> exception is the **public `pitch`** family — see
+> [External pitch](#external-pitch-no-llama-account-required).
 
-This npm package contains two binaries:
+---
 
-- **`llama`** — interactive CLI (humans + bash scripts). Zero deps, native fetch.
-- **`llama-mcp`** — stdio [MCP](https://modelcontextprotocol.io) server (Claude Code, Claude Desktop, Cursor, OpenClaw, Codex, any MCP-native agent). Single dep: `@modelcontextprotocol/sdk`.
+## What's in the box
 
-Both share the same auth chain and HTTP client, so behaviour stays in lockstep.
+```
+@llamaventures/cli
+├── bin/llama          interactive CLI for humans + bash
+└── bin/llama-mcp      stdio MCP server, 20 tools — for any MCP-native agent
+```
+
+Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
+client, **same** error format. CLI and MCP can never drift on transport or
+identity. Zero runtime dependencies for the CLI itself; the bundled MCP
+server depends only on `@modelcontextprotocol/sdk` (Anthropic-maintained,
+pinned exact).
+
+```mermaid
+flowchart LR
+  Human([🧑‍💻 Human])           --> CLI[bin/llama<br/>argv parser]
+  Agent([🤖 MCP-native agent]) --> MCP[bin/llama-mcp<br/>stdio JSON-RPC]
+  CLI  --> Client[lib/client.mjs<br/>auth · fetch · errors]
+  MCP  --> Client
+  Client -- HTTPS --> API[(command.llamaventures.vc)]
+  classDef src fill:#dcfce7,stroke:#166534,color:#14532d
+  classDef edge fill:#dbeafe,stroke:#1e40af,color:#1e3a8a
+  class Human,Agent edge
+  class CLI,MCP,Client src
+```
+
+---
 
 ## Install
 
@@ -24,250 +70,307 @@ Both share the same auth chain and HTTP client, so behaviour stays in lockstep.
 npm i -g @llamaventures/cli
 ```
 
-Requires Node 18+ (uses native `fetch`).
+Requires **Node 18+** (uses native `fetch` and ESM). CI runs the matrix on 18 / 20 / 22.
+
+Verify:
+
+```bash
+llama --version
+llama auth status     # round-trips against /api/me
+```
+
+The same install puts `llama-mcp` on your `PATH` for the MCP server — no second package.
+
+> **Upgrading from `npm link`?** The CLI used to live in the `llama-os/cli/`
+> directory and was distributed via `npm link`. As of CLI v1.x it ships as
+> `@llamaventures/cli`. Run `npm i -g @llamaventures/cli@latest`; the legacy
+> directory keeps working during the soak window but is no longer the source
+> of truth. See [`llama-os/cli/DEPRECATED.md`](https://github.com/SoujiOkita98/llama-os/blob/main/cli/DEPRECATED.md).
+
+---
 
 ## Authenticate
 
-The CLI tries credentials in this order on every call:
+The client tries credentials **in this order**, on every call:
 
-1. **`gcloud auth print-identity-token`** → `Authorization: Bearer …` (zero config; recommended for team members)
-2. **`$LLAMA_TOKEN` env var** → `X-Llama-Token` (preferred for CI / sandboxed agents)
-3. **`~/.llama/token`** (single line, mode `0600`) → `X-Llama-Token`
-4. **`~/.llama-command/config.json`** — legacy from CLI v0.1; auto-migrates to `~/.llama/token` on first read
+| # | Source | Header sent | Best for |
+|---|--------|-------------|----------|
+| 1 | `gcloud auth print-identity-token` | `Authorization: Bearer …` | Team members on a workstation (zero config) |
+| 2 | `$LLAMA_TOKEN` env var | `X-Llama-Token` | CI runners, sandboxed cloud agents |
+| 3 | `~/.llama/token` (mode `0600`) | `X-Llama-Token` | Persistent local install |
+| 4 | `~/.llama-command/config.json` | `X-Llama-Token` | Legacy CLI v0.1 — auto-migrates to `~/.llama/token` on first read |
 
-If both Bearer and X-Llama-Token are present, both are sent. The server tries Bearer first; on verification failure it falls through to X-Llama-Token.
+Both Bearer and X-Llama-Token are sent if both exist. The server tries Bearer
+first; on verification failure it falls through to X-Llama-Token. Inspect the
+resolved identity any time with `llama auth status`.
 
-### Zero-config (recommended)
+### Zero-config — recommended for team members
 
 ```bash
-gcloud auth login          # one-time, pick your @llamaventures.vc account
-llama auth status          # confirm — should show role + email
-llama deal search acme-ai  # ready to go
+gcloud auth login          # one-time; pick your @llamaventures.vc account
+llama auth status          # → role + email
+llama deal search acme-ai  # ready
 ```
 
-### Manual token
+### Manual token — for machines without `gcloud`, or stable CI
 
-For machines without `gcloud`, or for stable CI / agent setups:
-
-1. Sign in to https://command.llamaventures.vc
-2. Visit `/settings/tokens` → click **Mint Token**
-3. Save the `llc_…` value to `~/.llama/token`:
+1. Sign in to https://command.llamaventures.vc.
+2. Open `/settings/tokens` → **Mint Token**.
+3. Save the `llc_…` value:
 
    ```bash
    llama token set llc_paste_token_here
-   # writes ~/.llama/token (mode 0600), round-trips against /api/me before saving
+   #  → writes ~/.llama/token (mode 0600)
+   #  → round-trips /api/me before saving — bad token never lands on disk
    ```
 
-   Or set it as an env var (preferred for CI):
+   Or, in CI / one-shot environments:
 
    ```bash
    export LLAMA_TOKEN=llc_paste_token_here
    ```
 
-A team member without an account: ask
-[gavin@llamaventures.vc](mailto:gavin@llamaventures.vc) to mint one for you (he can mint for any email; it auto-creates an inactive user row that he then activates).
+> **Don't have an account?** Email
+> [gavin@llamaventures.vc](mailto:gavin@llamaventures.vc). Any email — including
+> non-`@llamaventures.vc` — can be granted a token; the system admin
+> mints it via `/settings/tokens`. Token first-use auto-creates the user row.
 
-## External / founder use (no Llama token required)
+---
 
-If you don't have a Llama Command token — you're a founder pitching us, an
-EA, a prospective hire, or just exploring — the CLI ships a separate
-`pitch` command family that talks to our public intake agent at
-[command.llamaventures.vc/external-agent](https://command.llamaventures.vc/external-agent).
-Same conversation, structured intake, same 12-dimension verdict as the web
-flow — but driven from your terminal (or your AI agent over MCP).
+## CLI tour
 
-```bash
-# Bootstrap a session
-llama pitch start --name "Jane Doe" --email "jane@acme.ai"
-
-# Send a message (single-shot, prints reply)
-llama pitch say "We're building an AI dev tool for X..."
-
-# Attach your deck / one-pager
-llama pitch upload ./deck.pdf
-
-# Or open an interactive REPL
-llama pitch
-```
-
-Caps (server-enforced — same as the web flow): 5 sessions/IP/day,
-3 sessions/email/day, 30min idle timeout, 100 messages/session,
-1M tokens/session.
-
-The MCP server exposes the same surface as `pitch_*` tools
-(`pitch_start`, `pitch_send_message`, `pitch_upload_file`, `pitch_status`,
-`pitch_finalize`) — so the founder's own AI agent (Claude / Cursor /
-OpenClaw / etc.) can help them pitch via Llama's intake agent. True A2A.
-
-## CLI command reference
+The CLI is the canonical interface. The HTTP API beneath it is stable, but the
+CLI handles auth, error formatting, and forward-compatibility across server
+schema changes — **prefer the CLI even from inside scripts.**
 
 ```bash
-# Auth diagnostics
+# Auth + tokens
 llama auth status
-
-# Token management
-llama token set <llc_...> [--base https://command.llamaventures.vc]
+llama token set <llc_...>
 llama token show
 
-# Deals — read
-llama deal search <query> [--founder ...] [--owner ...] [--status ...] [--stage ...] [--limit N]
-llama deal list [--owner ...] [--status ...]
+# Pipeline — read
+llama deal search "acme ai"
+llama deal list --owner kyle --status Diligence
 llama deal show <dealId>
 
-# Deals — write
-llama deal create "Company" --description "..." [--source ...] [--stage ...] [...]
-llama deal update <dealId> <field> <value>
-llama deal delete <dealId>                  # soft-delete (audit-logged)
+# Pipeline — write
+llama deal create "Acme AI" --description "..." --source Gavin
+llama deal update <dealId> status Diligence
+llama deal delete  <dealId>     # soft (audit-logged)
 llama deal restore <dealId>
-llama deal trash                            # list soft-deleted
 
-# Ownership
-llama claim <dealId>                        # propose self
-llama nominate <dealId> --user <userId>
-llama nominations list
-llama nominations decide <approvalId> accepted|declined
-llama approvals list                        # partner queue
-llama approvals decide <approvalId> approved|rejected [--note "..."]
+# Deal Brief — ordered, typed blocks (text · link · embed · callout)
+llama brief blocks       <dealId>
+llama brief add-text     <dealId> --heading "..." --body "..."
+llama brief add-link     <dealId> --url "..." --label "..."
+llama brief add-callout  <dealId> --tone insight --heading "..." --body "..."
+llama brief edit         <dealId> <blockId> [--heading ...] [--body ...]
+llama brief history      <dealId> <blockId>
+
+# Ownership + approvals
+llama claim       <dealId>
+llama nominate    <dealId> --user <userId>
+llama approvals   list
+llama approvals   decide <approvalId> approved --note "..."
 
 # Timeline + posts
 llama timeline <dealId>
-llama post <dealId> "message" [--link url] [--link-name "name"]
+llama post     <dealId> "message body" [--link url]
 
-# Brief blocks (ordered, typed: text | link | embed | callout)
-llama brief blocks <dealId>
-llama brief add-text    <dealId> --heading "..." --body "..."
-llama brief add-link    <dealId> --url "..." --label "..." [--description "..."]
-llama brief add-embed   <dealId> --url "..." [--label "..."]
-llama brief add-callout <dealId> --tone insight|info|warning|success --heading "..." --body "..."
-llama brief edit        <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--tone ...]
-llama brief delete      <dealId> <blockId>            # soft
-llama brief restore     <dealId> <blockId>
-llama brief history     <dealId> <blockId> [--limit 50]
-llama brief restore-version <dealId> <blockId> <historyId>
+# Wiki
+llama wiki search "<query>"
+llama wiki save <slug> --title "..." --content "..."
 
-# Collaborators
-llama deal collab list    <dealId>
-llama deal collab add     <dealId> --user <userId|email>
-llama deal collab remove  <dealId> --user <userId|email>
-llama deal collab restore <dealId> --user <userId|email>
-
-# Links (URLs attached to a deal — Netlify demos, Gamma decks, etc.)
-llama deal link list    <dealId> [--include-deleted]
-llama deal link add     <dealId> --url <url> [--label "..."]
-llama deal link delete  <dealId> <linkId>
-llama deal link restore <dealId> <linkId>
-
-# Brief / persona refresh
-llama deal refresh-brief   <dealId> [--force]
-llama deal refresh-persona <dealId> <persona>
-
-# Deal facts (AI / human-asserted, with verification)
-llama deal fact list   <dealId>
-llama deal fact add    <dealId> --category <cat> --claim "<text>" [--source <url>] [--confidence high|medium|low]
-llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
-
-# Mentions / inbox
-llama mentions                              # my unresolved cues (default)
-llama mentions list [--everyone] [--all]
-llama mentions show <mentionId>
+# Mentions inbox
+llama mentions
 llama mentions resolve <mentionId>
-llama mentions unread                       # badge count
-
-# Skill corrections (persona-owner workflow)
-llama skill-correction list <skill-slug> [--include-deleted]
-llama skill-correction add <skill-slug> "<rule>" [--deal <uuid>] [--block <blockId>]
-llama skill-correction delete <id>
-
-# Wiki (knowledge base)
-llama wiki search <query>
-llama wiki read <slug>
-llama wiki save <slug> --title "..." --content "..." [--sources "url1;url2"]
-
-# Admin event feeds (system admin only)
-llama admin auth-events  [--kind X] [--actor email] [--since 24h] [--limit 100]
-llama admin deal-events  [--kind X] [--deal <uuid>] [--since 24h]
-llama admin agent-events [--kind tool_call|loop_stalled] [--errors-only]
 ```
 
-### Soft-delete
+Run `llama --help` for the full surface (~40 commands across deals, briefs,
+ownership, timeline, facts, wiki, mentions, skill corrections, and admin event
+feeds). Soft-delete is the default everywhere — every removal is reversible
+and audit-logged via `deal_events`.
 
-All deletes through this CLI are non-destructive: brief blocks, collaborators, deal links, and deals themselves use `deleted_at` markers. Default reads filter trashed rows out; pass `--include-deleted` on `deal link list` (or visit `/admin` for the broader trash view) to see them. Every removal and restore writes an audit-log entry.
+### Error codes — for agents
 
-## MCP server (`llama-mcp`)
+The CLI's stderr exit messages start with stable, parseable prefixes:
 
-The same package ships a stdio MCP server with **16 tools** mirroring the most-used CLI surface. Auth is identical — gcloud → `$LLAMA_TOKEN` → `~/.llama/token`. The server reuses `lib/client.mjs` so the CLI and MCP can never drift on transport or auth.
+| Prefix | Meaning | Recovery |
+|--------|---------|----------|
+| `Error[NO_AUTH]` | No credentials found anywhere | `gcloud auth login` **or** `llama token set` |
+| `Error[UNAUTHORIZED]` | Server rejected the credentials we sent | Token may be revoked / expired / wrong gcloud account |
 
-Tools registered:
+The MCP server returns the same prefixes inside `isError: true` content so
+agents can pattern-match without parsing prose.
+
+---
+
+## MCP server
+
+The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
+**20 typed tools** that mirror the most-used CLI surface, plus a generic
+`llama_api` escape hatch (modeled on the GitHub MCP server) for any endpoint
+not yet wrapped.
 
 ```
-auth_status              deal_search   deal_show
-deal_create              deal_update
-brief_blocks             brief_add_text  brief_add_link  brief_add_callout
-wiki_search              wiki_save
-timeline                 post
+auth_status            llama_api
+
+deal_search            deal_show
+deal_create            deal_update
+
+brief_blocks           brief_add_text
+brief_add_link         brief_add_callout
+
+timeline               post
+
+wiki_search            wiki_save
+
 mentions_list
-llama_api                # escape hatch — raw HTTP for endpoints not yet wrapped
+
+pitch_start            pitch_send_message
+pitch_upload_file      pitch_status
+pitch_finalize
 ```
 
-`llama_api` is a generic passthrough modeled on the GitHub MCP server pattern: agents discover it via `tools/list` and use it for any endpoint not yet given a typed wrapper. Path must start with `/api/`.
+Auth is identical to the CLI's chain (gcloud → `$LLAMA_TOKEN` → `~/.llama/token`).
+The `agent_briefing` MCP **prompt** also returns
+[`AGENT_BRIEFING.md`](AGENT_BRIEFING.md) verbatim, so any new agent loading the
+server can self-onboard without leaving the protocol.
 
-### Wire into Claude Desktop / Claude Code
+### Wire into your agent
 
-`~/.config/claude-desktop/claude_desktop_config.json` (macOS:
-`~/Library/Application Support/Claude/claude_desktop_config.json`):
+<details open>
+<summary><strong>Claude Desktop</strong> (macOS path shown — Linux/Windows differ)</summary>
+
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "llama": {
-      "command": "llama-mcp"
-    }
+    "llama": { "command": "llama-mcp" }
   }
 }
 ```
 
-Restart Claude Desktop. The 16 tools appear under the 🛠️ menu.
+Restart Claude Desktop. Tools appear under the 🛠️ menu.
+</details>
 
-### Wire into Cursor
+<details>
+<summary><strong>Claude Code</strong></summary>
+
+```bash
+claude mcp add llama -- llama-mcp
+```
+
+Or edit `~/.claude/claude.json` directly — same JSON shape as Desktop.
+</details>
+
+<details>
+<summary><strong>Cursor</strong></summary>
 
 `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "llama": {
-      "command": "llama-mcp"
-    }
+    "llama": { "command": "llama-mcp" }
   }
 }
 ```
+</details>
 
-### Wire into a Codex / OpenClaw / arbitrary stdio MCP client
+<details>
+<summary><strong>OpenCode / OpenClaw / Codex / arbitrary stdio MCP client</strong></summary>
 
-Most clients accept a `command` + `args` config. Run `which llama-mcp` to find the binary path (`/usr/local/bin/llama-mcp` or `~/.npm-global/bin/llama-mcp`) and point the client at it. Any agent that speaks MCP over stdio works.
+Most clients accept a `command` + `args` pair. Locate the binary
+(`which llama-mcp` → typically `/usr/local/bin/llama-mcp` or
+`~/.npm-global/bin/llama-mcp`) and point the client at it. No protocol
+extensions, no transport flags.
+</details>
 
-## Error codes (for agents)
+> If you're new and want the agent to onboard itself, run
+> `llama agent-onboard` from the CLI or fetch the `agent_briefing` prompt from
+> the MCP server. It's the workflow contract — autonomy levels, attribution
+> grammar, error recovery, anti-pollution rules.
 
-CLI errors include a stable prefix so agents can pattern-match and recover:
+---
 
-- `Error[NO_AUTH]` — no credentials found. Direct the user to `gcloud auth login` or `llama token set`.
-- `Error[UNAUTHORIZED]` — server rejected our credentials. Token revoked, expired, or wrong account selected in gcloud.
+## External pitch — no Llama account required
 
-The MCP server returns the same errors as `isError: true` content with the same prefix.
+If you're a **founder pitching us, an EA, or a prospective hire** without a
+Llama Command token, the CLI ships a `pitch` command family (and the parallel
+`pitch_*` MCP tools) that talks to our public intake agent at
+[command.llamaventures.vc/external-agent](https://command.llamaventures.vc/external-agent).
+Same conversation, same structured 12-dimension verdict — driven from your
+terminal or your own AI agent.
 
-## Versioning
+```bash
+llama pitch start --name "Jane Doe" --email "jane@acme.ai"
+llama pitch say "We're building an AI dev tool for X..."
+llama pitch upload ./deck.pdf
+llama pitch                       # interactive REPL
+```
 
-Semver. Breaking changes to CLI command shape (renamed flags, removed commands) bump major. Adding a tool or flag bumps minor. Bug fixes bump patch.
+Server-enforced caps (same as the web flow): 5 sessions/IP/day,
+3 sessions/email/day, 30 min idle timeout, 100 messages/session,
+1 M tokens/session.
 
-The CLI prints its version under `llama --version`. MCP server reports the same version in its `serverInfo`.
+This is genuine **agent-to-agent**: your AI helps you tell the story, our
+intake agent extracts the structured fields and produces the verdict.
 
-## Reporting security issues
+---
 
-**Do not file public GitHub issues for security bugs.** Email
-[gavin@llamaventures.vc](mailto:gavin@llamaventures.vc). See
-[SECURITY.md](./SECURITY.md) for scope, response SLA, and the
-supply-chain posture (Trusted Publishers + provenance + zero-deps CLI).
+## Stability
+
+- **Versioning:** [SemVer](https://semver.org). Renaming or removing a CLI
+  command bumps **major**. Adding a tool, command, or flag bumps minor.
+  Bugfixes bump patch. The CLI prints `--version`; the MCP server reports
+  the same value in its `serverInfo`.
+- **Backwards compatibility:** The wire format (Bearer / X-Llama-Token) and
+  the `Error[…]` prefixes are part of the public contract and won't change
+  inside a major version.
+- **Server schema drift:** When the API gains an endpoint, the CLI / MCP gain
+  a typed wrapper in the next minor release. The `llama_api` MCP tool is the
+  always-available escape hatch in the meantime.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the per-version log.
+
+---
+
+## Security
+
+- **`@llamaventures/cli` is published via npm
+  [Trusted Publishers](https://docs.npmjs.com/trusted-publishers)** — no
+  `NPM_TOKEN` lives in repo secrets. Each release ships with `--provenance`
+  (sigstore-signed); the npm registry shows a **Provenance** badge traceable
+  to the exact GitHub Action workflow + commit.
+- **Minimal dependency tree.** The CLI is zero-deps. The MCP server depends
+  only on `@modelcontextprotocol/sdk`, pinned exact.
+- **Branch protection** on `main`; Dependabot, secret scanning, and
+  push-protection are enabled.
+- **Tokens:** stored locally at `~/.llama/token` mode `0600`. Server-side they
+  are stored as sha256 hashes — plaintext only ever exists in the user's
+  possession.
+
+Reporting a vulnerability: see [`SECURITY.md`](SECURITY.md). **Do not** file
+public GitHub issues for security bugs.
+
+---
+
+## Contributing
+
+This is an internal tool maintained by Llama Ventures. PRs from team members
+are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the local dev loop,
+release flow (Trusted Publishers + GitHub Releases), and the conventions we
+follow (zero-deps, lockstep CLI/MCP, stable `Error[…]` prefixes).
+
+External contributions: feel free to open issues for documentation gaps or
+broken flows. Feature requests for non-team workflows are best directed at
+the [external pitch path](#external-pitch-no-llama-account-required) instead.
+
+---
 
 ## License
 
-[MIT](./LICENSE).
+[MIT](LICENSE) — © 2026 Llama Ventures, Inc.
