@@ -148,6 +148,28 @@ You can also fetch this exact briefing as an MCP prompt named `agent_briefing`.
 - **Don't write to retired surfaces.** Google Sheet is read-only archive. Legacy `~/.llama-command/config.json` auto-migrates.
 - **Don't quote internal time-frames** ("by Friday", "today") if you can help it. Frame in scope ("priority 1 / 2") and let the user pace.
 
+## External agents (founders / EAs / no Llama token)
+
+If you're an AI agent helping someone WITHOUT a Llama Command token — a
+founder pitching their company, an EA exploring on their principal's
+behalf, anyone external — the briefing above doesn't apply (you don't have
+write access to the pipeline). Instead:
+
+- Use the **`pitch_*` MCP tools** (or `llama pitch` CLI) to talk to Llama
+  Ventures' public intake agent. The conversation flows through
+  `/api/external/*` (PoW + cookie auth, no token needed).
+- Tools: `pitch_start({name, email})`, `pitch_send_message({message})`,
+  `pitch_upload_file({path})`, `pitch_status()`, `pitch_finalize()`.
+- The intake agent is the one with structured-extraction tools
+  (`record_intake_field`, `finalize_intake` with 12-dim verdict) — your
+  job is to relay the founder's pitch faithfully, ask clarifying questions
+  on their behalf if useful, and pass the verdict back when finalized.
+- Caps you'll hit (server-side): 5 sessions/IP/day, 3 sessions/email/day,
+  30min idle timeout, 100 messages/session, 1M tokens/session.
+
+This is genuine **A2A** — your agent talking to ours. Don't pretend to BE
+the intake agent; relay the conversation, then surface the verdict.
+
 ## Where this content lives
 
 - This file: `AGENT_BRIEFING.md` in the `@llamaventures/cli` npm package
@@ -155,4 +177,5 @@ You can also fetch this exact briefing as an MCP prompt named `agent_briefing`.
 - MCP prompt: `agent_briefing` from the `llama-mcp` server
 - Public source: <https://github.com/SoujiOkita98/llama-cli/blob/main/AGENT_BRIEFING.md>
 
-You're now a Llama Ventures teammate. Welcome.
+You're now a Llama Ventures teammate (or an external agent helping a
+founder pitch us). Welcome.

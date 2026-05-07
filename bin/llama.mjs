@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import readline from "readline";
 import {
   DEFAULT_BASE_URL,
   LEGACY_DIR,
@@ -18,6 +19,15 @@ import {
   writeCanonicalToken,
   writeLegacyConfig,
 } from "../lib/client.mjs";
+import {
+  clearExternalSession,
+  EXTERNAL_SESSION_FILE,
+  getExternalSessionStatus,
+  readExternalSession,
+  sendExternalMessage,
+  startExternalSession,
+  uploadExternalFile,
+} from "../lib/external.mjs";
 
 function parseFlags(args) {
   const flags = {};
@@ -118,6 +128,14 @@ function usage() {
 
 Agent onboarding (run once on first install):
   llama agent-onboard                  # print AGENT_BRIEFING.md — the workflow contract for AI agents
+
+External pitch — talk to Llama Ventures' intake agent (no token required):
+  llama pitch start --name "Jane Doe" --email "jane@acme.ai"
+  llama pitch say "We're building X..."   # single message, prints reply
+  llama pitch upload ./deck.pdf           # attach a file
+  llama pitch                             # interactive REPL (existing session)
+  llama pitch status                      # session info
+  llama pitch end                         # clear local session
 
 Setup:
   llama auth status                    # show current credentials + verify with server
@@ -256,6 +274,215 @@ Env:
 `);
 }
 
+// ============================================================
+// `llama pitch` family — external founder-pitch intake
+// ============================================================
+//
+// No Llama Command token required. Bootstraps a session against
+// /api/external/* via PoW + cookie. Subcommands:
+//
+//   llama pitch                   → REPL (requires existing session)
+//   llama pitch start --name X --email Y
+//   llama pitch say "<msg>"
+//   llama pitch upload <path>
+//   llama pitch status
+//   llama pitch end
+
+async function handlePitch(action, rest) {
+  if (!action || action === "help" || action === "--help" || action === "-h") {
+    console.log(`Llama Ventures pitch intake — chat with our intake agent (no token required).
+
+Setup:
+  llama pitch start --name "Your Name" --email "you@company.com"
+
+Single message (non-interactive):
+  llama pitch say "We're building an AI dev tool for X..."
+
+Upload a file (deck / pitch / one-pager):
+  llama pitch upload ./deck.pdf
+
+Interactive REPL (requires existing session):
+  llama pitch
+
+Inspect / clean up:
+  llama pitch status         # session id, idle minutes, finalized?
+  llama pitch end            # clear local session state
+
+Caps (server-enforced):
+  5 sessions per IP per day, 3 per email per day, 30min idle timeout,
+  100 messages per session, 1M tokens per session.
+`);
+    return;
+  }
+
+  if (action === "start") {
+    const { flags } = parseFlags(rest);
+    if (!flags.name || !flags.email) {
+      throw new Error(
+        "pitch start: --name and --email are required.\n" +
+          "  Example: llama pitch start --name \"Jane Doe\" --email \"jane@acme.ai\""
+      );
+    }
+    const existing = readExternalSession();
+    if (existing && !existing.finalized) {
+      const status = getExternalSessionStatus();
+      if (status.active) {
+        throw new Error(
+          `An active pitch session already exists (started ${existing.started_at}, idle ${status.idle_minutes}min).\n` +
+            `  Run \`llama pitch end\` to clear it, or \`llama pitch say "..."\` to continue.`
+        );
+      }
+    }
+    process.stderr.write("Computing proof-of-work + opening session...\n");
+    const session = await startExternalSession({
+      name: String(flags.name),
+      email: String(flags.email),
+    });
+    print({
+      session_id: session.session_id,
+      name: session.name,
+      email: session.email,
+      started_at: session.started_at,
+      hint: 'Now run `llama pitch say "..."` to chat, or just `llama pitch` for interactive REPL.',
+    });
+    return;
+  }
+
+  if (action === "say") {
+    const message = rest.join(" ").trim();
+    if (!message) {
+      throw new Error('pitch say: message required. Example: llama pitch say "We\'re building X"');
+    }
+    const result = await sendExternalMessage(message);
+    process.stdout.write(result.text + "\n");
+    if (result.finalized) {
+      process.stderr.write("\n--- Pitch session finalized by the agent ---\n");
+      if (result.finalize_payload) {
+        process.stderr.write(JSON.stringify(result.finalize_payload, null, 2) + "\n");
+      }
+    }
+    return;
+  }
+
+  if (action === "upload") {
+    const filePath = rest[0];
+    if (!filePath) {
+      throw new Error("pitch upload: file path required. Example: llama pitch upload ./deck.pdf");
+    }
+    process.stderr.write(`Uploading ${filePath}...\n`);
+    const result = await uploadExternalFile(filePath);
+    print(result);
+    return;
+  }
+
+  if (action === "status") {
+    print(getExternalSessionStatus());
+    return;
+  }
+
+  if (action === "end") {
+    const had = readExternalSession();
+    clearExternalSession();
+    print({
+      ok: true,
+      cleared: !!had,
+      session_file: EXTERNAL_SESSION_FILE,
+      note: had
+        ? "Local session state cleared. Server-side session may still be active until idle timeout (30min)."
+        : "No local session was active.",
+    });
+    return;
+  }
+
+  // No action → REPL mode (requires existing session)
+  if (action === undefined || (rest.length === 0 && !["start", "say", "upload", "status", "end"].includes(action))) {
+    // Treat any unknown bare action as "join existing session in REPL mode"
+    const session = readExternalSession();
+    if (!session) {
+      throw new Error(
+        "No active pitch session. Start one with:\n" +
+          '  llama pitch start --name "Your Name" --email "you@company.com"'
+      );
+    }
+    if (session.finalized) {
+      throw new Error(
+        "This pitch session is finalized. Run `llama pitch end` then `pitch start` for a new one."
+      );
+    }
+    await runPitchRepl();
+    return;
+  }
+
+  throw new Error(`Unknown pitch subcommand: ${action}. Run \`llama pitch help\` for the full list.`);
+}
+
+async function runPitchRepl() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: "you> ",
+  });
+
+  console.log("Connected to Llama Ventures intake agent. Type your pitch — :q to exit, :upload <path> to attach a file.");
+  console.log("");
+
+  const send = async (msg) => {
+    process.stdout.write("\nllama> ");
+    let buffered = "";
+    const result = await sendExternalMessage(msg, {
+      onChunk: (chunk) => {
+        process.stdout.write(chunk);
+        buffered += chunk;
+      },
+    });
+    if (!buffered) process.stdout.write(result.text);
+    process.stdout.write("\n\n");
+    if (result.finalized) {
+      console.log("--- Pitch session finalized ---");
+      if (result.finalize_payload) {
+        console.log(JSON.stringify(result.finalize_payload, null, 2));
+      }
+      rl.close();
+      return true;
+    }
+    return false;
+  };
+
+  rl.prompt();
+  rl.on("line", async (line) => {
+    const trimmed = line.trim();
+    if (trimmed === ":q" || trimmed === ":quit" || trimmed === ":exit") {
+      rl.close();
+      return;
+    }
+    if (trimmed.startsWith(":upload ")) {
+      const filePath = trimmed.slice(8).trim();
+      try {
+        process.stdout.write("uploading...\n");
+        const result = await uploadExternalFile(filePath);
+        console.log(`uploaded: ${result.filename} (${result.drive_file_id})`);
+      } catch (err) {
+        console.error("upload error:", err.message);
+      }
+      rl.prompt();
+      return;
+    }
+    if (!trimmed) {
+      rl.prompt();
+      return;
+    }
+    try {
+      const finalized = await send(trimmed);
+      if (finalized) return;
+    } catch (err) {
+      console.error("error:", err.message);
+    }
+    rl.prompt();
+  });
+
+  await new Promise((resolve) => rl.on("close", resolve));
+}
+
 async function main() {
   const [area, action, ...rest] = process.argv.slice(2);
   if (!area || area === "help" || area === "--help" || area === "-h") {
@@ -272,6 +499,14 @@ async function main() {
     (area === "agent" && (action === "onboard" || action === "briefing"))
   ) {
     process.stdout.write(readBriefing());
+    return;
+  }
+
+  // `llama pitch ...` — external founder-pitch family. No Llama token
+  // required; bootstraps a session against /api/external/* via PoW + cookie.
+  // See lib/external.mjs and AGENT_BRIEFING.md for the full surface.
+  if (area === "pitch") {
+    await handlePitch(action, rest);
     return;
   }
 

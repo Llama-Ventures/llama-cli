@@ -67,6 +67,38 @@ For machines without `gcloud`, or for stable CI / agent setups:
 A team member without an account: ask
 [gavin@llamaventures.vc](mailto:gavin@llamaventures.vc) to mint one for you (he can mint for any email; it auto-creates an inactive user row that he then activates).
 
+## External / founder use (no Llama token required)
+
+If you don't have a Llama Command token — you're a founder pitching us, an
+EA, a prospective hire, or just exploring — the CLI ships a separate
+`pitch` command family that talks to our public intake agent at
+[command.llamaventures.vc/external-agent](https://command.llamaventures.vc/external-agent).
+Same conversation, structured intake, same 12-dimension verdict as the web
+flow — but driven from your terminal (or your AI agent over MCP).
+
+```bash
+# Bootstrap a session
+llama pitch start --name "Jane Doe" --email "jane@acme.ai"
+
+# Send a message (single-shot, prints reply)
+llama pitch say "We're building an AI dev tool for X..."
+
+# Attach your deck / one-pager
+llama pitch upload ./deck.pdf
+
+# Or open an interactive REPL
+llama pitch
+```
+
+Caps (server-enforced — same as the web flow): 5 sessions/IP/day,
+3 sessions/email/day, 30min idle timeout, 100 messages/session,
+1M tokens/session.
+
+The MCP server exposes the same surface as `pitch_*` tools
+(`pitch_start`, `pitch_send_message`, `pitch_upload_file`, `pitch_status`,
+`pitch_finalize`) — so the founder's own AI agent (Claude / Cursor /
+OpenClaw / etc.) can help them pitch via Llama's intake agent. True A2A.
+
 ## CLI command reference
 
 ```bash
