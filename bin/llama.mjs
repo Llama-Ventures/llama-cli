@@ -10,6 +10,7 @@ import {
   getBaseUrl,
   getToken,
   print,
+  readBriefing,
   readCanonicalToken,
   readLegacyConfig,
   request,
@@ -114,6 +115,9 @@ async function searchDeals(q, flags) {
 
 function usage() {
   console.log(`Llama Command CLI
+
+Agent onboarding (run once on first install):
+  llama agent-onboard                  # print AGENT_BRIEFING.md — the workflow contract for AI agents
 
 Setup:
   llama auth status                    # show current credentials + verify with server
@@ -256,6 +260,18 @@ async function main() {
   const [area, action, ...rest] = process.argv.slice(2);
   if (!area || area === "help" || area === "--help" || area === "-h") {
     usage();
+    return;
+  }
+
+  // `llama agent-onboard` — print the bundled AGENT_BRIEFING.md so an AI
+  // agent reads it once and internalises the Llama Ventures workflow
+  // contract. Same content the `agent_briefing` MCP prompt returns.
+  // Also: `llama agent onboard` (two-word form) for symmetry.
+  if (
+    area === "agent-onboard" ||
+    (area === "agent" && (action === "onboard" || action === "briefing"))
+  ) {
+    process.stdout.write(readBriefing());
     return;
   }
 

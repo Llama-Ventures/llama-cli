@@ -10,7 +10,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getAuthHeaders, request } from "../lib/client.mjs";
+import { getAuthHeaders, readBriefing, request } from "../lib/client.mjs";
 
 // Wrap a request() call into the MCP CallToolResult shape. Catches errors
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
@@ -374,6 +374,33 @@ server.registerTool(
     }
     return callApi(method, path, body);
   }
+);
+
+// ============================================================
+// Prompts
+// ============================================================
+//
+// MCP-native agents discover prompts via prompts/list — they can fetch
+// and adopt them without any user-side prompt engineering.
+
+server.registerPrompt(
+  "agent_briefing",
+  {
+    description:
+      "Onboard yourself as a Llama Ventures teammate. Returns the workflow " +
+      "contract: identity, Pipeline First rule, content capture, autonomy " +
+      "levels (L0/L1/L2/L3), communication style, error recovery, CLI/MCP " +
+      "reference, and boundaries. Read this once, internalise it, operate " +
+      "accordingly. Same content as `llama agent-onboard` from the CLI.",
+  },
+  async () => ({
+    messages: [
+      {
+        role: "user",
+        content: { type: "text", text: readBriefing() },
+      },
+    ],
+  })
 );
 
 // ============================================================
