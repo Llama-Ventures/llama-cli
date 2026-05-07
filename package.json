@@ -28,11 +28,18 @@
   },
   "keywords": [
     "llama-ventures",
+    "venture-capital",
+    "investment-pipeline",
     "cli",
     "mcp",
-    "modelcontextprotocol"
+    "mcp-server",
+    "modelcontextprotocol",
+    "agent",
+    "ai-agent",
+    "anthropic"
   ],
   "author": "Llama Ventures, Inc.",
+  "funding": "https://github.com/SoujiOkita98/llama-cli",
   "publishConfig": {
     "access": "public"
   },
