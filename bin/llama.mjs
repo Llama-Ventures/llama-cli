@@ -1,86 +1,22 @@
 #!/usr/bin/env node
 
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { execFile as _execFile } from "child_process";
-import { promisify } from "util";
-
-const execFile = promisify(_execFile);
-
-// Canonical entrypoint. `llama-command.onrender.com` also serves the
-// API but its NextAuth callback URL doesn't match, so browser login
-// (needed to mint a token at /settings/tokens) fails there with a
-// server-config error. Always default agents and humans to the
-// canonical domain — override with $LLAMA_API_URL only if testing.
-const DEFAULT_BASE_URL = "https://command.llamaventures.vc";
-
-// Canonical token location (single line, mode 0600). Aligns with the
-// agent-discovery convention documented in docs/CLI_API.md and the
-// llama-pipeline skill.
-const TOKEN_DIR = path.join(os.homedir(), ".llama");
-const TOKEN_FILE = path.join(TOKEN_DIR, "token");
-
-// Legacy location used by CLI v0.1. Read for back-compat (silent
-// migrate to canonical on first use); never written.
-const LEGACY_DIR = path.join(os.homedir(), ".llama-command");
-const LEGACY_FILE = path.join(LEGACY_DIR, "config.json");
-
-function readLegacyConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(LEGACY_FILE, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function migrateLegacyTokenIfNeeded(token) {
-  if (fs.existsSync(TOKEN_FILE)) return; // canonical already populated
-  try {
-    fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(TOKEN_FILE, `${token}\n`, { mode: 0o600 });
-    fs.chmodSync(TOKEN_FILE, 0o600);
-  } catch {
-    // Migration is best-effort; the env var / legacy fallback still works.
-  }
-}
-
-function readCanonicalToken() {
-  try {
-    return fs.readFileSync(TOKEN_FILE, "utf8").trim();
-  } catch {
-    return "";
-  }
-}
-
-function writeCanonicalToken(token) {
-  fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(TOKEN_FILE, `${token}\n`, { mode: 0o600 });
-  fs.chmodSync(TOKEN_FILE, 0o600);
-}
-
-function getBaseUrl() {
-  return (process.env.LLAMA_API_URL || readLegacyConfig().baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
-}
-
-function getToken() {
-  // 1. env var — preferred for CI, cloud agents, sandboxed runners
-  if (process.env.LLAMA_TOKEN) return process.env.LLAMA_TOKEN;
-
-  // 2. canonical file
-  const canonical = readCanonicalToken();
-  if (canonical) return canonical;
-
-  // 3. legacy fallback — silently migrate forward so future invocations
-  //    use the canonical path even if the user never re-runs `token set`.
-  const legacy = readLegacyConfig().token;
-  if (legacy) {
-    migrateLegacyTokenIfNeeded(legacy);
-    return legacy;
-  }
-
-  return "";
-}
+import {
+  DEFAULT_BASE_URL,
+  LEGACY_DIR,
+  LEGACY_FILE,
+  TOKEN_DIR,
+  TOKEN_FILE,
+  getAuthHeaders,
+  getBaseUrl,
+  getToken,
+  print,
+  readCanonicalToken,
+  readLegacyConfig,
+  request,
+  tryGcloudIdentityToken,
+  writeCanonicalToken,
+  writeLegacyConfig,
+} from "../lib/client.mjs";
 
 function parseFlags(args) {
   const flags = {};
@@ -101,93 +37,6 @@ function parseFlags(args) {
     }
   }
   return { flags, positional };
-}
-
-// Try `gcloud auth print-identity-token`. Returns the JWT or null.
-// Zero-config win for any team member who has gcloud + their
-// @llamaventures.vc account already set up — the server's Bearer auth
-// path (api-auth.ts) verifies and auto-creates the user row.
-async function tryGcloudIdentityToken() {
-  try {
-    const { stdout } = await execFile("gcloud", ["auth", "print-identity-token"], { timeout: 4000 });
-    const t = String(stdout).trim();
-    // Crude JWT shape check (header.payload.signature). Avoids passing
-    // junk like "ERROR: ..." to the server when gcloud misbehaves.
-    return t && t.split(".").length === 3 ? t : null;
-  } catch {
-    return null;
-  }
-}
-
-// Build the auth header set. If both Bearer and X-Llama-Token are
-// available, send both — the server tries Bearer first and falls
-// through to X-Llama-Token on verification failure (api-auth.ts).
-// This keeps the CLI working through expired gcloud tokens, mismatched
-// accounts, etc., without the caller having to think about it.
-async function getAuthHeaders() {
-  const headers = {};
-  const bearer = await tryGcloudIdentityToken();
-  if (bearer) headers["Authorization"] = `Bearer ${bearer}`;
-  const token = getToken();
-  if (token) headers["X-Llama-Token"] = token;
-  return headers;
-}
-
-// Structured no-credential error. Format is stable so agents can
-// pattern-match `Error[NO_AUTH]` and trigger a recovery flow.
-function noAuthError() {
-  return new Error(
-    "Error[NO_AUTH]: No credentials found.\n" +
-    "  Quickest: run `gcloud auth login` with your @llamaventures.vc account (zero config; CLI auto-detects).\n" +
-    "  Alternative: get a token at https://command.llamaventures.vc/settings/tokens, then\n" +
-    "    `llama token set <llc_...>`  (saved to ~/.llama/token)\n" +
-    "  Or set $LLAMA_TOKEN in your shell env."
-  );
-}
-
-// Structured 401 error after a request was attempted. Means the
-// credentials we sent were rejected (revoked / expired / wrong account).
-function unauthorizedError() {
-  return new Error(
-    "Error[UNAUTHORIZED]: Server rejected our credentials.\n" +
-    "  If using gcloud: confirm `gcloud config get account` shows your @llamaventures.vc address.\n" +
-    "  If using X-Llama-Token: the token may be revoked. Regenerate at\n" +
-    "    https://command.llamaventures.vc/settings/tokens and run `llama token set <llc_...>`."
-  );
-}
-
-async function request(method, endpoint, body) {
-  const authHeaders = await getAuthHeaders();
-  if (Object.keys(authHeaders).length === 0) throw noAuthError();
-  const res = await fetch(`${getBaseUrl()}${endpoint}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (res.status === 401) throw unauthorizedError();
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-  if (!res.ok) {
-    const message = typeof data === "object" && data?.error ? data.error : `HTTP ${res.status}`;
-    throw new Error(message);
-  }
-  return data;
-}
-
-function print(data) {
-  if (typeof data === "string") {
-    console.log(data);
-  } else {
-    console.log(JSON.stringify(data, null, 2));
-  }
 }
 
 // Client-side fuzzy match — used as a fallback when the server hasn't yet
@@ -428,9 +277,7 @@ async function main() {
       // file there so we don't introduce a second config surface.
       const legacy = readLegacyConfig();
       legacy.baseUrl = String(flags.base).replace(/\/$/, "");
-      fs.mkdirSync(LEGACY_DIR, { recursive: true });
-      fs.writeFileSync(LEGACY_FILE, `${JSON.stringify(legacy, null, 2)}\n`, { mode: 0o600 });
-      fs.chmodSync(LEGACY_FILE, 0o600);
+      writeLegacyConfig(legacy);
     }
     // Round-trip the token against /api/me before persisting. Catches the
     // pasted-preview / wrong-token / wrong-host cases at "set" time instead
