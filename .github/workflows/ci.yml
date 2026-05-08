@@ -36,7 +36,7 @@ jobs:
       - name: MCP server module loads cleanly
         run: node --check bin/llama-mcp.mjs
 
-      - name: MCP server boots + lists 20 tools
+      - name: MCP server boots + lists 19 tools (and llama_api is NOT among them)
         run: |
           OUT=$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci-smoke","version":"1.0.0"}}}' \
@@ -51,7 +51,13 @@ jobs:
           echo "$OUT" | grep -q '"name":"wiki_search"'
           echo "$OUT" | grep -q '"name":"timeline"'
           echo "$OUT" | grep -q '"name":"pitch_start"'
-          echo "$OUT" | grep -q '"name":"llama_api"'
+          # Regression test for the v1.2.3 security fix: the generic
+          # /api/* passthrough must never come back. Hard-fail the build
+          # if it ever shows up in tools/list again.
+          if echo "$OUT" | grep -q '"name":"llama_api"'; then
+            echo "FAIL: llama_api tool resurfaced — see v1.2.3 security release notes."
+            exit 1
+          fi
 
       - name: Pack tarball + verify file allowlist
         run: |
