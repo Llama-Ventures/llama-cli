@@ -159,7 +159,7 @@ llama token show
 
 # Pipeline — read
 llama deal search "acme ai"
-llama deal list --owner kyle --status Diligence
+llama deal list --owner alex --status Diligence
 llama deal show <dealId>
 
 # Pipeline — write
@@ -217,12 +217,13 @@ agents can pattern-match without parsing prose.
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**20 typed tools** that mirror the most-used CLI surface, plus a generic
-`llama_api` escape hatch (modeled on the GitHub MCP server) for any endpoint
-not yet wrapped.
+**19 typed tools** that mirror the most-used CLI surface. Every tool is named
+and scoped — there is no generic API passthrough, by design (a public-package
+escape hatch reachable from a prompt-injectable agent context is exactly the
+shape we want to avoid).
 
 ```
-auth_status            llama_api
+auth_status
 
 deal_search            deal_show
 deal_create            deal_update
@@ -339,8 +340,9 @@ intake agent extracts the structured fields and produces the verdict.
   the `Error[…]` prefixes are part of the public contract and won't change
   inside a major version.
 - **Server schema drift:** When the API gains an endpoint, the CLI / MCP gain
-  a typed wrapper in the next minor release. The `llama_api` MCP tool is the
-  always-available escape hatch in the meantime.
+  a typed wrapper in the next minor release. While you wait, the `llama` CLI
+  itself ships the full `llama` command surface (40+ commands) — use it for
+  ad-hoc HTTP work that the MCP doesn't yet wrap.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the per-version log.
 
