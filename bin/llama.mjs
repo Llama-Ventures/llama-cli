@@ -309,13 +309,19 @@ Upload a file (deck / pitch / one-pager):
 Interactive REPL (requires existing session):
   llama pitch
 
+Wrap up the pitch (asks the agent to call finalize_intake immediately):
+  llama pitch finalize       # use when you're done — agent stops asking
+
 Inspect / clean up:
   llama pitch status         # session id, idle minutes, finalized?
   llama pitch end            # clear local session state
 
 Caps (server-enforced):
-  5 sessions per IP per day, 3 per email per day, 30min idle timeout,
+  5 sessions per IP per day, 3 per email per day, 60min idle timeout,
   100 messages per session, 1M tokens per session.
+
+Environment:
+  LLAMA_API_URL              override base URL (dev: http://localhost:3000)
 `);
     return;
   }
@@ -403,14 +409,49 @@ Caps (server-enforced):
       cleared: !!had,
       session_file: EXTERNAL_SESSION_FILE,
       note: had
-        ? "Local session state cleared. Server-side session may still be active until idle timeout (30min)."
+        ? "Local session state cleared. Server-side session may still be active until idle timeout (60min)."
         : "No local session was active.",
     });
     return;
   }
 
+  if (action === "finalize") {
+    // Founder-initiated finalize: send a sentinel token in the chat
+    // stream that the system prompt recognizes as "wrap up now." The
+    // intake agent calls finalize_intake on this turn with whatever
+    // fields are recorded — no extra questions, no confirmation prompt.
+    // Local session is left as-is; on next read its `finalized=true`
+    // reflects the server's status.
+    const session = readExternalSession();
+    if (!session) {
+      throw new Error(
+        "No active pitch session. Run `llama pitch start --name \"...\" --email \"...\"` first."
+      );
+    }
+    if (session.finalized) {
+      throw new Error(
+        "This pitch session is already finalized. Run `llama pitch end` to clear local state."
+      );
+    }
+    process.stderr.write("Asking the agent to wrap up...\n");
+    const result = await sendExternalMessage("[FOUNDER_FINALIZE_REQUEST]");
+    process.stdout.write(result.text + "\n");
+    if (result.finalized) {
+      process.stderr.write("\n--- Pitch session finalized ---\n");
+      if (result.finalize_payload) {
+        process.stderr.write(JSON.stringify(result.finalize_payload, null, 2) + "\n");
+      }
+    } else {
+      process.stderr.write(
+        "\n⚠ Agent did not call finalize_intake on this turn. " +
+        "Try `llama pitch finalize` once more, or `llama pitch end` to abandon.\n"
+      );
+    }
+    return;
+  }
+
   // No action → REPL mode (requires existing session)
-  if (action === undefined || (rest.length === 0 && !["start", "say", "upload", "status", "end"].includes(action))) {
+  if (action === undefined || (rest.length === 0 && !["start", "say", "upload", "status", "end", "finalize"].includes(action))) {
     // Treat any unknown bare action as "join existing session in REPL mode"
     const session = readExternalSession();
     if (!session) {
