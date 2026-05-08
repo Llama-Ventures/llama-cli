@@ -500,6 +500,13 @@ async function runPitchRepl() {
 
 async function main() {
   const [area, action, ...rest] = process.argv.slice(2);
+  if (area === "--version" || area === "-v" || area === "version") {
+    const { createRequire } = await import("module");
+    const requireFromHere = createRequire(import.meta.url);
+    const { version } = requireFromHere("../package.json");
+    console.log(version);
+    return;
+  }
   if (!area || area === "help" || area === "--help" || area === "-h") {
     usage();
     return;
@@ -608,7 +615,7 @@ https://command.llamaventures.vc/settings/tokens, run
           throw new Error(`Verify call failed: HTTP ${res.status}. Not saving.`);
         }
       } catch (e) {
-        if (e instanceof Error && e.message.startsWith("Server rejected") || e.message.startsWith("Verify call failed")) {
+        if (e instanceof Error && (e.message.startsWith("Server rejected") || e.message.startsWith("Verify call failed"))) {
           throw e;
         }
         // Network / DNS failure — surface but let the user override.

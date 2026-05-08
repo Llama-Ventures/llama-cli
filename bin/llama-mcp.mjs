@@ -7,10 +7,14 @@
 // agent's MCP config — see README for snippets. Auth is identical to the
 // CLI: gcloud (preferred) → $LLAMA_TOKEN → ~/.llama/token.
 
+import { createRequire } from "module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { getAuthHeaders, readBriefing, request } from "../lib/client.mjs";
+
+const requireFromHere = createRequire(import.meta.url);
+const { version: PKG_VERSION } = requireFromHere("../package.json");
 import {
   clearExternalSession,
   getExternalSessionStatus,
@@ -38,7 +42,7 @@ async function callApi(method, path, body) {
 
 const server = new McpServer({
   name: "llama-mcp",
-  version: "1.0.0",
+  version: PKG_VERSION,
 });
 
 // ============================================================
@@ -347,39 +351,6 @@ server.registerTool(
     else params.set("for_me", "1");
     if (!includeResolved) params.set("unresolved", "1");
     return callApi("GET", `/api/mentions?${params}`);
-  }
-);
-
-// ============================================================
-// Escape hatch
-// ============================================================
-
-server.registerTool(
-  "llama_api",
-  {
-    description:
-      "Generic Llama Command HTTP API passthrough. Use this for endpoints that " +
-      "don't yet have a typed tool. Returns raw JSON. Path must start with /api/. " +
-      "See https://github.com/SoujiOkita98/llama-cli for the wrapped tool list.",
-    inputSchema: {
-      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
-      path: z.string().describe("path starting with /api/"),
-      body: z
-        .any()
-        .optional()
-        .describe(
-          "request body — only used on POST / PUT / PATCH; should be a JSON-serializable object"
-        ),
-    },
-  },
-  async ({ method, path, body }) => {
-    if (typeof path !== "string" || !path.startsWith("/api/")) {
-      return {
-        content: [{ type: "text", text: "Error: path must start with /api/" }],
-        isError: true,
-      };
-    }
-    return callApi(method, path, body);
   }
 );
 
