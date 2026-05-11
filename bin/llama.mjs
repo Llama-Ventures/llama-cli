@@ -28,6 +28,8 @@ import {
   startExternalSession,
   uploadExternalFile,
 } from "../lib/external.mjs";
+import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
+import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
 
 function parseFlags(args) {
   const flags = {};
@@ -697,8 +699,11 @@ https://command.llamaventures.vc/settings/tokens, run
           ? "~/.llama-command/config.json (legacy)"
           : null;
 
+    const oauthBundle = await readBundle();
+    const oauthBackend = oauthBundle ? await detectBackend() : null;
+
     let serverCheck = "skipped (no credentials)";
-    if (bearer || token) {
+    if (oauthBundle?.access_token || bearer || token) {
       try {
         const me = await request("GET", "/api/me");
         serverCheck = `ok — authenticated as ${me?.email ?? "unknown"} (role: ${me?.role ?? "unknown"})`;
@@ -707,12 +712,101 @@ https://command.llamaventures.vc/settings/tokens, run
       }
     }
 
-    print({
+    const out = {
       baseUrl: getBaseUrl(),
+      activeMethod: oauthBundle?.access_token
+        ? "oauth"
+        : bearer
+          ? "gcloud-bearer"
+          : token
+            ? "llama-token"
+            : "none",
+      oauth: oauthBundle
+        ? {
+            storage: oauthBackend,
+            client_id: oauthBundle.client_id,
+            scope: oauthBundle.scope,
+            issuer: oauthBundle.issuer,
+            expires_in_seconds: Math.max(0, Math.round((oauthBundle.expires_at - Date.now()) / 1000)),
+          }
+        : "absent (run `llama auth login`)",
       gcloudIdentityToken: bearer ? "present" : "absent",
       llamaToken: token ? `${token.slice(0, 8)}...${token.slice(-4)}` : "absent",
       llamaTokenSource: tokenSrc,
       serverCheck,
+    };
+    print(out);
+    return;
+  }
+
+  // ============================================================
+  // auth login — PKCE + loopback browser flow
+  // ============================================================
+  if (area === "auth" && action === "login") {
+    const { flags } = parseFlags(rest);
+    const requestedScope = typeof flags.scope === "string" && flags.scope.trim()
+      ? flags.scope.trim()
+      : "read write";
+    const baseUrl = getBaseUrl();
+    const resource = baseUrl; // general API audience (oauthApiResource on the server)
+
+    console.error(`Signing in to ${baseUrl} as Llama CLI (client_id=${LLAMA_CLI_CLIENT_ID})...`);
+    const bundle = await pkceLoopbackFlow({ baseUrl, scope: requestedScope, resource });
+    const stored = await writeBundle({
+      access_token: bundle.access_token,
+      refresh_token: bundle.refresh_token,
+      expires_at: Date.now() + (bundle.expires_in ?? 3600) * 1000,
+      scope: bundle.scope,
+      client_id: bundle.client_id,
+      issuer: bundle.issuer,
+      resource: bundle.resource,
+      created_at: Date.now(),
+    });
+
+    // Verify by hitting /api/me with the new token.
+    let identity = "(unable to verify — /api/me did not respond)";
+    try {
+      const me = await request("GET", "/api/me");
+      identity = `${me?.email ?? "unknown"} (role: ${me?.role ?? "unknown"})`;
+    } catch (e) {
+      identity = `verification failed: ${e.message.split("\n")[0]}`;
+    }
+
+    print({
+      ok: true,
+      message: "Signed in",
+      identity,
+      storage: stored.backend,
+      scope: bundle.scope,
+      expires_in_seconds: bundle.expires_in,
+    });
+    return;
+  }
+
+  // ============================================================
+  // auth logout — revoke + clear local
+  // ============================================================
+  if (area === "auth" && action === "logout") {
+    const bundle = await readBundle();
+    if (!bundle) {
+      print({ ok: true, message: "No OAuth credentials to clear" });
+      return;
+    }
+    let revoked = false;
+    try {
+      revoked = await revokeOAuthToken({
+        baseUrl: bundle.issuer ?? getBaseUrl(),
+        token: bundle.refresh_token,
+        tokenTypeHint: "refresh_token",
+      });
+    } catch {
+      revoked = false;
+    }
+    await deleteBundle();
+    print({
+      ok: true,
+      message: "Signed out — local credentials cleared",
+      serverRevoke: revoked ? "succeeded" : "failed (server unreachable or token already invalid; local state cleared anyway)",
     });
     return;
   }

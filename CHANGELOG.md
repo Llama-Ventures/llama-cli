@@ -6,6 +6,45 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-05-11
+
+### Added
+- **`llama auth login` — browser-based OAuth 2.1 sign-in.** PKCE + loopback
+  flow against the Llama Command authorization server. Opens your browser,
+  routes through Google sign-in (`@llamaventures.vc` only) + consent screen,
+  redirects to a one-shot ephemeral `127.0.0.1:<port>/callback`, exchanges
+  the code for an access + refresh token pair. Replaces the 4-step
+  "mint at /settings/tokens → copy → paste → `llama token set`" path with a
+  single command. Existing `llc_...` PATs and gcloud Bearer auth continue
+  to work unchanged (priority order: OAuth → gcloud → `$LLAMA_TOKEN` →
+  `~/.llama/token` → legacy).
+- **`llama auth logout`** — RFC 7009 revoke at the AS + clear local
+  storage. Falls back to gcloud / PAT cleanly afterward.
+- **OS Keychain credential storage** via `@napi-rs/keyring` (macOS Keychain,
+  Windows Credential Manager, Linux Secret Service). File backend at
+  `~/.llama/oauth.json` (mode 0600) when no Keychain backend is available
+  (Linux containers without libsecret, CI runners) — same posture
+  `gcloud`/`gh`/`aws` ship with on Linux servers.
+- **Auto-refresh on 401.** When an OAuth-bearing call returns 401, the CLI
+  forces a refresh-token rotation under a cross-process file lock and
+  retries once. Two shells refreshing simultaneously can't burn each other's
+  refresh token.
+- **`llama auth status` extended.** New `activeMethod` field (`oauth` /
+  `gcloud-bearer` / `llama-token` / `none`) and `oauth` block showing
+  storage backend, client_id, scope, expiry. Existing fields preserved.
+
+### Changed
+- Bearer header on outbound requests now prefers OAuth access token over
+  gcloud identity token. Unchanged when no OAuth bundle exists.
+
+### Notes
+- Requires the Llama Command server to have `OAUTH_PROVIDER_ENABLED=true`
+  set on Render. Until that flag flips, `llama auth login` will fail with
+  a 404 on the OAuth endpoints — fall back to PATs in the meantime.
+- Phase 2.5 (RFC 8628 device authorization grant for SSH/headless
+  environments) lands in a follow-up; today's `auth login` requires a
+  browser.
+
 ## [1.2.2] — 2026-05-07
 
 ### Changed

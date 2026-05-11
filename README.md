@@ -103,16 +103,37 @@ The client tries credentials **in this order**, on every call:
 
 | # | Source | Header sent | Best for |
 |---|--------|-------------|----------|
-| 1 | `gcloud auth print-identity-token` | `Authorization: Bearer …` | Team members on a workstation (zero config) |
-| 2 | `$LLAMA_TOKEN` env var | `X-Llama-Token` | CI runners, sandboxed cloud agents |
-| 3 | `~/.llama/token` (mode `0600`) | `X-Llama-Token` | Persistent local install |
-| 4 | `~/.llama-command/config.json` | `X-Llama-Token` | Legacy CLI v0.1 — auto-migrates to `~/.llama/token` on first read |
+| 1 | `llama auth login` (OAuth 2.1, OS Keychain) | `Authorization: Bearer …` | **Recommended for everyone.** One-shot browser login; tokens auto-refresh and survive reboots. |
+| 2 | `gcloud auth print-identity-token` | `Authorization: Bearer …` | Workstations with gcloud already wired (zero config) |
+| 3 | `$LLAMA_TOKEN` env var | `X-Llama-Token` | CI runners, sandboxed cloud agents |
+| 4 | `~/.llama/token` (mode `0600`) | `X-Llama-Token` | Persistent local install (legacy PATs) |
+| 5 | `~/.llama-command/config.json` | `X-Llama-Token` | CLI v0.1 — auto-migrates to `~/.llama/token` |
 
-Both Bearer and X-Llama-Token are sent if both exist. The server tries Bearer
-first; on verification failure it falls through to X-Llama-Token. Inspect the
-resolved identity any time with `llama auth status`.
+If both Bearer and X-Llama-Token are present, both are sent — the server tries
+Bearer first and falls through to X-Llama-Token on verification failure.
+Inspect the resolved identity any time with `llama auth status`.
 
-### Zero-config — recommended for team members
+### Browser sign-in — recommended
+
+```bash
+llama auth login           # opens browser → Google sign-in → consent → done
+llama auth status          # → activeMethod=oauth, scope, identity
+llama deal search acme-ai  # ready
+```
+
+`llama auth login` runs an OAuth 2.1 PKCE + RFC 8252 loopback flow against
+`https://command.llamaventures.vc`, exchanges the code for an access + refresh
+token pair, and stores them in the OS Keychain (macOS Keychain / Windows
+Credential Manager / Linux Secret Service via [`@napi-rs/keyring`](https://www.npmjs.com/package/@napi-rs/keyring)).
+Linux containers without libsecret use a 0600-mode file at `~/.llama/oauth.json`
+— same posture `gcloud` / `gh` / `aws` ship with on Linux servers. Refresh
+tokens rotate transparently when the access token nears expiry; a cross-process
+file lock prevents two shells from burning each other's refresh during
+concurrent calls.
+
+`llama auth logout` revokes server-side via RFC 7009 and clears local storage.
+
+### gcloud — for machines already wired with `gcloud auth login`
 
 ```bash
 gcloud auth login          # one-time; pick your @llamaventures.vc account
@@ -120,7 +141,7 @@ llama auth status          # → role + email
 llama deal search acme-ai  # ready
 ```
 
-### Manual token — for machines without `gcloud`, or stable CI
+### Long-lived PAT — for CI / unattended environments
 
 1. Sign in to https://command.llamaventures.vc.
 2. Open `/settings/tokens` → **Mint Token**.
