@@ -76,8 +76,8 @@ Default to action. Ask only for genuine judgment.
 
 | Error | What to do |
 |---|---|
-| `Error[NO_AUTH]` | Tell user: mint a token at `command.llamaventures.vc/settings/tokens`, then `llama token set <llc_...>`. |
-| `Error[UNAUTHORIZED]` | Credentials rejected (revoked / expired / wrong account). Same recovery — re-mint. |
+| `Error[NO_AUTH]` | Tell user: run `llama auth login` (browser sign-in via Google, OAuth tokens stored in OS Keychain). For unattended/CI: mint a long-lived PAT at `command.llamaventures.vc/settings/tokens` and `llama token set <llc_...>`. |
+| `Error[UNAUTHORIZED]` | Credentials rejected (revoked / expired / wrong account). If using OAuth: `llama auth login` again. If using PAT: re-mint. |
 | HTTP 5xx | Wait 5s, retry once. Two failures → tell the user "Command unavailable, will retry later." |
 | `Too many failed authentication attempts` (HTTP 429) | IP rate-limit. Wait until next UTC hour, OR switch network (e.g. tether to phone). |
 
@@ -87,7 +87,9 @@ Default to action. Ask only for genuine judgment.
 
 ```bash
 # Auth
-llama auth status
+llama auth login              # browser PKCE flow → OAuth tokens in OS Keychain (recommended)
+llama auth logout             # revoke + clear local
+llama auth status             # show identity + active method
 
 # Pipeline — read
 llama deal search "<name>"
