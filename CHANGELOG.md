@@ -104,7 +104,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ### Changed
 - `agent_briefing` MCP prompt + `llama agent-onboard` CLI command now gate on
-  `/api/me` and *** that the caller isn't owner of.
+  `/api/me`; unauthenticated callers see a short bootstrap stub instead of
+  the full workflow contract.
 
 ## [1.1.0] — 2026-05-04
 
