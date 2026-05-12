@@ -6,6 +6,25 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- **`llama memo` subcommands.** Closes the CLI/MCP gap on the Memo tab —
+  long-form HTML investment memos previously only accessible through the
+  web UI. Four verbs:
+  - `llama memo show <dealId>` — fetch the current memo; default writes
+    HTML to stdout (pipeable to a file or `open`), `--out <path>` writes
+    to disk, `--json` returns the full envelope (memo + mode + inflight).
+  - `llama memo regenerate <dealId> [--opus]` — trigger server-side
+    regeneration; streams panel progress to stderr, prints final summary
+    JSON to stdout.
+  - `llama memo save <dealId> --file <path>` — upload hand-written HTML
+    as a manual override.
+  - `llama memo reset <dealId> [--all]` — drop the manual override
+    (default) or every version (`--all`).
+- **MCP `memo_*` tools.** Same surface as the CLI: `memo_show`,
+  `memo_regenerate`, `memo_save`, `memo_reset`. `memo_regenerate` is
+  synchronous (non-streaming) so the call returns the final result
+  directly to the calling agent.
+
 ## [1.3.1] — 2026-05-12
 
 ### Changed
