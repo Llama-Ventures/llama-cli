@@ -6,6 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-05-12
+
+### Changed
+- **Documentation hygiene.** CHANGELOG backfilled for 1.2.3 and 1.2.4. Help text
+  and READMEs now describe server-enforced rate limits generically instead of
+  restating specific numbers. `package.json` description clarified.
+
+### Added
+- **Pre-publish identifier guard in CI.** Shape-based regex blocks `npm publish`
+  if any internal-style slug accidentally slips into shipped files (`bin/`,
+  `lib/`, root `.md`). Extend the pattern as new shapes surface.
+
 ## [1.3.0] — 2026-05-11
 
 ### Added
@@ -151,7 +163,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ---
 
-[Unreleased]: https://github.com/SoujiOkita98/llama-cli/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/SoujiOkita98/llama-cli/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/SoujiOkita98/llama-cli/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.2...v1.2.3
