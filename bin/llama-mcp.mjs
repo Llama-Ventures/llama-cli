@@ -364,9 +364,8 @@ server.registerTool(
 // founder's agent talks to ours, structured intake gets captured, and a
 // 12-dimension verdict is returned.
 //
-// Anti-abuse caps are server-enforced (5 sessions/IP/day, 3/email/day,
-// 30min idle, 100 msg cap, 1M token cap, global daily cap). The MCP tools
-// surface those rejections as text back to the agent.
+// Anti-abuse rate limits are server-enforced. The MCP tools surface
+// any server-side rejections as text back to the agent.
 
 function asTextResult(text, isError = false) {
   return {
@@ -383,8 +382,8 @@ server.registerTool(
       "when a founder (the user) wants to pitch their company to Llama. " +
       "Requires their name + email. Returns a session_id; the conversation " +
       "is then maintained via pitch_send_message until the agent finalizes. " +
-      "Caps (server-enforced): 5 sessions/IP/day, 3 sessions/email/day, " +
-      "30min idle timeout. No Llama Command token needed.",
+      "Server-enforced rate limits apply (per-IP, per-email, per-session). " +
+      "No Llama Command token needed.",
     inputSchema: {
       name: z.string().describe("the founder's full name (max 100 chars)"),
       email: z.string().describe("the founder's email (deliverable, not a disposable domain)"),
@@ -447,8 +446,9 @@ server.registerTool(
     description:
       "Attach a file (deck, one-pager, deck PDF, screenshot, etc.) to the " +
       "active pitch session. Server allows pdf / pptx / ppt / docx / doc / " +
-      "xlsx / xls / png / jpg / webp / heic / heif / txt / md, max 50 MB, " +
-      "10 files per session. Returns a drive_file_id; the intake agent will " +
+      "xlsx / xls / png / jpg / webp / heic / heif / txt / md, with " +
+      "server-enforced size and per-session count limits. " +
+      "Returns a drive_file_id; the intake agent will " +
       "pick the file up via list_uploaded_files / read_uploaded_file on its " +
       "next turn (so call pitch_send_message with a one-line note like " +
       "'I just uploaded our pitch deck' so the agent knows to look).",
@@ -493,7 +493,7 @@ server.registerTool(
       "server-side intake agent to finalize — the agent decides that on its " +
       "own once the pitch is sufficient. Use this for cleanup after a session " +
       "ends, or to abandon a session early. The server-side session will " +
-      "naturally expire after 30min of idle.",
+      "naturally expire after the server's idle timeout.",
     inputSchema: {},
   },
   async () => {
@@ -505,7 +505,7 @@ server.registerTool(
           {
             cleared: before.active,
             previous_session: before.active ? before : null,
-            note: "Local pitch session state cleared. Server-side session may still be active for ~30min until idle timeout.",
+            note: "Local pitch session state cleared. Server-side session may still be active until its idle timeout.",
           },
           null,
           2

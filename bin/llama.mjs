@@ -242,7 +242,7 @@ Skill corrections (persona-owner pushback — read by persona-watcher):
   llama skill-correction add <skill-slug> "<correction text>" [--deal <uuid>] [--block <blockId>]
   llama skill-correction delete <id>
   Server enforces persona owner OR system admin on POST/DELETE; GET is open.
-  External personas (owner_email=null, e.g. ***) are admin-only for write.
+  External personas (owner_email=null) are admin-only for write.
 
 Mentions / Inbox:
   llama mentions                                       # default: my unresolved cues
@@ -318,9 +318,9 @@ Inspect / clean up:
   llama pitch status         # session id, idle minutes, finalized?
   llama pitch end            # clear local session state
 
-Caps (server-enforced):
-  5 sessions per IP per day, 3 per email per day, 60min idle timeout,
-  100 messages per session, 1M tokens per session.
+Caps:
+  Server-enforced per-IP / per-email / per-session rate limits apply.
+  The CLI surfaces server messages if a limit is hit.
 
 Environment:
   LLAMA_API_URL              override base URL (dev: http://localhost:3000)
@@ -411,7 +411,7 @@ Environment:
       cleared: !!had,
       session_file: EXTERNAL_SESSION_FILE,
       note: had
-        ? "Local session state cleared. Server-side session may still be active until idle timeout (60min)."
+        ? "Local session state cleared. Server-side session may still be active until idle timeout."
         : "No local session was active.",
     });
     return;

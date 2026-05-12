@@ -45,6 +45,41 @@ this project adheres to [Semantic Versioning](https://semver.org).
   environments) lands in a follow-up; today's `auth login` requires a
   browser.
 
+## [1.2.4] — 2026-05-08
+
+### Added
+- **`llama pitch finalize`** — founder-initiated wrap-up. Sends a sentinel
+  that the intake agent recognizes as "call `finalize_intake` on this turn."
+  Closes the gap where the founder is done but the agent keeps asking.
+
+### Changed
+- **Fetch timeouts on all three external API calls** — 60s on
+  `/start-session`, 180s on `/chat`, 180s on `/upload`. Without these, a
+  network hang froze the CLI indefinitely.
+- **Help polish** — `pitch help` now mentions `pitch finalize` and the
+  `LLAMA_API_URL` env override.
+
+## [1.2.3] — 2026-05-08
+
+### Security
+- **Removed a generic MCP tool that proxied arbitrary internal API paths.**
+  An unrestricted internal-API tool reachable from a prompt-injection-prone
+  agent context is the wrong shape for a public package. Power users keep
+  the `llama` CLI (40+ commands) for raw HTTP.
+
+### Changed
+- Scrubbed example identifiers from deal-list snippets (both READMEs).
+- `zod` is now a direct dependency (was resolving via transitive hoist;
+  would have broken under pnpm/yarn strict).
+- MCP server reports the real package version in `serverInfo` (was
+  hardcoded `"1.0.0"`).
+
+### Fixed
+- Operator-precedence bug in `bin/llama.mjs` token-set verify path that
+  could TypeError on rare error paths.
+- `llama --version` / `-v` / `version` now print the package version
+  cleanly (exit 0).
+
 ## [1.2.2] — 2026-05-07
 
 ### Changed
@@ -75,9 +110,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 - **`llama-mcp` stdio MCP server**, distributed in the same npm package.
-  Mirrors the most-used CLI surface as 15 typed tools plus the generic
-  `llama_api` escape hatch (path must start with `/api/`). Same auth chain,
-  same error prefixes — CLI and MCP cannot drift.
+  Mirrors the most-used CLI surface as a set of named, typed tools.
+  Same auth chain, same error prefixes — CLI and MCP cannot drift.
 - `llama agent-onboard` — re-prints the bundled `AGENT_BRIEFING.md` so any
   agent that just installed the package can self-onboard.
 
@@ -116,7 +150,10 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ---
 
-[Unreleased]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/SoujiOkita98/llama-cli/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.4...v1.3.0
+[1.2.4]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.3...v1.2.4
+[1.2.3]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/SoujiOkita98/llama-cli/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/SoujiOkita98/llama-cli/compare/v1.1.0...v1.2.0

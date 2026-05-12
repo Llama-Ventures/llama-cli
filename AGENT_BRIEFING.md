@@ -139,7 +139,6 @@ Tools available:
 - `timeline` / `post`
 - `mentions_list`
 - `pitch_start` / `pitch_send_message` / `pitch_upload_file` / `pitch_status` / `pitch_finalize` — public intake (no Llama token needed; for founders / EAs / external agents)
-- `llama_api` — escape hatch for any endpoint not yet wrapped (path must start `/api/`)
 
 You can also fetch this exact briefing as an MCP prompt named `agent_briefing`.
 

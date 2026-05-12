@@ -48,9 +48,9 @@ You should see all 20 tools, including the 5 `pitch_*`.
   are part of the public contract — agents pattern-match on them. New error
   classes need a new prefix; renaming an existing one is a major version bump.
 - **CLI and MCP stay in lockstep.** Adding a new CLI command? Add the matching
-  MCP tool in the same PR. Adding a generic-but-undocumented endpoint? Use the
-  `llama_api` escape hatch on the MCP side and ship the typed CLI verb in a
-  follow-up.
+  MCP tool in the same PR. The MCP server exposes only named, typed tools — no
+  generic API passthrough — so every server endpoint that needs agent access
+  gets its own typed wrapper.
 - **No bundler, no build step.** The CLI ships as `.mjs` files that npm copies
   verbatim. `package.json::files` is the allowlist; CI re-verifies the tarball
   contents on every PR.

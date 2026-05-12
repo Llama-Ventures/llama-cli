@@ -342,9 +342,8 @@ llama pitch upload ./deck.pdf
 llama pitch                       # interactive REPL
 ```
 
-Server-enforced caps (same as the web flow): 5 sessions/IP/day,
-3 sessions/email/day, 30 min idle timeout, 100 messages/session,
-1 M tokens/session.
+Server-enforced rate limits apply (per-IP, per-email, per-session). If you
+hit a limit, the CLI surfaces the server's response message.
 
 This is genuine **agent-to-agent**: your AI helps you tell the story, our
 intake agent extracts the structured fields and produces the verdict.
