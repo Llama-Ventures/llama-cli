@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-05-12
+
 ### Added
 - **`llama memo` subcommands.** Closes the CLI/MCP gap on the Memo tab —
   long-form HTML investment memos previously only accessible through the
