@@ -37,6 +37,22 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: npm ci
 
+      - name: Identifier guard — block known leak shapes from publish
+        run: |
+          # Block publish if any known-sensitive identifier shape slipped into
+          # files that go into the tarball (bin/, lib/, root .md). The pattern
+          # is intentionally narrow: it targets internal naming conventions
+          # that should never appear in a public artifact. Extend as new
+          # patterns surface.
+          PATTERN='\bvirtual-[a-z][a-z-]+\b|\b[a-z]+_analysis\b'
+          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ *.md 2>/dev/null || true)
+          if [ -n "$MATCHES" ]; then
+            echo "FAIL: publish blocked — sensitive identifier shape detected:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "OK: no leak-shape identifiers detected"
+
       - name: Sanity — package.json version matches release tag
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
