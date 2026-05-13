@@ -40,6 +40,34 @@ async function callApi(method, path, body) {
   }
 }
 
+// Append a block to a deal brief. The /blocks route only accepts atomic
+// full-array PUTs (no POST), so we GET current blocks, prepend the new
+// one (matches UI default since 2026-05-03), and PUT the merged array.
+// Server stamps identity meta on PUT; we don't send any.
+async function addBriefBlock(dealId, block) {
+  try {
+    const id = globalThis.crypto.randomUUID();
+    const cur = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`);
+    const existing = Array.isArray(cur?.blocks) ? cur.blocks : [];
+    const result = await request(
+      "PUT",
+      `/api/deals/${encodeURIComponent(dealId)}/blocks`,
+      { blocks: [{ id, ...block }, ...existing] }
+    );
+    const text = JSON.stringify(
+      { ok: result?.ok ?? true, id, count: result?.count ?? existing.length + 1 },
+      null,
+      2
+    );
+    return { content: [{ type: "text", text }] };
+  } catch (err) {
+    return {
+      content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
+      isError: true,
+    };
+  }
+}
+
 const server = new McpServer({
   name: "llama-mcp",
   version: PKG_VERSION,
@@ -202,7 +230,7 @@ server.registerTool(
   "brief_add_text",
   {
     description:
-      "Append a markdown text block to a deal brief. Supports markdown + mermaid diagrams.",
+      "Prepend a markdown text block to a deal brief. Supports markdown + mermaid diagrams.",
     inputSchema: {
       dealId: z.string(),
       heading: z.string().optional().describe("optional block heading"),
@@ -210,18 +238,14 @@ server.registerTool(
     },
   },
   async ({ dealId, heading, body }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/blocks`, {
-      type: "text",
-      heading,
-      body,
-    })
+    addBriefBlock(dealId, { type: "text", heading: heading ?? "", body })
 );
 
 server.registerTool(
   "brief_add_link",
   {
     description:
-      "Append a link block to a deal brief. Server fetches og:image + title via /api/link-preview.",
+      "Prepend a link block to a deal brief. Server fetches og:image + title via /api/link-preview.",
     inputSchema: {
       dealId: z.string(),
       url: z.string(),
@@ -229,18 +253,14 @@ server.registerTool(
     },
   },
   async ({ dealId, url, label }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/blocks`, {
-      type: "link",
-      url,
-      label,
-    })
+    addBriefBlock(dealId, { type: "link", url, label: label ?? "" })
 );
 
 server.registerTool(
   "brief_add_callout",
   {
     description:
-      "Append a callout block to a deal brief. Use for emphasized insights or warnings.",
+      "Prepend a callout block to a deal brief. Use for emphasized insights or warnings.",
     inputSchema: {
       dealId: z.string(),
       tone: z.string().describe("insight | warning | info | success"),
@@ -249,12 +269,7 @@ server.registerTool(
     },
   },
   async ({ dealId, tone, heading, body }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/blocks`, {
-      type: "callout",
-      tone,
-      heading,
-      body,
-    })
+    addBriefBlock(dealId, { type: "callout", tone, heading: heading ?? "", body })
 );
 
 // ============================================================
@@ -279,15 +294,23 @@ server.registerTool(
   {
     description:
       "Create or update a wiki page. Content should be markdown with attribution " +
-      "blocks (**[Name · YYYY-MM-DD · source · fact|opinion]**) for traceability.",
+      "blocks (**[Name · YYYY-MM-DD · source · fact|opinion]**) for traceability. " +
+      "`sources` is a separate citation list (URLs, doc names, or meeting references) " +
+      "— at least one is required; URLs embedded inside `content` do not count.",
     inputSchema: {
       slug: z.string().describe("kebab-case slug"),
       title: z.string(),
       content: z.string().describe("markdown content"),
+      sources: z
+        .array(z.string())
+        .min(1)
+        .describe(
+          "citation list — URLs, doc names, or meeting references. At least one required."
+        ),
     },
   },
-  async ({ slug, title, content }) =>
-    callApi("POST", "/api/wiki/save", { slug, title, content })
+  async ({ slug, title, content, sources }) =>
+    callApi("POST", "/api/wiki/save", { slug, title, content, sources })
 );
 
 // ============================================================
