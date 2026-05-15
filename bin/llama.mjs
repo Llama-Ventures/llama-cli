@@ -1218,12 +1218,18 @@ https://command.llamaventures.vc/settings/tokens, run
   }
 
   // ----- Wiki: read a single article (EN by default) -----
+  // Hits /api/wiki/<slug> directly. Earlier versions did a fuzzy
+  // /api/wiki/search call and filtered for an exact slug match — that
+  // missed any article whose slug-as-string didn't appear in title or
+  // content (e.g. "jack-feng" search vs "Jack Feng" content), so a real
+  // article would print as "not found" even though it existed.
   if (area === "wiki" && action === "read") {
-    const slug = rest[0];
-    if (!slug) throw new Error("Usage: llama wiki read <slug>");
-    const results = await request("GET", `/api/wiki/search?q=${encodeURIComponent(slug)}`);
-    const match = Array.isArray(results) ? results.find((r) => r.slug === slug) : null;
-    print(match || { error: `Article "${slug}" not found.` });
+    const { flags, positional } = parseFlags(rest);
+    const slug = positional[0];
+    if (!slug) throw new Error("Usage: llama wiki read <slug> [--lang en|zh]");
+    const lang = flags.lang === "zh" ? "zh" : "en";
+    const path = `/api/wiki/${encodeURIComponent(slug)}?lang=${lang}`;
+    print(await request("GET", path));
     return;
   }
 

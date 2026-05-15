@@ -281,12 +281,47 @@ server.registerTool(
   {
     description:
       "Search the Llama Ventures internal wiki — deal context, company profiles, " +
-      "industry frameworks, partner-curated knowledge.",
+      "industry frameworks, partner-curated knowledge. Returns excerpts. " +
+      "For full article content use `wiki_read`.",
     inputSchema: {
       q: z.string().describe("search query"),
     },
   },
   async ({ q }) => callApi("GET", `/api/wiki/search?q=${encodeURIComponent(q)}`)
+);
+
+server.registerTool(
+  "wiki_read",
+  {
+    description:
+      "Read a single wiki article from the configured Llama Command " +
+      "deployment by exact slug. Returns title, frontmatter, full " +
+      "markdown content, and rendered HTML.\n\n" +
+      "USE THIS — DO NOT WebFetch — whenever the user gives you a " +
+      "wiki URL whose path is `/wiki/<slug>`. Extract the slug from " +
+      "the URL path and call this tool with it. WebFetch against the " +
+      "browser URL goes through session-cookie auth — your agent " +
+      "doesn't have one — so it will look like a permission denial " +
+      "even though your token is fine.\n\n" +
+      "If you only have a topic name, use `wiki_search` first to " +
+      "find the slug.",
+    inputSchema: {
+      slug: z
+        .string()
+        .describe(
+          "exact kebab-case slug — the last path segment of the wiki URL"
+        ),
+      lang: z
+        .enum(["en", "zh"])
+        .optional()
+        .describe("article language (default 'en')"),
+    },
+  },
+  async ({ slug, lang }) =>
+    callApi(
+      "GET",
+      `/api/wiki/${encodeURIComponent(slug)}?lang=${lang === "zh" ? "zh" : "en"}`
+    )
 );
 
 server.registerTool(
