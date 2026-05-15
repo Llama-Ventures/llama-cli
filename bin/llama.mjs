@@ -2,11 +2,6 @@
 
 import readline from "readline";
 import {
-  DEFAULT_BASE_URL,
-  LEGACY_DIR,
-  LEGACY_FILE,
-  TOKEN_DIR,
-  TOKEN_FILE,
   getAuthHeaders,
   getBaseUrl,
   getToken,
