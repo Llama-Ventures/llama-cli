@@ -48,7 +48,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          interactive CLI for humans + bash
-└── bin/llama-mcp      stdio MCP server, 20 tools — for any MCP-native agent
+└── bin/llama-mcp      stdio MCP server, 23 tools — for any MCP-native agent
 ```
 
 Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
@@ -238,7 +238,7 @@ agents can pattern-match without parsing prose.
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**19 typed tools** that mirror the most-used CLI surface. Every tool is named
+**23 typed tools** that mirror the most-used CLI surface. Every tool is named
 and scoped — there is no generic API passthrough, by design (a public-package
 escape hatch reachable from a prompt-injectable agent context is exactly the
 shape we want to avoid).
@@ -257,6 +257,9 @@ timeline               post
 wiki_search            wiki_save
 
 mentions_list
+
+memo_show              memo_regenerate
+memo_save              memo_reset
 
 pitch_start            pitch_send_message
 pitch_upload_file      pitch_status
@@ -361,8 +364,8 @@ intake agent extracts the structured fields and produces the verdict.
   inside a major version.
 - **Server schema drift:** When the API gains an endpoint, the CLI / MCP gain
   a typed wrapper in the next minor release. While you wait, the `llama` CLI
-  itself ships the full `llama` command surface (40+ commands) — use it for
-  ad-hoc HTTP work that the MCP doesn't yet wrap.
+  itself ships the full command surface (40+ commands) — use it for ad-hoc
+  HTTP work that the MCP doesn't yet wrap.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the per-version log.
 
