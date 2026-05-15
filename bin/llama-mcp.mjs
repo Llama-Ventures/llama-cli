@@ -281,12 +281,35 @@ server.registerTool(
   {
     description:
       "Search the Llama Ventures internal wiki — deal context, company profiles, " +
-      "industry frameworks, partner-curated knowledge.",
+      "industry frameworks, partner-curated knowledge. Returns excerpts. " +
+      "For full article content use `wiki_read`.",
     inputSchema: {
       q: z.string().describe("search query"),
     },
   },
   async ({ q }) => callApi("GET", `/api/wiki/search?q=${encodeURIComponent(q)}`)
+);
+
+server.registerTool(
+  "wiki_read",
+  {
+    description:
+      "Read a single wiki article by exact slug. Returns title, frontmatter, " +
+      "full markdown content, and rendered HTML. Use `wiki_search` first if you " +
+      "don't know the slug.",
+    inputSchema: {
+      slug: z.string().describe("exact kebab-case slug, e.g. 'jack-feng'"),
+      lang: z
+        .enum(["en", "zh"])
+        .optional()
+        .describe("article language (default 'en')"),
+    },
+  },
+  async ({ slug, lang }) =>
+    callApi(
+      "GET",
+      `/api/wiki/${encodeURIComponent(slug)}?lang=${lang === "zh" ? "zh" : "en"}`
+    )
 );
 
 server.registerTool(
