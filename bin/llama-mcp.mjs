@@ -294,23 +294,22 @@ server.registerTool(
   "wiki_read",
   {
     description:
-      "Read a single Llama Ventures wiki article by exact slug. Returns " +
-      "title, frontmatter, full markdown content, and rendered HTML.\n\n" +
-      "USE THIS — DO NOT WebFetch — whenever the user gives you a Llama " +
-      "wiki URL like `https://command.llamaventures.vc/wiki/<slug>` " +
-      "(or `command.llamaventures.vc/wiki/<slug>`). Extract the slug " +
-      "from the URL path and call this tool with it. WebFetch against " +
-      "the browser URL goes through session-cookie auth — your agent " +
+      "Read a single wiki article from the configured Llama Command " +
+      "deployment by exact slug. Returns title, frontmatter, full " +
+      "markdown content, and rendered HTML.\n\n" +
+      "USE THIS — DO NOT WebFetch — whenever the user gives you a " +
+      "wiki URL whose path is `/wiki/<slug>`. Extract the slug from " +
+      "the URL path and call this tool with it. WebFetch against the " +
+      "browser URL goes through session-cookie auth — your agent " +
       "doesn't have one — so it will look like a permission denial " +
       "even though your token is fine.\n\n" +
-      "If you only have a topic name (e.g. 'Jack Feng' or 'neolab map'), " +
-      "use `wiki_search` first to find the slug.",
+      "If you only have a topic name, use `wiki_search` first to " +
+      "find the slug.",
     inputSchema: {
       slug: z
         .string()
         .describe(
-          "exact kebab-case slug — the last path segment of the wiki URL " +
-            "(e.g. 'jack-feng' for /wiki/jack-feng)"
+          "exact kebab-case slug — the last path segment of the wiki URL"
         ),
       lang: z
         .enum(["en", "zh"])
