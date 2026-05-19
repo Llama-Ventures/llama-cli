@@ -662,6 +662,266 @@ server.registerTool(
 );
 
 // ============================================================
+// Deal page HTML — hand-authored sandboxed page per deal
+// ============================================================
+//
+// Each deal has its own /deals/<id>/browse page that renders a
+// hand-authored HTML in a sandboxed iframe (allow-scripts, no
+// same-origin). Uploads from any caller (web UI, CLI, agent, MCP)
+// create a new monotonic version + trigger SSE push so any open
+// viewer refreshes in real time. Old versions are soft-deleted on
+// replace and can be restored.
+
+// All html_* tools take an optional documentSlug param. Default 'main'.
+// Each deal can hold multiple named documents (different HTMLs); use
+// html_docs_list to discover slugs.
+function htmlUrl(dealId, slug) {
+  return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug ?? "main")}/html`;
+}
+
+server.registerTool(
+  "html_show",
+  {
+    description:
+      "Read the current hand-authored HTML 'deal page' for a deal. " +
+      "Returns {empty: true} if no one has uploaded HTML yet, or " +
+      "{empty: false, version, html, bytes, uploaded_by, source, " +
+      "created_at}. The HTML can be 5-500KB — be deliberate about " +
+      "including the body in your reply. Use html_versions if you " +
+      "just want the version list without the body. Each deal can " +
+      "have multiple named docs — pass documentSlug to target a " +
+      "non-'main' one (use html_docs_list to discover them).",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      documentSlug: z
+        .string()
+        .optional()
+        .describe("default: 'main'. Use html_docs_list to discover slugs."),
+    },
+  },
+  async ({ dealId, documentSlug }) =>
+    callApi("GET", htmlUrl(dealId, documentSlug))
+);
+
+server.registerTool(
+  "html_upload",
+  {
+    description:
+      "Upload (PUT) a new HTML version for a deal's /browse page. " +
+      "Creates a NEW version row — the previous version is retained " +
+      "and restorable. Triggers SSE push so any open viewer auto- " +
+      "refreshes. Constraints: HTML body MUST start with " +
+      "<!doctype html> or <html (case-insensitive); max 5 MB. ALWAYS " +
+      "call html_show first if anything exists — replace only the " +
+      "relevant section, don't lose unrelated content. Source defaults " +
+      "to 'agent' for MCP-originated uploads. Pass documentSlug to " +
+      "target a non-'main' doc — auto-creates the doc if it doesn't exist.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      html: z.string().describe("complete HTML document"),
+      documentSlug: z
+        .string()
+        .optional()
+        .describe("default: 'main'"),
+      source: z
+        .enum(["web", "cli", "agent"])
+        .optional()
+        .describe("default: agent"),
+    },
+  },
+  async ({ dealId, html, documentSlug, source }) =>
+    callApi("PUT", htmlUrl(dealId, documentSlug), {
+      html,
+      source: source ?? "agent",
+    })
+);
+
+server.registerTool(
+  "html_versions",
+  {
+    description:
+      "List version history for a deal's /browse page HTML. Returns " +
+      "an array of {version, bytes, uploaded_by, source, created_at, " +
+      "deleted_at} — newest first, including soft-deleted versions. " +
+      "Use to find a target version for html_restore.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      documentSlug: z.string().optional().describe("default: 'main'"),
+    },
+  },
+  async ({ dealId, documentSlug }) =>
+    callApi("GET", `${htmlUrl(dealId, documentSlug)}/history`)
+);
+
+server.registerTool(
+  "html_restore",
+  {
+    description:
+      "Restore an old HTML version by copying it forward as a new " +
+      "version (so the latest pointer moves to the restored content). " +
+      "Use html_versions first to discover the version number. " +
+      "Triggers SSE push.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      version: z.number().int().positive().describe("version to restore"),
+      documentSlug: z.string().optional().describe("default: 'main'"),
+    },
+  },
+  async ({ dealId, version, documentSlug }) =>
+    callApi("POST", `${htmlUrl(dealId, documentSlug)}/restore/${version}`)
+);
+
+server.registerTool(
+  "html_docs_list",
+  {
+    description:
+      "List all documents (HTML 'pages') on a deal. Each deal can " +
+      "hold multiple — like a folder of files. Returns an array of " +
+      "{slug, title, preview_url, created_by, latest_version, " +
+      "latest_bytes, latest_uploaded_by, latest_updated_at}. The " +
+      "'main' slug is the default doc; non-main slugs are explicit.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+    },
+  },
+  async ({ dealId }) =>
+    callApi("GET", `/api/deals/${encodeURIComponent(dealId)}/documents`)
+);
+
+server.registerTool(
+  "html_docs_create",
+  {
+    description:
+      "Create a NEW named document slot on a deal (metadata only — " +
+      "upload HTML separately via html_upload with the same slug). " +
+      "Slug must match /^[a-z0-9][a-z0-9_-]{0,63}$/ — lowercase alnum + " +
+      "hyphen/underscore. Examples: 'ic-onepager', 'founder-brief', " +
+      "'market-map'. Title is for display; defaults to the slug.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      slug: z.string().describe("URL-safe id, e.g. 'ic-onepager'"),
+      title: z.string().optional().describe("display title; defaults to slug"),
+    },
+  },
+  async ({ dealId, slug, title }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/documents`, {
+      slug,
+      title: title ?? slug,
+    })
+);
+
+server.registerTool(
+  "html_docs_archive",
+  {
+    description:
+      "Archive a non-'main' doc — hides it from the selection page. " +
+      "HTML/asset versions are retained and the doc can be 'un-archived' " +
+      "later (currently via direct DB or by ensureDealDocument). The " +
+      "'main' doc cannot be archived (it's the default slot).",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      slug: z.string().describe("slug to archive (must not be 'main')"),
+    },
+  },
+  async ({ dealId, slug }) =>
+    callApi(
+      "DELETE",
+      `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}`
+    )
+);
+
+server.registerTool(
+  "html_upload_bundle",
+  {
+    description:
+      "Upload HTML + binary assets as one atomic version. Use this " +
+      "INSTEAD of html_upload when the HTML references local images / " +
+      "fonts / CSS files via relative src=/href= attributes (typical " +
+      "of 'Save Page As Complete' exports). The server stores HTML + " +
+      "each asset as one transactional bundle (deal_browse_assets " +
+      "table), rewrites the HTML refs to version-pinned URLs at " +
+      "/api/deals/<id>/asset/<path>?v=N, and triggers SSE push. " +
+      "Constraints: HTML <= 5 MB; each asset <= 50 MB; total bundle " +
+      "<= 100 MB. Asset paths must match the relative refs in the HTML " +
+      "(no leading './', no '..' segments).",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      html: z.string().describe("complete HTML document"),
+      assets: z
+        .array(
+          z.object({
+            path: z
+              .string()
+              .describe(
+                "relative path matching the HTML's src/href ref " +
+                  "(e.g. 'images/cover.png' or 'Foo_files/img.jpg')",
+              ),
+            contentType: z
+              .string()
+              .describe("MIME type, e.g. 'image/jpeg', 'font/woff2'"),
+            base64: z
+              .string()
+              .describe("base64-encoded file bytes (NO data:URI prefix)"),
+          }),
+        )
+        .min(1)
+        .describe("at least one asset (use html_upload if no assets)"),
+      documentSlug: z
+        .string()
+        .optional()
+        .describe("default: 'main'"),
+      source: z
+        .enum(["web", "cli", "agent"])
+        .optional()
+        .describe("default: agent"),
+    },
+  },
+  async ({ dealId, html, assets, documentSlug, source }) => {
+    const form = new FormData();
+    form.append("html", html);
+    form.append("source", source ?? "agent");
+    for (const a of assets) {
+      const bytes = Buffer.from(a.base64, "base64");
+      form.append(
+        `asset:${a.path}`,
+        new Blob([bytes], { type: a.contentType || "application/octet-stream" }),
+        a.path,
+      );
+    }
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${getBaseUrl()}${htmlUrl(dealId, documentSlug)}`, {
+      method: "PUT",
+      headers, // let fetch set multipart Content-Type with boundary
+      body: form,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
+      );
+    }
+    return body;
+  },
+);
+
+server.registerTool(
+  "html_reset",
+  {
+    description:
+      "Soft-delete the latest HTML version for a deal. The /browse " +
+      "page reverts to its empty state (drop / paste / CLI / agent " +
+      "invitation). Old versions are retained and restorable via " +
+      "html_restore.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      documentSlug: z.string().optional().describe("default: 'main'"),
+    },
+  },
+  async ({ dealId, documentSlug }) =>
+    callApi("DELETE", htmlUrl(dealId, documentSlug))
+);
+
+// ============================================================
 // Prompts
 // ============================================================
 //

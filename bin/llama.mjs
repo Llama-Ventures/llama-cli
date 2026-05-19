@@ -262,6 +262,20 @@ Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo save <dealId> --file <path>                     # paste a hand-written HTML as manual override
   llama memo reset <dealId> [--all]                          # default drops manual override; --all drops every version
 
+Deal page HTML (hand-authored sandboxed page on /deals/<id>/browse):
+  llama html show <dealId> [--out <path>] [--json]           # default: current html → stdout (pipeable)
+  llama html upload <dealId> --file <path> [--assets DIR]    # PUT a new version (auto increments).
+                                                             # --assets bundles a sibling folder of images / fonts / css
+                                                             # (e.g. "Save Page As Complete" exports — the _files/ dir)
+  llama html versions <dealId>                               # list version history (incl. soft-deleted)
+  llama html restore <dealId> <version>                      # promote an old version to new latest
+  llama html reset <dealId>                                  # soft-delete latest; /browse reverts to empty state
+
+  Caps: HTML 5 MB, each asset 50 MB, total bundle 100 MB. Every write
+  triggers SSE push — any browser viewing /deals/<id>/browse refreshes
+  automatically. Same write path as the in-app deal agent's
+  update_deal_browse_html tool and the MCP html_upload_bundle tool.
+
 Admin (system admin only — server returns 403 for non-admin tokens):
   llama admin auth-events  [--kind X] [--actor email] [--subject email] [--since 24h|7d|30d|<ISO>] [--limit 100]
   llama admin deal-events  [--kind X] [--actor email] [--deal <uuid>] [--since 24h] [--limit 100]
@@ -1789,6 +1803,384 @@ https://command.llamaventures.vc/settings/tokens, run
 
     throw new Error(
       `Unknown memo subcommand "${sub || ""}". Use: show / regenerate / save / reset.`
+    );
+  }
+
+  // ============================================================
+  // `llama html` family — per-deal hand-authored HTML "deal page"
+  // ============================================================
+  //
+  // Each deal can have its own HTML browse view (sandboxed iframe).
+  // Upload via this CLI, or directly via the web UI's drag-drop / paste,
+  // or by the in-app deal agent via the update_deal_browse_html tool.
+  // Every upload creates a new monotonic version; old versions are
+  // soft-deleted on replace and can be restored.
+  //
+  //   llama html show <dealId> [--out PATH] [--json]
+  //   llama html upload <dealId> --file PATH [--source cli|web|agent]
+  //   llama html versions <dealId>
+  //   llama html restore <dealId> <version>
+  //   llama html reset <dealId>
+  if (area === "html") {
+    const sub = action;
+
+    // --doc <slug> selects which named document on the deal (default 'main').
+    // Slugs match /^[a-z0-9][a-z0-9_-]{0,63}$/. Use `llama html docs <dealId>`
+    // to list available slugs.
+    function htmlEndpoint(dealId, slug) {
+      return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}/html`;
+    }
+
+    // docs — list / create / archive documents on a deal.
+    //
+    // Forms:
+    //   llama html docs <dealId>                      # list
+    //   llama html docs list <dealId>                 # list (explicit)
+    //   llama html docs create <dealId> <slug> [--title "..."]
+    //   llama html docs archive <dealId> <slug>
+    if (sub === "docs") {
+      const docSub = rest[0];
+      const isExplicitSubcommand =
+        docSub === "list" ||
+        docSub === "create" ||
+        docSub === "archive";
+      if (!isExplicitSubcommand) {
+        // First positional is the dealId (the common "just list" case).
+        const dealId = rest[0];
+        if (!dealId) {
+          throw new Error(
+            "Usage: llama html docs <dealId>\n" +
+              "       llama html docs create <dealId> <slug> --title \"...\"\n" +
+              "       llama html docs archive <dealId> <slug>",
+          );
+        }
+        const data = await request(
+          "GET",
+          `/api/deals/${encodeURIComponent(dealId)}/documents`,
+        );
+        print(data);
+        return;
+      }
+      if (docSub === "list") {
+        const dealId = rest[1];
+        if (!dealId) {
+          throw new Error("Usage: llama html docs list <dealId>");
+        }
+        const data = await request(
+          "GET",
+          `/api/deals/${encodeURIComponent(dealId)}/documents`,
+        );
+        print(data);
+        return;
+      }
+      if (docSub === "create") {
+        const dealId = rest[1];
+        const slug = rest[2];
+        if (!dealId || !slug) {
+          throw new Error(
+            "Usage: llama html docs create <dealId> <slug> [--title \"...\"]",
+          );
+        }
+        const { flags } = parseFlags(rest.slice(3));
+        const title = flags.title ? String(flags.title) : slug;
+        const data = await request(
+          "POST",
+          `/api/deals/${encodeURIComponent(dealId)}/documents`,
+          { slug, title },
+        );
+        print(data);
+        return;
+      }
+      if (docSub === "archive") {
+        const dealId = rest[1];
+        const slug = rest[2];
+        if (!dealId || !slug) {
+          throw new Error("Usage: llama html docs archive <dealId> <slug>");
+        }
+        const data = await request(
+          "DELETE",
+          `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}`,
+        );
+        print(data);
+        return;
+      }
+      throw new Error(
+        `Unknown html docs subcommand "${docSub}". Use: list / create / archive.`,
+      );
+    }
+
+    // show — fetch the current HTML. Default: print to stdout (pipeable).
+    if (sub === "show") {
+      const dealId = rest[0];
+      if (!dealId) {
+        throw new Error("Usage: llama html show <dealId> [--doc SLUG] [--out PATH] [--json]");
+      }
+      const { flags } = parseFlags(rest.slice(1));
+      const slug = typeof flags.doc === "string" && flags.doc.trim() ? flags.doc.trim() : "main";
+      const data = await request("GET", htmlEndpoint(dealId, slug));
+      if (flags.json) {
+        print(data);
+        return;
+      }
+      if (data?.empty) {
+        throw new Error(
+          `No HTML uploaded for deal ${dealId} yet. Upload via \`llama html upload\`, the web UI, or have the deal agent write it.`,
+        );
+      }
+      const html = data?.html;
+      if (typeof html !== "string") {
+        throw new Error("browse-html response missing html field.");
+      }
+      if (flags.out) {
+        const { writeFileSync } = await import("fs");
+        writeFileSync(String(flags.out), html);
+        console.error(
+          `Wrote ${html.length} bytes (v${data.version}) → ${flags.out}`,
+        );
+        return;
+      }
+      // Stdout — supports `llama html show <id> > page.html` and piping
+      // to e.g. `open -f -a Safari` for quick preview.
+      process.stdout.write(html);
+      return;
+    }
+
+    // upload — PUT a new version. Reads HTML from --file or stdin. With
+    // --assets <dir>, walks the folder, packages as a multipart bundle,
+    // and the server stores HTML + per-asset BYTEA rows atomically
+    // (deal_browse_assets table). Perfect for "Save Page As Complete"
+    // exports — the sibling `_files/` folder maps 1-to-1 to assets.
+    if (sub === "upload") {
+      const dealId = rest[0];
+      if (!dealId) {
+        throw new Error(
+          "Usage: llama html upload <dealId> --file PATH [--doc SLUG] [--assets DIR] [--source cli|agent]\n" +
+            "       echo '<!doctype html>...' | llama html upload <dealId> --stdin [--doc SLUG]",
+        );
+      }
+      const { flags } = parseFlags(rest.slice(1));
+      const slug =
+        typeof flags.doc === "string" && flags.doc.trim()
+          ? flags.doc.trim()
+          : "main";
+      let html;
+      if (flags.file) {
+        const { readFileSync } = await import("fs");
+        html = readFileSync(String(flags.file), "utf8");
+      } else if (flags.stdin) {
+        const chunks = [];
+        for await (const chunk of process.stdin) chunks.push(chunk);
+        html = Buffer.concat(chunks).toString("utf8");
+      } else {
+        throw new Error(
+          "Pass --file <path> to upload a file, or --stdin to read from stdin.",
+        );
+      }
+      if (!html || !html.trim()) {
+        throw new Error("HTML body is empty.");
+      }
+      const source =
+        typeof flags.source === "string" && flags.source.trim()
+          ? flags.source.trim()
+          : "cli";
+
+      // No --assets → JSON path (small, faster).
+      if (!flags.assets) {
+        const data = await request("PUT", htmlEndpoint(dealId, slug), {
+          html,
+          source,
+        });
+        print({
+          ok: true,
+          document_slug: slug,
+          version: data?.version,
+          bytes: data?.bytes ?? Buffer.byteLength(html, "utf8"),
+          deal_uuid: dealId,
+          viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(slug)}`,
+        });
+        return;
+      }
+
+      // --assets path → multipart bundle. Walk the asset directory,
+      // attach every file as `asset:<relativePath>`, and let the server
+      // rewrite the HTML refs to /api/deals/<id>/asset/<path>?v=N.
+      const { readFileSync, readdirSync, statSync } = await import("fs");
+      const { join, relative, sep, basename } = await import("path");
+      const assetsRoot = String(flags.assets);
+      const assetsRootStat = statSync(assetsRoot);
+      if (!assetsRootStat.isDirectory()) {
+        throw new Error(`--assets must point to a directory: ${assetsRoot}`);
+      }
+
+      // Recursively collect every file under the assets root.
+      const collected = []; // { absPath, relPath, bytes }
+      const walk = (dir) => {
+        for (const name of readdirSync(dir)) {
+          const abs = join(dir, name);
+          const st = statSync(abs);
+          if (st.isDirectory()) {
+            walk(abs);
+          } else if (st.isFile()) {
+            const rel = relative(assetsRoot, abs).split(sep).join("/");
+            collected.push({ absPath: abs, relPath: rel, bytes: st.size });
+          }
+        }
+      };
+      walk(assetsRoot);
+      if (collected.length === 0) {
+        throw new Error(`--assets directory is empty: ${assetsRoot}`);
+      }
+
+      // Some "Save Page As" exports put assets in a sibling folder named
+      // after the HTML (e.g. "Foo.html" + "Foo_files/"). When the HTML
+      // references "./Foo_files/img.png" but we walk just the inner dir,
+      // the rel paths don't match. Detect this case: if the assets root's
+      // basename is "<something>_files" or "<something> files", the HTML
+      // probably uses that prefix — prepend it to each relPath.
+      const rootName = basename(assetsRoot);
+      const looksLikeSavePageDir = /[_ ]files$/i.test(rootName);
+      const finalPaths = looksLikeSavePageDir
+        ? collected.map((c) => ({ ...c, relPath: `${rootName}/${c.relPath}` }))
+        : collected;
+
+      // Mime sniff from extension. Server defaults to
+      // application/octet-stream if blob.type is empty.
+      const mimeFor = (path) => {
+        const ext = (path.split(".").pop() || "").toLowerCase();
+        return (
+          {
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            png: "image/png",
+            gif: "image/gif",
+            webp: "image/webp",
+            svg: "image/svg+xml",
+            ico: "image/x-icon",
+            avif: "image/avif",
+            css: "text/css",
+            js: "text/javascript",
+            json: "application/json",
+            woff: "font/woff",
+            woff2: "font/woff2",
+            ttf: "font/ttf",
+            otf: "font/otf",
+            mp4: "video/mp4",
+            webm: "video/webm",
+            pdf: "application/pdf",
+          }[ext] || "application/octet-stream"
+        );
+      };
+
+      const form = new FormData();
+      form.append("html", html);
+      form.append("source", source);
+      let totalBytes = 0;
+      for (const { absPath, relPath } of finalPaths) {
+        const buf = readFileSync(absPath);
+        totalBytes += buf.length;
+        // FormData wants a Blob; in Node 20+ Blob is global and accepts Buffer.
+        form.append(
+          `asset:${relPath}`,
+          new Blob([buf], { type: mimeFor(relPath) }),
+          relPath,
+        );
+      }
+
+      console.error(
+        `Uploading bundle: html ${Buffer.byteLength(html, "utf8")} bytes + ${finalPaths.length} assets (${totalBytes} bytes)`,
+      );
+
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
+        method: "PUT",
+        headers: { ...headers /* let fetch set the multipart boundary */ },
+        body: form,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+      print({
+        ok: true,
+        document_slug: slug,
+        version: body.version,
+        asset_count: body.asset_count,
+        asset_bytes: body.asset_bytes,
+        deal_uuid: dealId,
+        viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(slug)}`,
+      });
+      return;
+    }
+
+    // versions — list version history (newest first, includes soft-deleted).
+    if (sub === "versions") {
+      const dealId = rest[0];
+      if (!dealId) {
+        throw new Error("Usage: llama html versions <dealId> [--doc SLUG]");
+      }
+      const { flags } = parseFlags(rest.slice(1));
+      const slug =
+        typeof flags.doc === "string" && flags.doc.trim()
+          ? flags.doc.trim()
+          : "main";
+      const data = await request("GET", `${htmlEndpoint(dealId, slug)}/history`);
+      print(data);
+      return;
+    }
+
+    // restore — re-promote an old version as the new latest.
+    if (sub === "restore") {
+      const dealId = rest[0];
+      const version = Number(rest[1]);
+      if (!dealId || !Number.isFinite(version)) {
+        throw new Error(
+          "Usage: llama html restore <dealId> <version> [--doc SLUG]",
+        );
+      }
+      const { flags } = parseFlags(rest.slice(2));
+      const slug =
+        typeof flags.doc === "string" && flags.doc.trim()
+          ? flags.doc.trim()
+          : "main";
+      const data = await request(
+        "POST",
+        `${htmlEndpoint(dealId, slug)}/restore/${version}`,
+      );
+      print({
+        ok: true,
+        document_slug: slug,
+        restored_from: version,
+        new_version: data?.version,
+        deal_uuid: dealId,
+      });
+      return;
+    }
+
+    // reset — soft-delete the current HTML. /browse page reverts to empty state.
+    if (sub === "reset" || sub === "delete") {
+      const dealId = rest[0];
+      if (!dealId) {
+        throw new Error("Usage: llama html reset <dealId> [--doc SLUG]");
+      }
+      const { flags } = parseFlags(rest.slice(1));
+      const slug =
+        typeof flags.doc === "string" && flags.doc.trim()
+          ? flags.doc.trim()
+          : "main";
+      const data = await request("DELETE", htmlEndpoint(dealId, slug));
+      print({
+        ok: true,
+        document_slug: slug,
+        soft_deleted_version: data?.version ?? null,
+        deal_uuid: dealId,
+      });
+      return;
+    }
+
+    throw new Error(
+      `Unknown html subcommand "${sub || ""}". Use: docs / show / upload / versions / restore / reset.`,
     );
   }
 
