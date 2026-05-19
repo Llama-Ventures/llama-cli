@@ -33,6 +33,8 @@ Conversation produces value → that value flows somewhere. This is not optional
 |---|---|---|
 | Deal metadata (status, stage, valuation, founders, notes, etc.) | Pipeline (Postgres) | `llama deal create` / `llama deal update` |
 | Brief blocks (text / link / embed / callout) | Pipeline | `llama brief add-text` / `add-link` / `add-callout` |
+| **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | **`llama html upload <dealId> --file <path> [--assets <dir>]`** — this is the **default** path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". Do NOT default to Netlify for internal pages. |
+| HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
 | Insights, decisions, framework improvements | Wiki | `llama wiki save` (with attribution — see below) |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
 | Cross-team mentions | Inbox + email | `llama post <dealId> "@<teammate> ..."` — server fires email + UI badge to the recipient |
@@ -105,6 +107,14 @@ llama brief blocks <dealId>
 llama brief add-text <dealId> --heading "..." --body "..."
 llama brief add-link <dealId> --url "..." --label "..."
 llama brief add-callout <dealId> --tone insight|warning|info|success --heading "..." --body "..."
+
+# Deal HTML — native deploy to /deals/<id>/browse/<slug> (PR #81)
+# Default path when user says "deploy to llama / 部署到 llama command / put this HTML on the deal page".
+llama html upload <dealId> --file ./report.html [--assets ./assets]   # PUT new version (auto-increments)
+llama html show <dealId> [--out path] [--json]                         # current HTML → stdout
+llama html versions <dealId>                                           # version history (incl. soft-deleted)
+llama html restore <dealId> <version>                                  # promote old version to latest
+llama html reset <dealId>                                              # soft-delete latest (browse reverts to empty)
 
 # Wiki (knowledge base)
 llama wiki search "<query>"

@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.4.4] — 2026-05-19
+
+### Changed
+- **`AGENT_BRIEFING.md` — document native HTML deploy as the default.**
+  After llama-command PR #81 shipped per-deal hand-authored HTML pages at
+  `/deals/<id>/browse/<slug>` (sandboxed iframe, Postgres-backed), the
+  agent briefing now teaches `llama html upload` as the default route
+  when a user says "deploy to llama", "deploy to llama command",
+  "部署到 llama command", or "put this HTML on the deal page". The
+  Netlify path (`netlify-access-guard`) is preserved but explicitly
+  narrowed to founder-facing / external share-link scenarios. Quick
+  reference section now lists the full `llama html` surface
+  (`upload`, `show`, `versions`, `restore`, `reset`).
+
 ## [1.4.0] — 2026-05-12
 
 ### Added
