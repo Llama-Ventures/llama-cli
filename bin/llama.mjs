@@ -1235,8 +1235,8 @@ https://command.llamaventures.vc/settings/tokens, run
   // Hits /api/wiki/<slug> directly. Earlier versions did a fuzzy
   // /api/wiki/search call and filtered for an exact slug match — that
   // missed any article whose slug-as-string didn't appear in title or
-  // content (e.g. "jack-feng" search vs "Jack Feng" content), so a real
-  // article would print as "not found" even though it existed.
+  // content (e.g. a slug like "foo-bar" against an article titled "Foo Bar"),
+  // so a real article would print as "not found" even though it existed.
   if (area === "wiki" && action === "read") {
     const { flags, positional } = parseFlags(rest);
     const slug = positional[0];
