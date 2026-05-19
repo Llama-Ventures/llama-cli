@@ -6,6 +6,57 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-05-19
+
+### Changed
+- **`llama html upload` now requires explicit intent — no more silent
+  overwrites.** Before: `llama html upload <dealId> --file <path>`
+  silently appended a new version to slug `main`, even when the deal
+  already had a different HTML artifact under that slug. After: the
+  same bare command **refuses** if `main` already has content, naming
+  the existing artifact and printing a two-line instruction
+  (`--doc main` to update it, `--new --title "..."` to add alongside).
+  The slug `main` still works as an auto-init default when the deal
+  has no documents yet — only the silent-overwrite path is gone.
+
+### Added
+- **`--new` and `--title` flags on `llama html upload`.** Explicit
+  "create a new artifact" intent.
+  - `--new --doc <slug> --title "..."` — caller picks the slug.
+  - `--new --title "Investment Thesis"` — CLI slugifies the title
+    (`investment-thesis`). Collisions auto-resolve with `-2` / `-3`
+    suffix and a stderr note.
+  - Refuses (`--new --doc <slug>`) if the named slug already exists.
+- **`--slug` as an alias for `--doc`.** When agents guess the wrong
+  flag name (the DB column is `document_slug`, so `--slug` is a
+  natural guess), the CLI now accepts it and prints a one-line
+  `note: --slug accepted as alias for --doc.` This eliminates the
+  exact silent-fall-through that caused the 1.4.4 incident.
+- **Unknown-flag stderr warnings on `llama html *` handlers.**
+  Mistyped `--out` / `--asssets` / `--doc-slug` etc. now print
+  `warning: unknown flag --X (did you mean --Y?)` (Levenshtein-1
+  matcher) to stderr. The command still proceeds — no breaking
+  change for callers wrapping legacy flags.
+- **`mode: 'created' | 'updated'`** field in `llama html upload`
+  JSON output, so scripts can branch on whether the call created a
+  new doc or appended a version.
+
+### Hardened
+- `llama html upload` pre-flights `GET /api/deals/<id>/documents` and
+  uses the response to (a) detect existing slugs (b) refuse on the
+  bare-default overwrite (c) auto-resolve title-slug collisions.
+  Adds one extra round-trip per upload; cheap insurance.
+
+### Migration notes
+- `llama html upload <id> --file X` callers targeting an empty
+  deal: **no change**, still works.
+- `llama html upload <id> --file X` callers updating an existing
+  `main` artifact: **must add `--doc main`**.
+- Agents using the natural-language flow ("deploy to llama / 部署到
+  llama command") via the deal agent or MCP tools: see the updated
+  `AGENT_BRIEFING.md` and llama-os routing tables — the agent path
+  now teaches "new vs update" upfront.
+
 ## [1.4.4] — 2026-05-19
 
 ### Changed

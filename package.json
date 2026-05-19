@@ -1,6 +1,6 @@
 {
   "name": "@llamaventures/cli",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "CLI + MCP server for the Llama Ventures investment workbench (command.llamaventures.vc).",
   "type": "module",
   "bin": {

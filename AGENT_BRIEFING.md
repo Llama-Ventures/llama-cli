@@ -33,7 +33,7 @@ Conversation produces value → that value flows somewhere. This is not optional
 |---|---|---|
 | Deal metadata (status, stage, valuation, founders, notes, etc.) | Pipeline (Postgres) | `llama deal create` / `llama deal update` |
 | Brief blocks (text / link / embed / callout) | Pipeline | `llama brief add-text` / `add-link` / `add-callout` |
-| **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | **`llama html upload <dealId> --file <path> [--assets <dir>]`** — this is the **default** path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". Do NOT default to Netlify for internal pages. |
+| **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | Default path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". **You MUST declare intent — "new artifact" vs "update existing":**<br><br>**New artifact:** `llama html upload <dealId> --new --title "<artifact name>" --file <path>` (CLI slugifies the title; pass `--doc <slug>` to override).<br>**Update existing:** `llama html upload <dealId> --doc <slug> --file <path>` (slug must already exist — run `llama html docs <dealId>` first to see what's there).<br><br>The bare form `llama html upload <id> --file <path>` REFUSES if `main` already has content. Do NOT default to Netlify for internal pages. |
 | HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
 | Insights, decisions, framework improvements | Wiki | `llama wiki save` (with attribution — see below) |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
@@ -108,13 +108,33 @@ llama brief add-text <dealId> --heading "..." --body "..."
 llama brief add-link <dealId> --url "..." --label "..."
 llama brief add-callout <dealId> --tone insight|warning|info|success --heading "..." --body "..."
 
-# Deal HTML — native deploy to /deals/<id>/browse/<slug> (PR #81)
+# Deal HTML — native deploy to /deals/<id>/browse/<slug>
 # Default path when user says "deploy to llama / 部署到 llama command / put this HTML on the deal page".
-llama html upload <dealId> --file ./report.html [--assets ./assets]   # PUT new version (auto-increments)
-llama html show <dealId> [--out path] [--json]                         # current HTML → stdout
-llama html versions <dealId>                                           # version history (incl. soft-deleted)
-llama html restore <dealId> <version>                                  # promote old version to latest
-llama html reset <dealId>                                              # soft-delete latest (browse reverts to empty)
+# Each deal can host many slug-scoped artifacts. ALWAYS declare intent: new vs update.
+
+llama html docs <dealId>                                                 # list slugs currently on this deal
+llama html docs create <dealId> <slug> [--title "..."]                   # pre-create a slot (optional; upload --new also creates)
+llama html docs archive <dealId> <slug>                                  # soft-archive a doc
+
+# Add a NEW artifact (slug must NOT already exist):
+llama html upload <dealId> --new --title "Consumer-Facing Thesis" --file ./thesis.html
+llama html upload <dealId> --new --doc thesis --title "Consumer-Facing Thesis" --file ./thesis.html
+
+# Update an EXISTING artifact (slug must already exist):
+llama html upload <dealId> --doc <slug> --file ./report.html [--assets ./assets]
+
+# Common helpers (all accept --doc <slug>; default 'main'):
+llama html show <dealId> [--doc <slug>] [--out path] [--json]            # current HTML → stdout
+llama html versions <dealId> [--doc <slug>]                              # version history (incl. soft-deleted)
+llama html restore <dealId> <version> [--doc <slug>]                     # promote old version to latest
+llama html reset <dealId> [--doc <slug>]                                 # soft-delete latest (browse reverts to empty)
+
+# Safety contract (since 1.5.0):
+#  - Bare `llama html upload <id> --file X` REFUSES if 'main' already has content.
+#    The error names the existing artifact and suggests --doc main / --new --title "...".
+#  - --slug is silently accepted as an alias for --doc (agent-confusion mitigation).
+#  - Unknown flags print a warning to stderr suggesting a likely match.
+#  - JSON output gains `mode: 'created' | 'updated'` so callers can branch.
 
 # Wiki (knowledge base)
 llama wiki search "<query>"

@@ -31,7 +31,7 @@ import {
 import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
 
-function parseFlags(args) {
+function parseFlags(args, knownFlags = null) {
   const flags = {};
   const positional = [];
   for (let i = 0; i < args.length; i++) {
@@ -49,7 +49,80 @@ function parseFlags(args) {
       positional.push(arg);
     }
   }
+  // Opt-in unknown-flag warning. Handlers that pass a `knownFlags` array
+  // get a stderr nudge when they see typos like `--slug` for `--doc`.
+  // Don't reject — agents wrap legacy options, breaking them silently is
+  // worse than a one-line warning.
+  if (Array.isArray(knownFlags)) {
+    const known = new Set(knownFlags);
+    for (const key of Object.keys(flags)) {
+      if (!known.has(key)) {
+        const suggestion = closestKnownFlag(key, knownFlags);
+        process.stderr.write(
+          suggestion
+            ? `warning: unknown flag --${key} (did you mean --${suggestion}?)\n`
+            : `warning: unknown flag --${key}\n`,
+        );
+      }
+    }
+  }
   return { flags, positional };
+}
+
+function closestKnownFlag(input, candidates) {
+  let best = null;
+  let bestScore = Infinity;
+  for (const c of candidates) {
+    const d = levenshtein(input, c);
+    const tolerance = Math.max(2, Math.floor(c.length / 3));
+    if (d < bestScore && d <= tolerance) {
+      best = c;
+      bestScore = d;
+    }
+  }
+  return best;
+}
+
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = Array(n + 1).fill(0).map((_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1]
+        ? prev
+        : 1 + Math.min(prev, dp[j - 1], dp[j]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+// Slug shape used by deal_documents.slug (matches server-side SLUG_RE).
+function isValidDocSlug(s) {
+  return typeof s === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(s);
+}
+
+// Best-effort title → slug. Strips diacritics, lowercases, collapses
+// non-alnum to single hyphens, trims, caps at 64. Returns null if the
+// result wouldn't pass `isValidDocSlug` (caller must then require --doc).
+function slugifyTitle(title) {
+  if (typeof title !== "string") return null;
+  const slug = title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  if (!slug || !/^[a-z0-9]/.test(slug)) return null;
+  return slug;
 }
 
 // Client-side fuzzy match — used as a fallback when the server hasn't yet
@@ -262,14 +335,30 @@ Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo save <dealId> --file <path>                     # paste a hand-written HTML as manual override
   llama memo reset <dealId> [--all]                          # default drops manual override; --all drops every version
 
-Deal page HTML (hand-authored sandboxed page on /deals/<id>/browse):
-  llama html show <dealId> [--out <path>] [--json]           # default: current html → stdout (pipeable)
-  llama html upload <dealId> --file <path> [--assets DIR]    # PUT a new version (auto increments).
-                                                             # --assets bundles a sibling folder of images / fonts / css
-                                                             # (e.g. "Save Page As Complete" exports — the _files/ dir)
-  llama html versions <dealId>                               # list version history (incl. soft-deleted)
-  llama html restore <dealId> <version>                      # promote an old version to new latest
-  llama html reset <dealId>                                  # soft-delete latest; /browse reverts to empty state
+Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
+  Each deal can host many HTML artifacts (IC report, dashboard, market map, …).
+  Each one has a stable slug. UPLOAD must declare intent — update an existing
+  artifact or add a new one — to avoid silent overwrites.
+
+  List existing artifacts:
+    llama html docs <dealId>                                  # who-has-what
+    llama html docs create <dealId> <slug> [--title "..."]    # pre-create a slot
+    llama html docs archive <dealId> <slug>                   # soft-archive (browse hides)
+
+  Update an EXISTING artifact (slug must exist):
+    llama html upload <dealId> --doc <slug> --file <path> [--assets DIR]
+
+  Add a NEW artifact (slug must NOT already exist):
+    llama html upload <dealId> --new --title "..." --file <path> [--doc <slug>] [--assets DIR]
+      (omit --doc → CLI slugifies the title; appends -2 / -3 on collision)
+
+  Default (no --doc, no --new) targets slug 'main' but REFUSES if 'main'
+  already has content — pass --doc main or --new --title "..." explicitly.
+
+  llama html show <dealId> [--doc <slug>] [--out <path>] [--json]   # default: current html → stdout
+  llama html versions <dealId> [--doc <slug>]                       # list version history
+  llama html restore <dealId> <version> [--doc <slug>]              # promote an old version to new latest
+  llama html reset <dealId> [--doc <slug>]                          # soft-delete latest; /browse reverts to empty
 
   Caps: HTML 5 MB, each asset 50 MB, total bundle 100 MB. Every write
   triggers SSE push — any browser viewing /deals/<id>/browse refreshes
@@ -1954,15 +2043,169 @@ https://command.llamaventures.vc/settings/tokens, run
       const dealId = rest[0];
       if (!dealId) {
         throw new Error(
-          "Usage: llama html upload <dealId> --file PATH [--doc SLUG] [--assets DIR] [--source cli|agent]\n" +
-            "       echo '<!doctype html>...' | llama html upload <dealId> --stdin [--doc SLUG]",
+          "Usage:\n" +
+            "  Update an existing artifact:\n" +
+            "    llama html upload <dealId> --doc <slug> --file PATH [--assets DIR]\n" +
+            "  Create a new artifact:\n" +
+            "    llama html upload <dealId> --new --title \"...\" --file PATH [--doc <slug>]\n" +
+            "  Stream from stdin (either form above with --stdin in place of --file PATH).\n" +
+            "\n" +
+            "Default (no --doc, no --new) targets slug 'main' but REFUSES if 'main'\n" +
+            "already has content — pass --doc main to update it explicitly, or\n" +
+            "--new --title \"...\" to add a NEW artifact alongside.",
         );
       }
-      const { flags } = parseFlags(rest.slice(1));
-      const slug =
+      const knownFlags = [
+        "doc", "slug", "new", "title",
+        "file", "stdin", "assets", "source",
+      ];
+      const { flags } = parseFlags(rest.slice(1), knownFlags);
+
+      // --slug is the natural agent guess (DB column is `document_slug`).
+      // Accept it as an alias for --doc so the failure mode that bit
+      // Gavin (silent fall-through to 'main') can't happen again.
+      if (flags.slug && !flags.doc) {
+        process.stderr.write("note: --slug accepted as alias for --doc.\n");
+        flags.doc = flags.slug;
+      } else if (flags.slug && flags.doc) {
+        process.stderr.write("note: both --doc and --slug given; --doc wins.\n");
+      }
+
+      const isNew = Boolean(flags.new);
+      const explicitDoc =
         typeof flags.doc === "string" && flags.doc.trim()
           ? flags.doc.trim()
-          : "main";
+          : null;
+      const titleFlag =
+        typeof flags.title === "string" && flags.title.trim()
+          ? flags.title.trim()
+          : null;
+
+      // Pre-flight: ask the server what slugs already exist on this deal.
+      // One extra GET round-trip — cheap insurance against silent overwrite.
+      let existing = [];
+      try {
+        const docList = await request(
+          "GET",
+          `/api/deals/${encodeURIComponent(dealId)}/documents`,
+        );
+        existing = Array.isArray(docList?.documents) ? docList.documents : [];
+      } catch (err) {
+        // If the deal exists but the list endpoint somehow errors, we
+        // shouldn't block the whole upload — surface the warning and
+        // proceed in "no existing docs" mode. The server is still the
+        // ultimate gate for permission failures.
+        process.stderr.write(
+          `warning: could not pre-check existing documents (${err.message}). Continuing.\n`,
+        );
+      }
+      const findDoc = (s) =>
+        existing.find((d) => d && d.slug === s) || null;
+      const docHasHtml = (d) =>
+        Boolean(d && (d.latest_version > 0 || d.latest_updated_at));
+
+      let slug;
+      let mode; // 'created' | 'updated'
+
+      if (isNew) {
+        // Create-new branch. Caller must provide --doc OR --title (we
+        // derive the slug from the title in the latter case).
+        let candidate = explicitDoc || (titleFlag ? slugifyTitle(titleFlag) : null);
+        if (!candidate) {
+          throw new Error(
+            "--new requires --doc <slug> or --title \"...\" so the new artifact has a stable identifier.",
+          );
+        }
+        if (!isValidDocSlug(candidate)) {
+          throw new Error(
+            `slug "${candidate}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+          );
+        }
+        if (findDoc(candidate)) {
+          if (explicitDoc) {
+            const existingDoc = findDoc(candidate);
+            const meta = docHasHtml(existingDoc)
+              ? ` (currently at v${existingDoc.latest_version}, last update ${existingDoc.latest_updated_at})`
+              : "";
+            throw new Error(
+              `--new --doc ${candidate} but a document with slug "${candidate}" already exists${meta}.\n` +
+                `Pick a different slug, or drop --new to UPDATE the existing one.`,
+            );
+          }
+          // Auto-resolve title collisions: foo -> foo-2 -> foo-3 -> ...
+          let suffix = 2;
+          while (findDoc(`${candidate}-${suffix}`)) suffix++;
+          const oldCandidate = candidate;
+          candidate = `${candidate}-${suffix}`;
+          process.stderr.write(
+            `note: slug "${oldCandidate}" already in use; using "${candidate}" instead.\n`,
+          );
+        }
+        slug = candidate;
+        mode = "created";
+        // Stamp the doc metadata first (title, etc.) so the UI selection
+        // page shows a nice name. PUT auto-creates the row too, but
+        // POST gives us a chance to set --title.
+        await request(
+          "POST",
+          `/api/deals/${encodeURIComponent(dealId)}/documents`,
+          { slug, title: titleFlag || slug },
+        );
+      } else if (explicitDoc) {
+        // Update an existing slug.
+        if (!isValidDocSlug(explicitDoc)) {
+          throw new Error(
+            `slug "${explicitDoc}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+          );
+        }
+        const target = findDoc(explicitDoc);
+        if (!target) {
+          if (explicitDoc === "main") {
+            // 'main' is the legacy default — fine to auto-init on first
+            // upload to an empty deal.
+            slug = "main";
+            mode = "created";
+          } else {
+            const slugList = existing.length
+              ? existing.map((d) => d.slug).join(", ")
+              : "(none)";
+            throw new Error(
+              `No document with slug "${explicitDoc}" exists on this deal.\n` +
+                `To create it: add --new --title "..."\n` +
+                `Or pre-create: llama html docs create ${dealId} ${explicitDoc} --title "..."\n` +
+                `Existing slugs: ${slugList}`,
+            );
+          }
+        } else {
+          slug = explicitDoc;
+          mode = docHasHtml(target) ? "updated" : "created";
+        }
+      } else {
+        // Bare upload — no --doc, no --new. Safe-default to 'main' only
+        // if 'main' is empty / absent. Otherwise refuse, naming the
+        // existing artifact so the caller can pick an explicit intent.
+        const main = findDoc("main");
+        if (docHasHtml(main)) {
+          const versionInfo = main.latest_version
+            ? ` (v${main.latest_version}, ${main.latest_updated_at || "last update unknown"})`
+            : "";
+          const slugList = existing.length
+            ? existing.map((d) => d.slug).join(", ")
+            : "main";
+          throw new Error(
+            `Refusing to silently overwrite the existing 'main' artifact${versionInfo}.\n` +
+              `\n` +
+              `If you meant to UPDATE 'main':         --doc main\n` +
+              `If you meant to add a NEW artifact:    --new --title "<name>"\n` +
+              `\n` +
+              `Existing slugs on this deal: ${slugList}\n` +
+              `List details:                llama html docs ${dealId}`,
+          );
+        }
+        slug = "main";
+        mode = main ? "updated" : "created";
+      }
+
       let html;
       if (flags.file) {
         const { readFileSync } = await import("fs");
@@ -1992,6 +2235,7 @@ https://command.llamaventures.vc/settings/tokens, run
         });
         print({
           ok: true,
+          mode,
           document_slug: slug,
           version: data?.version,
           bytes: data?.bytes ?? Buffer.byteLength(html, "utf8"),
@@ -2104,6 +2348,7 @@ https://command.llamaventures.vc/settings/tokens, run
       }
       print({
         ok: true,
+        mode,
         document_slug: slug,
         version: body.version,
         asset_count: body.asset_count,
