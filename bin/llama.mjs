@@ -1337,27 +1337,66 @@ https://command.llamaventures.vc/settings/tokens, run
   }
 
   // ----- Wiki: save (create or update) -----
+  // Two body modes:
+  //   --content "..."  inline markdown OR raw HTML (string)
+  //   --file <path>    read body from a file; if .html/.htm,
+  //                    content_type auto-detects to 'html'
+  // --content-type <markdown|html> overrides auto-detect.
+  // Refuses content_type mismatch on existing entries (server-side check;
+  // CLI surfaces the server error verbatim).
   if (area === "wiki" && action === "save") {
     const { flags, positional } = parseFlags(rest);
     const slug = positional[0];
     const title = flags.title;
-    const content = flags.content;
+    const inlineContent = flags.content;
+    const filePath = flags.file;
     const sourcesRaw = flags.sources;
-    if (!slug || !title || !content || !sourcesRaw) {
+    if (!slug || !title || !sourcesRaw || (!inlineContent && !filePath)) {
       throw new Error(
-        `Usage: llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh]`
+        `Usage:
+  llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
+or
+  llama wiki save <slug> --title "..." --file path/to/article.{md,html} --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
+
+Pass either --content (inline) or --file (read from disk). With --file, content_type auto-detects from extension (.html/.htm → html, else markdown). Use --content-type to override.`
       );
+    }
+    if (inlineContent && filePath) {
+      throw new Error("Pass either --content OR --file, not both.");
+    }
+    // Read body — either inline or from file.
+    let body;
+    let inferredType = "markdown";
+    if (filePath) {
+      const { readFileSync } = await import("fs");
+      body = readFileSync(String(filePath), "utf-8");
+      const lower = String(filePath).toLowerCase();
+      if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+        inferredType = "html";
+      }
+    } else {
+      body = String(inlineContent);
+    }
+    // Determine content_type: explicit flag wins over file-extension inference.
+    let contentType = inferredType;
+    if (flags["content-type"]) {
+      const v = String(flags["content-type"]).toLowerCase();
+      if (v !== "markdown" && v !== "html") {
+        throw new Error(`--content-type must be 'markdown' or 'html', got "${v}"`);
+      }
+      contentType = v;
     }
     const splitCsv = (v) => String(v).split(/[;|]/).map((s) => s.trim()).filter(Boolean);
     const payload = {
       slug,
       title: String(title),
-      content: String(content),
+      content: body,
       sources: splitCsv(sourcesRaw),
       type: flags.type ? String(flags.type) : undefined,
       related: flags.related ? splitCsv(flags.related) : undefined,
       lang: flags.lang === "zh" ? "zh" : "en",
       status: flags.status ? String(flags.status) : undefined,
+      content_type: contentType,
     };
     print(await request("POST", "/api/wiki/save", payload));
     return;

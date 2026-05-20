@@ -328,24 +328,46 @@ server.registerTool(
   "wiki_save",
   {
     description:
-      "Create or update a wiki page. Content should be markdown with attribution " +
-      "blocks (**[Name · YYYY-MM-DD · source · fact|opinion]**) for traceability. " +
-      "`sources` is a separate citation list (URLs, doc names, or meeting references) " +
-      "— at least one is required; URLs embedded inside `content` do not count.",
+      "Create or update a wiki page. By default `content` is markdown with " +
+      "attribution blocks (**[Name · YYYY-MM-DD · source · fact|opinion]**) " +
+      "for traceability. Set `content_type: 'html'` to deploy a standalone " +
+      "HTML page as the wiki entry (full-viewport sandboxed iframe takeover " +
+      "on /wiki/<slug>; the HTML itself is the page). `sources` is a separate " +
+      "citation list (URLs, doc names, or meeting references) — at least one " +
+      "required; URLs inside `content` do not count. For HTML asset bundles " +
+      "use the `llama wiki save --file ... --assets ...` CLI path; MCP only " +
+      "supports single-file HTML.",
     inputSchema: {
       slug: z.string().describe("kebab-case slug"),
       title: z.string(),
-      content: z.string().describe("markdown content"),
+      content: z
+        .string()
+        .describe(
+          "body — markdown source by default, or raw HTML when content_type='html'"
+        ),
       sources: z
         .array(z.string())
         .min(1)
         .describe(
           "citation list — URLs, doc names, or meeting references. At least one required."
         ),
+      content_type: z
+        .enum(["markdown", "html"])
+        .optional()
+        .describe(
+          "'markdown' (default) renders via the wiki markdown pipeline. " +
+            "'html' stores the body as a standalone HTML page (sandboxed iframe)."
+        ),
     },
   },
-  async ({ slug, title, content, sources }) =>
-    callApi("POST", "/api/wiki/save", { slug, title, content, sources })
+  async ({ slug, title, content, sources, content_type }) =>
+    callApi("POST", "/api/wiki/save", {
+      slug,
+      title,
+      content,
+      sources,
+      ...(content_type ? { content_type } : {}),
+    })
 );
 
 // ============================================================

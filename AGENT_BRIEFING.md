@@ -35,7 +35,8 @@ Conversation produces value → that value flows somewhere. This is not optional
 | Brief blocks (text / link / embed / callout) | Pipeline | `llama brief add-text` / `add-link` / `add-callout` |
 | **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | Default path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". **You MUST declare intent — "new artifact" vs "update existing":**<br><br>**New artifact:** `llama html upload <dealId> --new --title "<artifact name>" --file <path>` (CLI slugifies the title; pass `--doc <slug>` to override).<br>**Update existing:** `llama html upload <dealId> --doc <slug> --file <path>` (slug must already exist — run `llama html docs <dealId>` first to see what's there).<br><br>The bare form `llama html upload <id> --file <path>` REFUSES if `main` already has content. Do NOT default to Netlify for internal pages. |
 | HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
-| Insights, decisions, framework improvements | Wiki | `llama wiki save` (with attribution — see below) |
+| Insights, decisions, framework improvements | Wiki (markdown) | `llama wiki save <slug> --content "..."` (with attribution — see below) |
+| **HTML wiki entry — standalone HTML page hosted at `/wiki/<slug>`** (sector landscape, market map, dashboard, hand-styled thesis page) | **Wiki (HTML)** | `llama wiki save <slug> --title "..." --file <path.html> --sources "..."`. Auto-detects content_type=html from extension. Public page is full-viewport sandboxed iframe takeover (no wiki chrome). Sources/status/title still required; appears in `wiki search` + backlinks. Use when the user says "deploy this HTML to wiki", "wiki 词条", "make this page a wiki entry". HTML must be self-contained (inline CSS/JS, image data URIs or external URLs) — asset bundles aren't supported on wiki yet. |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
 | Cross-team mentions | Inbox + email | `llama post <dealId> "@<teammate> ..."` — server fires email + UI badge to the recipient |
 
@@ -138,7 +139,17 @@ llama html reset <dealId> [--doc <slug>]                                 # soft-
 
 # Wiki (knowledge base)
 llama wiki search "<query>"
-llama wiki save <slug> --title "..." --content "..."
+llama wiki read <slug> [--lang en|zh]
+
+# Markdown entry (default):
+llama wiki save <slug> --title "..." --content "..." --sources "url1;url2"
+
+# HTML entry — standalone page at /wiki/<slug>, full-viewport sandboxed iframe:
+llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
+#   .html / .htm extension auto-implies content_type=html.
+#   --content-type html (or markdown) overrides the inference.
+#   Refuses to switch content_type on an existing slug; delete + re-create
+#   if you really mean to change format.
 
 # Timeline + posts
 llama timeline <dealId>
@@ -165,7 +176,7 @@ Tools available:
 - `auth_status` — verify creds + identity (call first if anything 401s)
 - `deal_search` / `deal_show` / `deal_create` / `deal_update`
 - `brief_blocks` / `brief_add_text` / `brief_add_link` / `brief_add_callout`
-- `wiki_search` / `wiki_save`
+- `wiki_search` / `wiki_save` (accepts `content_type: 'markdown' | 'html'` — HTML entries render as full-viewport sandboxed iframe at `/wiki/<slug>`)
 - `timeline` / `post`
 - `mentions_list`
 - `pitch_start` / `pitch_send_message` / `pitch_upload_file` / `pitch_status` / `pitch_finalize` — public intake (no Llama token needed; for founders / EAs / external agents)
