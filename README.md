@@ -209,7 +209,14 @@ llama post     <dealId> "message body" [--link url]
 
 # Wiki
 llama wiki search "<query>"
-llama wiki save <slug> --title "..." --content "..."
+llama wiki read   <slug> [--lang en|zh]
+# Markdown entry:
+llama wiki save <slug> --title "..." --content "..." --sources "url1;url2"
+# HTML entry — standalone page at /wiki/<slug> (full-viewport sandboxed iframe):
+llama wiki save <slug> --title "..." --file page.html --sources "..." [--content-type html]
+# Delete / restore (soft, reversible):
+llama wiki delete  <slug> [--lang en|zh]
+llama wiki restore <slug> [--lang en|zh]
 
 # Mentions inbox
 llama mentions
@@ -255,6 +262,7 @@ brief_add_link         brief_add_callout
 timeline               post
 
 wiki_search            wiki_save
+wiki_delete            wiki_restore
 
 mentions_list
 

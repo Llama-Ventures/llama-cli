@@ -343,6 +343,9 @@ Wiki:
       (.html / .htm extension auto-implies content_type=html)
   ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
     thesis, framework, methodology. For deal-specific HTML use "llama html upload <dealId>" instead.
+  Delete / restore (soft — reversible):
+    llama wiki delete <slug> [--lang en|zh]
+    llama wiki restore <slug> [--lang en|zh]
 
 Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo show <dealId> [--out <path>] [--json]          # default: html → stdout (pipeable to file / browser)
@@ -1426,6 +1429,24 @@ Routing — is this the right command?
       content_type: contentType,
     };
     print(await request("POST", "/api/wiki/save", payload));
+    return;
+  }
+
+  // ----- Wiki: delete (soft) / restore -----
+  // Soft-delete (CONSTITUTION §8 reversible). For HTML entries the
+  // sentinel deal_browse_html body + assets are soft-deleted too;
+  // `llama wiki restore <slug>` brings it all back.
+  if (area === "wiki" && (action === "delete" || action === "restore")) {
+    const { flags, positional } = parseFlags(rest);
+    const slug = positional[0];
+    if (!slug) throw new Error(`Usage: llama wiki ${action} <slug> [--lang en|zh]`);
+    const lang = flags.lang === "zh" ? "zh" : "en";
+    const qs = `?lang=${lang}`;
+    if (action === "delete") {
+      print(await request("DELETE", `/api/wiki/${encodeURIComponent(slug)}${qs}`));
+    } else {
+      print(await request("POST", `/api/wiki/${encodeURIComponent(slug)}/restore${qs}`));
+    }
     return;
   }
 

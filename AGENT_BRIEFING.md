@@ -205,6 +205,9 @@ llama wiki save <slug> --title "..." --file path.html --sources "..." [--content
 #   --content-type html (or markdown) overrides the inference.
 #   Refuses to switch content_type on an existing slug; delete + re-create
 #   if you really mean to change format.
+# Delete / restore (soft, reversible — CONSTITUTION §8):
+llama wiki delete  <slug> [--lang en|zh]
+llama wiki restore <slug> [--lang en|zh]
 
 # Timeline + posts
 llama timeline <dealId>
@@ -231,7 +234,7 @@ Tools available:
 - `auth_status` — verify creds + identity (call first if anything 401s)
 - `deal_search` / `deal_show` / `deal_create` / `deal_update`
 - `brief_blocks` / `brief_add_text` / `brief_add_link` / `brief_add_callout`
-- `wiki_search` / `wiki_save` (accepts `content_type: 'markdown' | 'html'` — HTML entries render as full-viewport sandboxed iframe at `/wiki/<slug>`)
+- `wiki_search` / `wiki_save` (accepts `content_type: 'markdown' | 'html'` — HTML entries render as full-viewport sandboxed iframe at `/wiki/<slug>`) / `wiki_delete` / `wiki_restore` (soft-delete, reversible)
 - `timeline` / `post`
 - `mentions_list`
 - `pitch_start` / `pitch_send_message` / `pitch_upload_file` / `pitch_status` / `pitch_finalize` — public intake (no Llama token needed; for founders / EAs / external agents)

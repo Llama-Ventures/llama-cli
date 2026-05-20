@@ -380,6 +380,44 @@ server.registerTool(
     })
 );
 
+server.registerTool(
+  "wiki_delete",
+  {
+    description:
+      "Soft-delete a wiki page (reversible). The entry stops appearing in " +
+      "reads / search / backlinks; for HTML entries the standalone page + " +
+      "assets stop resolving too. Restore with wiki_restore. Use when the " +
+      "user asks to remove / delete / retire a wiki entry.",
+    inputSchema: {
+      slug: z.string().describe("kebab-case slug"),
+      lang: z.enum(["en", "zh"]).optional().describe("default: en"),
+    },
+  },
+  async ({ slug, lang }) =>
+    callApi(
+      "DELETE",
+      `/api/wiki/${encodeURIComponent(slug)}?lang=${lang === "zh" ? "zh" : "en"}`
+    )
+);
+
+server.registerTool(
+  "wiki_restore",
+  {
+    description:
+      "Restore a soft-deleted wiki page (undo wiki_delete). Brings back the " +
+      "entry + (for HTML entries) its standalone page and assets.",
+    inputSchema: {
+      slug: z.string().describe("kebab-case slug"),
+      lang: z.enum(["en", "zh"]).optional().describe("default: en"),
+    },
+  },
+  async ({ slug, lang }) =>
+    callApi(
+      "POST",
+      `/api/wiki/${encodeURIComponent(slug)}/restore?lang=${lang === "zh" ? "zh" : "en"}`
+    )
+);
+
 // ============================================================
 // Timeline + posts
 // ============================================================
