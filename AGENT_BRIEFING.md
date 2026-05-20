@@ -29,6 +29,61 @@ Don't:
 
 Conversation produces value → that value flows somewhere. This is not optional.
 
+### Where does this HTML / thesis / artifact go? (decision tree)
+
+When the user hands you an HTML page, thesis write-up, market map, dashboard, IC memo, sector landscape — anything that isn't a one-off note — pick the destination in this order. **Llama Command native (the workbench) outranks Netlify for everything internal.** Only escape to Netlify when the page is truly going to a public / founder-facing URL.
+
+```
+HTML / thesis / artifact in hand
+        │
+        ▼
+  ┌─────────────────────────────────────────────────┐
+  │ Is it about ONE specific company or deal?       │
+  │  (deal IC memo · dashboard for X · X 的 thesis  │
+  │   · founder briefing for X · X 的 2×2 …)        │
+  └──────────────┬──────────────────────────────────┘
+                 │
+        yes ────►│  → Llama Command DEAL page
+                 │    `llama html upload <dealId> --new --title "..." --file <path>`
+                 │    Renders at /deals/<id>/browse/<slug>.
+                 │    Use --doc <slug> + --file to update an existing one.
+                 │
+        no  ────►│  Is it cross-deal / institutional knowledge?
+                 │   (sector landscape · market map · framework · firm-level
+                 │    thesis · methodology · "AI infra in 2026" …)
+                 │
+                 │       yes ──►  → Llama Command WIKI entry
+                 │                  Markdown body:
+                 │                    `llama wiki save <slug> --title "..." \`
+                 │                    `  --content "..." --sources "..."`
+                 │                  Standalone HTML page (full-viewport iframe):
+                 │                    `llama wiki save <slug> --title "..." \`
+                 │                    `  --file <path>.html --sources "..."`
+                 │                  Renders at /wiki/<slug>. Sources mandatory.
+                 │
+                 │       no  ──►  Likely doesn't need to live anywhere
+                 │                durable — confirm with the user before
+                 │                inventing a destination.
+                 ▼
+  ┌─────────────────────────────────────────────────┐
+  │ Does the user EXPLICITLY say "share with        │
+  │ founder" / "public share link" / "give it to    │
+  │ <external person>" / "publish publicly"?        │
+  └──────────────┬──────────────────────────────────┘
+                 │
+        no  ────►│  → STAY on Llama Command. Don't reach for Netlify.
+                 │
+        yes ────►│  → Netlify (only this case).
+                 │    Use the `netlify-access-guard` workflow:
+                 │    server-side password + edge 401 verification.
+                 │    Verify enforcement is at the Netlify edge, not a
+                 │    browser-side JS fake.
+```
+
+**Default bias:** when in doubt, route to Llama Command. It has auth, audit, search, backlinks, and lives next to the rest of the team's context. Netlify is the escape hatch for genuinely-external surfaces — not "where pretty HTML goes."
+
+The table below details the exact CLI for each destination.
+
 | Type | Destination | How |
 |---|---|---|
 | Deal metadata (status, stage, valuation, founders, notes, etc.) | Pipeline (Postgres) | `llama deal create` / `llama deal update` |

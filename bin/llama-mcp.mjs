@@ -328,15 +328,25 @@ server.registerTool(
   "wiki_save",
   {
     description:
-      "Create or update a wiki page. By default `content` is markdown with " +
-      "attribution blocks (**[Name · YYYY-MM-DD · source · fact|opinion]**) " +
-      "for traceability. Set `content_type: 'html'` to deploy a standalone " +
-      "HTML page as the wiki entry (full-viewport sandboxed iframe takeover " +
-      "on /wiki/<slug>; the HTML itself is the page). `sources` is a separate " +
-      "citation list (URLs, doc names, or meeting references) — at least one " +
-      "required; URLs inside `content` do not count. For HTML asset bundles " +
-      "use the `llama wiki save --file ... --assets ...` CLI path; MCP only " +
-      "supports single-file HTML.",
+      "Create or update a wiki page — Llama's CROSS-DEAL / institutional " +
+      "knowledge surface (sector landscape · market map · thesis · framework · " +
+      "methodology · anything not tied to ONE specific deal). Renders at " +
+      "/wiki/<slug>. " +
+      "**Routing — decide BEFORE calling:** " +
+      "(a) Deal-specific HTML (IC memo for X, dashboard for X) → use " +
+      "`html_upload` instead, NOT this. " +
+      "(b) Cross-deal / institutional (this tool) → /wiki/<slug>. " +
+      "(c) Founder-facing public share → Netlify only when user explicitly " +
+      "says so; Llama Command outranks Netlify for everything internal. " +
+      "By default `content` is markdown with attribution blocks " +
+      "(**[Name · YYYY-MM-DD · source · fact|opinion]**) for traceability. " +
+      "Set `content_type: 'html'` to deploy a standalone HTML page as the " +
+      "wiki entry (full-viewport sandboxed iframe takeover on /wiki/<slug>; " +
+      "the HTML itself is the page — no wiki chrome). `sources` is a " +
+      "separate citation list (URLs, doc names, or meeting references) — " +
+      "at least one required; URLs inside `content` do not count. For HTML " +
+      "asset bundles use the `llama wiki save --file ... --assets ...` CLI " +
+      "path; MCP only supports single-file HTML.",
     inputSchema: {
       slug: z.string().describe("kebab-case slug"),
       title: z.string(),
@@ -729,7 +739,16 @@ server.registerTool(
   "html_upload",
   {
     description:
-      "Upload (PUT) a new HTML version for a deal's /browse page. " +
+      "Upload (PUT) a new HTML version for a SPECIFIC DEAL's /browse page " +
+      "(deal-scoped artifact: IC memo for X · dashboard for X · 2×2 for X). " +
+      "Renders at /deals/<id>/browse/<slug>. " +
+      "**Routing — pick the right destination BEFORE calling this:** " +
+      "(a) Deal-specific HTML (this tool) → /deals/<id>/browse/<slug>. " +
+      "(b) Cross-deal / institutional / thesis / sector landscape → use " +
+      "`wiki_save` with content_type='html' instead (/wiki/<slug>). " +
+      "(c) Founder-facing public share link → escape to Netlify only when " +
+      "the user explicitly says 'share with founder' / 'publish publicly'; " +
+      "Llama Command outranks Netlify for everything internal. " +
       "Creates a NEW version row — the previous version is retained " +
       "and restorable. Triggers SSE push so any open viewer auto- " +
       "refreshes. Constraints: HTML body MUST start with " +

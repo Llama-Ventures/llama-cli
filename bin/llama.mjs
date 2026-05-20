@@ -324,10 +324,25 @@ Mentions / Inbox:
   llama mentions resolve <mentionId>                   # mark thread resolved (idempotent)
   llama mentions unread                                # just the badge count
 
+Where does this HTML / thesis / artifact go?
+  About ONE specific deal? ........ llama html upload <dealId> --new --title "..." --file <path>
+                                      (renders at /deals/<id>/browse/<slug>; see "Deal page HTML" below)
+  Cross-deal / institutional? ..... llama wiki save <slug> --title "..." --file <path>.html --sources "..."
+                                      (renders at /wiki/<slug>; see "Wiki" below)
+  Founder-facing public share? .... Netlify (with netlify-access-guard skill), only when user explicitly
+                                      says "share publicly". Llama Command outranks Netlify for everything
+                                      internal — don't reach for Netlify by default.
+
 Wiki:
   llama wiki search <query>
   llama wiki read <slug>
-  llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"]
+  Markdown entry (default):
+    llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"]
+  HTML entry — standalone HTML page at /wiki/<slug> (full-viewport sandboxed iframe):
+    llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
+      (.html / .htm extension auto-implies content_type=html)
+  ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
+    thesis, framework, methodology. For deal-specific HTML use "llama html upload <dealId>" instead.
 
 Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo show <dealId> [--out <path>] [--json]          # default: html → stdout (pipeable to file / browser)
@@ -336,6 +351,9 @@ Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo reset <dealId> [--all]                          # default drops manual override; --all drops every version
 
 Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
+  ➜ Use this for DEAL-SPECIFIC artifacts: IC memo for X, dashboard for X, 2×2 for X.
+    For cross-deal / institutional pages (sector landscape, market map, thesis) use
+    "llama wiki save <slug> --file ..." instead — see "Wiki" above.
   Each deal can host many HTML artifacts (IC report, dashboard, market map, …).
   Each one has a stable slug. UPLOAD must declare intent — update an existing
   artifact or add a new one — to avoid silent overwrites.
@@ -1358,7 +1376,16 @@ https://command.llamaventures.vc/settings/tokens, run
 or
   llama wiki save <slug> --title "..." --file path/to/article.{md,html} --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
 
-Pass either --content (inline) or --file (read from disk). With --file, content_type auto-detects from extension (.html/.htm → html, else markdown). Use --content-type to override.`
+Pass either --content (inline) or --file (read from disk). With --file, content_type auto-detects from extension (.html/.htm → html, else markdown). Use --content-type to override.
+
+Routing — is this the right command?
+  ✓ Cross-deal / institutional knowledge (sector landscape, market map, thesis, framework, methodology)
+      → YES, you're in the right place.
+  ✗ Deal-specific HTML (IC memo for X, dashboard for X, 2×2 for one company)
+      → use \`llama html upload <dealId> --new --title "..." --file <path>\` instead.
+  ✗ Founder-facing public share link
+      → escape to Netlify only when the user explicitly says "share publicly" / "give it to the founder";
+        Llama Command outranks Netlify for everything internal.`
       );
     }
     if (inlineContent && filePath) {
@@ -2091,7 +2118,18 @@ Pass either --content (inline) or --file (read from disk). With --file, content_
             "\n" +
             "Default (no --doc, no --new) targets slug 'main' but REFUSES if 'main'\n" +
             "already has content — pass --doc main to update it explicitly, or\n" +
-            "--new --title \"...\" to add a NEW artifact alongside.",
+            "--new --title \"...\" to add a NEW artifact alongside.\n" +
+            "\n" +
+            "Routing — is this the right command?\n" +
+            "  ✓ DEAL-specific HTML (IC memo for X, dashboard for X, 2×2 for X)\n" +
+            "      → YES, you're in the right place. Pass <dealId> + --new / --doc.\n" +
+            "  ✗ Cross-deal / institutional knowledge (sector landscape, market map,\n" +
+            "    thesis, framework, methodology, anything not tied to one company)\n" +
+            "      → use `llama wiki save <slug> --title \"...\" --file <path>.html --sources \"...\"`\n" +
+            "        instead (renders at /wiki/<slug>).\n" +
+            "  ✗ Founder-facing public share link\n" +
+            "      → escape to Netlify only when the user explicitly says \"share publicly\";\n" +
+            "        Llama Command outranks Netlify for everything internal.",
         );
       }
       const knownFlags = [
