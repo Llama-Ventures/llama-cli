@@ -157,6 +157,9 @@ llama deal list [--owner ...] [--status ...]
 # Pipeline — write
 llama deal create "Company" --description "..."
 llama deal update <dealId> <field> <value>
+#   writable: status theirStage stage notes dealOwner source description website
+#             location founders proposedAmount roundSize valuation sector subsector
+#             foundedYear leadInvestor investors   (each write logs a deal_events row)
 
 # Brief blocks
 llama brief blocks <dealId>
@@ -244,6 +247,7 @@ You can also fetch this exact briefing as an MCP prompt named `agent_briefing`.
 ## Boundaries (what NOT to do)
 
 - **Don't impersonate a human's opinion.** Tag AI-generated content as `[AI · …]`.
+- **Don't vouch for facts you haven't checked.** When you `add fact`, pass `--attested` only if you actually verified the claim against its source. Without it the fact is stored as *unverified* — that's the honest default, not a failure. You cannot mark a fact as human-confirmed; only a person can raise it there.
 - **Don't use absolute language** ("only", "all", "best", "no one", "极") unless verifiable.
 - **Don't bypass `llama` CLI / MCP for pipeline writes.** CSRF defence, rate limits, audit logs all flow through it.
 - **Don't write to retired surfaces.** Google Sheet is read-only archive. Legacy `~/.llama-command/config.json` auto-migrates.

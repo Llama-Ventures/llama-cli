@@ -226,6 +226,13 @@ Deals:
   llama deal create "Company" --source <name> --description "..." --website https://...
   llama deal show <dealId>
   llama deal update <dealId> <field> <value>
+      Writable fields: status, theirStage, stage, notes, dealOwner, source,
+      description, website, location, founders, proposedAmount, roundSize,
+      valuation, sector, subsector, foundedYear, leadInvestor, investors.
+      e.g.  llama deal update <dealId> website https://acme.ai
+            llama deal update <dealId> sector "Developer Tools"
+            llama deal update <dealId> foundedYear 2024
+            llama deal update <dealId> leadInvestor "Acme Capital"
   llama deal search <query> [--founder name] [--owner <user-key>] [--status Diligence]
                             [--theirStage Raising] [--stage Seed]
                             [--limit 200] [--offset 0]
@@ -307,7 +314,7 @@ Deal soft-delete / restore / trash list:
 
 Deal facts (AI-extracted or human-asserted, with verification):
   llama deal fact list <dealId>                                # ⚠ session-only on server today
-  llama deal fact add <dealId> --category <cat> --claim "<text>" [--source <url>] [--confidence high|medium|low]
+  llama deal fact add <dealId> --category <cat> --claim "<text>" [--source <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
 
 Skill corrections (persona-owner pushback — read by persona-watcher):
@@ -1147,14 +1154,18 @@ https://command.llamaventures.vc/settings/tokens, run
       if (!flags.category || !flags.claim) {
         throw new Error(
           `Usage: llama deal fact add <dealId> --category <cat> --claim "<text>" ` +
-          `[--source <url>] [--confidence high|medium|low]`
+          `[--source <url>] [--confidence high|medium|low] [--attested]`
         );
       }
+      // --attested: the caller takes responsibility that this is accurate
+      // (verified against the source). With it, the fact is recorded as
+      // vouched; without it, it stays unverified. Declare honestly.
       print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/facts`, {
         category: String(flags.category),
         claim: String(flags.claim),
         source: flags.source ? String(flags.source) : "",
         confidence: flags.confidence ? String(flags.confidence) : "medium",
+        attested: flags.attested === true,
       }));
       return;
     }
@@ -2160,8 +2171,8 @@ Routing — is this the right command?
       const { flags } = parseFlags(rest.slice(1), knownFlags);
 
       // --slug is the natural agent guess (DB column is `document_slug`).
-      // Accept it as an alias for --doc so the failure mode that bit
-      // Gavin (silent fall-through to 'main') can't happen again.
+      // Accept it as an alias for --doc so the earlier failure mode
+      // (silent fall-through to 'main') can't happen again.
       if (flags.slug && !flags.doc) {
         process.stderr.write("note: --slug accepted as alias for --doc.\n");
         flags.doc = flags.slug;
