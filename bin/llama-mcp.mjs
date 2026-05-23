@@ -197,7 +197,8 @@ server.registerTool(
     description:
       "Update a single whitelisted field on a deal. Writable fields: status, theirStage, " +
       "notes, stage, dealOwner, source, description, website, location, founders, " +
-      "proposedAmount, roundSize, valuation. Logs a field_change event in deal_events.",
+      "proposedAmount, roundSize, valuation, sector, subsector, foundedYear, leadInvestor, " +
+      "investors. Logs a field_change event in deal_events.",
     inputSchema: {
       dealId: z.string(),
       field: z.string().describe("camelCase field name (see description for whitelist)"),
@@ -206,6 +207,82 @@ server.registerTool(
   },
   async ({ dealId, field, value }) =>
     callApi("POST", "/api/deals/update", { dealId, field, value })
+);
+
+// ============================================================
+// Deal facts (research substrate + trust ladder)
+// ============================================================
+
+server.registerTool(
+  "deal_fact_list",
+  {
+    description:
+      "List a deal's recorded facts (the research substrate). Each fact carries a " +
+      "category, a claim, a source, a confidence, and a trust rung (unverified → " +
+      "agent-verified → human-vouched → endorsed) plus who/what recorded it.",
+    inputSchema: {
+      dealId: z.string(),
+    },
+  },
+  async ({ dealId }) =>
+    callApi("GET", `/api/deals/${encodeURIComponent(dealId)}/facts`)
+);
+
+server.registerTool(
+  "deal_fact_add",
+  {
+    description:
+      "Record a factual claim about a deal. RESPONSIBILITY: set `attested` honestly — " +
+      "true ONLY if you actually verified the claim against its cited source (the fact " +
+      "is then stored at trust level 'agent-verified'); false/omitted if you are relaying " +
+      "something unconfirmed (stored 'unverified', which is the honest default). You CANNOT " +
+      "mark a fact as human-confirmed — only a person can raise it to 'human-vouched'. " +
+      "`confidence` is how certain the claim is; `attested` is whether YOU take responsibility " +
+      "for having checked it. category ∈ founders | financials | product | market | team | " +
+      "company_basics | risk | fundraise | milestone | meta.",
+    inputSchema: {
+      dealId: z.string(),
+      category: z.string(),
+      claim: z.string(),
+      source: z.string().optional().describe("where you found this (URL, 'deck p3', 'LinkedIn')"),
+      confidence: z.enum(["high", "medium", "low"]).optional(),
+      attested: z
+        .boolean()
+        .optional()
+        .describe("true → stored 'agent-verified'; false/omitted → 'unverified'. Answer honestly."),
+    },
+  },
+  async ({ dealId, category, claim, source, confidence, attested }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/facts`, {
+      category,
+      claim,
+      source: source ?? "",
+      confidence: confidence ?? "medium",
+      attested: attested === true,
+    })
+);
+
+server.registerTool(
+  "deal_fact_verify",
+  {
+    description:
+      "Verify a recorded fact. status='confirmed' vouches for it (raises to 'human-vouched'); " +
+      "status='disputed' marks it contradicted. Trust-ladder guardrails apply server-side " +
+      "(external-org callers are capped at 'unverified'; only Partners reach 'endorsed'). " +
+      "Optionally pass correctedValue when disputing.",
+    inputSchema: {
+      dealId: z.string(),
+      factId: z.union([z.string(), z.number()]),
+      status: z.enum(["confirmed", "disputed"]),
+      correctedValue: z.string().optional(),
+    },
+  },
+  async ({ dealId, factId, status, correctedValue }) =>
+    callApi(
+      "PATCH",
+      `/api/deals/${encodeURIComponent(dealId)}/facts/${encodeURIComponent(String(factId))}`,
+      { status, ...(correctedValue !== undefined ? { correctedValue } : {}) }
+    )
 );
 
 // ============================================================
@@ -270,6 +347,108 @@ server.registerTool(
   },
   async ({ dealId, tone, heading, body }) =>
     addBriefBlock(dealId, { type: "callout", tone, heading: heading ?? "", body })
+);
+
+server.registerTool(
+  "brief_edit",
+  {
+    description:
+      "Edit an existing brief block in place. Pass only the fields you want to change " +
+      "(heading/body/url/label/description/tone). Meta toggles: locked (protect from bulk " +
+      "overwrite), hidden (fold), sourceSection (route watcher writes). Snapshots the prior " +
+      "version to history (reversible via brief_restore_version).",
+    inputSchema: {
+      dealId: z.string(),
+      blockId: z.string(),
+      heading: z.string().optional(),
+      body: z.string().optional(),
+      url: z.string().optional(),
+      label: z.string().optional(),
+      description: z.string().optional(),
+      tone: z.string().optional(),
+      locked: z.boolean().optional(),
+      hidden: z.boolean().optional(),
+      sourceSection: z.string().optional(),
+    },
+  },
+  async ({ dealId, blockId, heading, body, url, label, description, tone, locked, hidden, sourceSection }) => {
+    const patch = {};
+    for (const [k, v] of Object.entries({ heading, body, url, label, description, tone })) {
+      if (v !== undefined) patch[k] = v;
+    }
+    const meta = {};
+    if (locked !== undefined) meta.locked = locked;
+    if (hidden !== undefined) meta.hidden = hidden;
+    if (sourceSection !== undefined) meta.sourceSection = sourceSection;
+    if (Object.keys(meta).length > 0) patch.meta = meta;
+    return callApi(
+      "PATCH",
+      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`,
+      patch
+    );
+  }
+);
+
+server.registerTool(
+  "brief_delete",
+  {
+    description:
+      "Soft-delete a brief block (reversible via brief_restore). Locked blocks are refused.",
+    inputSchema: { dealId: z.string(), blockId: z.string() },
+  },
+  async ({ dealId, blockId }) =>
+    callApi("DELETE", `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`)
+);
+
+server.registerTool(
+  "brief_restore",
+  {
+    description: "Restore a soft-deleted brief block.",
+    inputSchema: { dealId: z.string(), blockId: z.string() },
+  },
+  async ({ dealId, blockId }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/restore`)
+);
+
+server.registerTool(
+  "brief_history",
+  {
+    description:
+      "List the content-version history of a brief block (every overwrite is snapshotted). " +
+      "Use the returned history id with brief_restore_version.",
+    inputSchema: {
+      dealId: z.string(),
+      blockId: z.string(),
+      limit: z.number().optional(),
+    },
+  },
+  async ({ dealId, blockId, limit }) => {
+    const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+    return callApi(
+      "GET",
+      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/history${qs}`
+    );
+  }
+);
+
+server.registerTool(
+  "brief_restore_version",
+  {
+    description:
+      "Restore a brief block to a specific historical version (find historyId via brief_history). " +
+      "Itself reversible — the outgoing version is snapshotted before replacement.",
+    inputSchema: {
+      dealId: z.string(),
+      blockId: z.string(),
+      historyId: z.number(),
+    },
+  },
+  async ({ dealId, blockId, historyId }) =>
+    callApi(
+      "POST",
+      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/history`,
+      { history_id: historyId }
+    )
 );
 
 // ============================================================
@@ -480,6 +659,109 @@ server.registerTool(
     if (!includeResolved) params.set("unresolved", "1");
     return callApi("GET", `/api/mentions?${params}`);
   }
+);
+
+server.registerTool(
+  "mentions_resolve",
+  {
+    description: "Mark an @-mention as resolved (clears it from the recipient's open cues).",
+    inputSchema: { mentionId: z.union([z.string(), z.number()]) },
+  },
+  async ({ mentionId }) =>
+    callApi("POST", `/api/mentions/${encodeURIComponent(String(mentionId))}/resolve`)
+);
+
+// ============================================================
+// Skill corrections (persona-owner pushback workflow)
+// ============================================================
+
+server.registerTool(
+  "skill_correction_list",
+  {
+    description:
+      "List the recorded corrections (long-term rules) for a persona/skill. These shape how " +
+      "that persona's analysis is generated.",
+    inputSchema: {
+      skillSlug: z.string(),
+      includeDeleted: z.boolean().optional(),
+    },
+  },
+  async ({ skillSlug, includeDeleted }) => {
+    const params = new URLSearchParams({ skill: skillSlug });
+    if (includeDeleted) params.set("include_deleted", "1");
+    return callApi("GET", `/api/skill-corrections?${params}`);
+  }
+);
+
+server.registerTool(
+  "skill_correction_add",
+  {
+    description:
+      "Record a long-term correction rule for a persona/skill (e.g. 'always check burn multiple " +
+      "before commenting on efficiency'). ALWAYS reconfirm the distilled rule with the user before " +
+      "calling — this changes how the persona behaves going forward. Optionally tie it to the deal/" +
+      "block where it came up.",
+    inputSchema: {
+      skillSlug: z.string(),
+      correctionText: z.string(),
+      dealUuid: z.string().optional(),
+      blockId: z.string().optional(),
+    },
+  },
+  async ({ skillSlug, correctionText, dealUuid, blockId }) =>
+    callApi("POST", "/api/skill-corrections", {
+      skill_slug: skillSlug,
+      correction_text: correctionText,
+      triggered_in_deal_uuid: dealUuid ?? null,
+      triggered_in_block_id: blockId ?? null,
+    })
+);
+
+server.registerTool(
+  "skill_correction_delete",
+  {
+    description: "Soft-delete a recorded skill correction by id.",
+    inputSchema: { id: z.union([z.string(), z.number()]) },
+  },
+  async ({ id }) =>
+    callApi("DELETE", `/api/skill-corrections/${encodeURIComponent(String(id))}`)
+);
+
+// ============================================================
+// Brief / persona refresh (signal-driven re-evaluation)
+// ============================================================
+
+server.registerTool(
+  "deal_refresh_brief",
+  {
+    description:
+      "Trigger a stale-section re-evaluation of a deal's brief. Pass force=true to bypass the " +
+      "debounce. Returns a runId (or null if debounced / deal inactive).",
+    inputSchema: {
+      dealId: z.string(),
+      force: z.boolean().optional(),
+    },
+  },
+  async ({ dealId, force }) =>
+    callApi(
+      "POST",
+      `/api/deals/${encodeURIComponent(dealId)}/refresh-brief${force ? "?force=1" : ""}`
+    )
+);
+
+server.registerTool(
+  "deal_refresh_persona",
+  {
+    description:
+      "Regenerate one persona's analysis section for a deal. persona ∈ gavin | kyle | jack | " +
+      "david | bryan | herman | hongjiang | liuyi | kevin. Returns a runId (or null if debounced).",
+    inputSchema: {
+      dealId: z.string(),
+      persona: z.string(),
+    },
+  },
+  async ({ dealId, persona }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/refresh-persona`, { persona })
 );
 
 // ============================================================
