@@ -6,6 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-05-23
+
+### Added
+- **`llama deal fact add --attested`** — the caller declares whether they
+  verified the claim against its source. With `--attested` the fact is recorded
+  as vouched; without it, it stays unverified (the honest default). You can't
+  mark a fact as human-confirmed on someone's behalf — only a person can.
+- **MCP parity with the CLI.** MCP-native agents now have the same surface as
+  CLI users (35 → 49 tools): `deal_fact_list` / `deal_fact_add` (carries the
+  same `attested` contract) / `deal_fact_verify`; `brief_edit` / `brief_delete`
+  / `brief_restore` / `brief_history` / `brief_restore_version`;
+  `mentions_resolve`; `skill_correction_list` / `add` / `delete`;
+  `deal_refresh_brief` / `deal_refresh_persona`.
+
+### Changed
+- `AGENT_BRIEFING.md`: new boundary — don't vouch for facts you haven't checked.
+
+> Note: the 1.6.0 / 1.6.1 changelog entries were never committed to `main`
+> (the releases are tagged); reconcile from the pending docs edit when convenient.
+
 ## [1.5.0] — 2026-05-19
 
 ### Changed
