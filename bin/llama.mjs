@@ -30,6 +30,7 @@ import {
 } from "../lib/external.mjs";
 import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
+import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
 
 function parseFlags(args, knownFlags = null) {
   const flags = {};
@@ -763,6 +764,14 @@ async function main() {
     const { createRequire } = await import("module");
     const requireFromHere = createRequire(import.meta.url);
     const { version } = requireFromHere("../package.json");
+    // `llama version --check` — explicitly check npm for a newer release and
+    // print the upgrade line (or "up to date"). Lets an agent surface the
+    // nudge on demand, separate from the throttled, TTY-gated auto-nudge.
+    if (action === "--check" || action === "check") {
+      const nudge = await getUpdateNudge();
+      console.log(nudge || `llama CLI ${version} — up to date`);
+      return;
+    }
     console.log(version);
     return;
   }
@@ -2633,7 +2642,12 @@ Routing — is this the right command?
   process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(`Error: ${error.message}`);
-  process.exit(1);
-});
+main()
+  // Soft, throttled, TTY-gated update nudge. Runs AFTER the command's own
+  // output and is awaited so the registry check completes before exit — but
+  // it can never fail the command (all errors swallowed internally).
+  .then(() => maybeNudgeUpdate())
+  .catch((error) => {
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
+  });
