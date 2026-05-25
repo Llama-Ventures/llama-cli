@@ -198,8 +198,7 @@ async function searchDeals(q, flags) {
   return result;
 }
 
-function usage() {
-  console.log(`Llama Command CLI
+const HELP_FULL = `Llama Command CLI
 
 Agent onboarding (run once on first install):
   llama agent-onboard                  # print AGENT_BRIEFING.md — the workflow contract for AI agents
@@ -411,7 +410,86 @@ Token discovery (in order):
 Env:
   LLAMA_TOKEN    token override
   LLAMA_API_URL  API base URL override
-`);
+`;
+
+// ── Progressive help (Constitution §1) ──
+// Default `llama` / `llama --help` prints a SHORT root: the command groups +
+// a few starters. Drill into one group with `llama help <area>` (or
+// `llama <area> --help`); `llama help all` prints the full reference above.
+const HELP_ROOT = `Llama Command CLI — the \`llama\` command for the Llama Ventures workbench.
+
+Common:
+  llama deal search "<name>"        find a deal in the pipeline
+  llama deal show <dealId>          full deal record
+  llama deal feed <dealId>          everything humans added, newest first
+  llama post <dealId> "..."         add a note to a deal
+  llama agent-onboard               print the AI-agent workflow contract
+
+Command groups — run \`llama help <group>\` for that group's commands:
+  deal        create · show · feed · update · search · collaborators · links · delete
+  brief       brief blocks: list · add · edit · history · refresh
+  facts       deal facts + skill corrections (the sourced, trust-rated layer)
+  timeline    timeline · posts · mentions
+  wiki        cross-deal knowledge entries (markdown or HTML)
+  memo        long-form HTML investment memo
+  html        deal-specific HTML artifacts (/deals/<id>/browse/<slug>)
+  pitch       external founder intake (no token needed)
+  ownership   claim · nominate · approvals
+  admin       audit events (system admin only)
+  auth        setup · tokens · auth status
+
+  llama help all     the full command reference (everything at once)
+
+Auth: if you've run \`gcloud auth login\` with your @llamaventures.vc account,
+the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
+
+// Area → which top-level sections of HELP_FULL belong to it.
+const HELP_AREA_MATCH = {
+  deal: [/^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
+  brief: [/^Brief blocks/, /^Brief \/ persona/],
+  facts: [/^Deal facts/, /^Skill corrections/],
+  timeline: [/^Timeline/, /^Mentions/],
+  wiki: [/^Wiki/, /^Where does this HTML/],
+  memo: [/^Memo/],
+  html: [/^Deal page HTML/],
+  pitch: [/^External pitch/],
+  ownership: [/^Ownership/, /^Approvals/],
+  admin: [/^Admin/],
+  auth: [/^Setup/, /^Zero-config/, /^Token discovery/, /^Env/],
+};
+
+// Slice HELP_FULL into sections: a top-level (non-indented) header line plus
+// the indented/blank lines that follow it, until the next header.
+function helpSections() {
+  const out = [];
+  let cur = null;
+  for (const line of HELP_FULL.split("\n")) {
+    if (/^[A-Za-z]/.test(line)) {
+      cur = { head: line, lines: [line] };
+      out.push(cur);
+    } else if (cur) {
+      cur.lines.push(line);
+    }
+  }
+  return out;
+}
+
+function usage(area) {
+  if (area === "all") {
+    console.log(HELP_FULL);
+    return;
+  }
+  const matchers = area && HELP_AREA_MATCH[area];
+  if (matchers) {
+    const blocks = helpSections()
+      .filter((s) => matchers.some((re) => re.test(s.head)))
+      .map((s) => s.lines.join("\n").replace(/\s+$/, ""));
+    if (blocks.length) {
+      console.log(blocks.join("\n\n"));
+      return;
+    }
+  }
+  console.log(HELP_ROOT);
 }
 
 // ============================================================
@@ -689,7 +767,12 @@ async function main() {
     return;
   }
   if (!area || area === "help" || area === "--help" || area === "-h") {
-    usage();
+    usage(area === "help" ? action : undefined);
+    return;
+  }
+  // `llama <area> --help` / `-h` → just that group's commands
+  if (action === "--help" || action === "-h") {
+    usage(area);
     return;
   }
 
