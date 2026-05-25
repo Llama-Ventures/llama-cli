@@ -225,6 +225,7 @@ Manually-set \`llc_\` tokens are used as a fallback.
 Deals:
   llama deal create "Company" --source <name> --description "..." --website https://...
   llama deal show <dealId>
+  llama deal feed <dealId>                                     # everything humans added (facts + notes), newest first
   llama deal update <dealId> <field> <value>
       Writable fields: status, theirStage, stage, notes, dealOwner, source,
       description, website, location, founders, proposedAmount, roundSize,
@@ -975,6 +976,13 @@ https://command.llamaventures.vc/settings/tokens, run
     const dealId = rest[0];
     if (!dealId) throw new Error("Usage: llama deal show <dealId>");
     print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/command-center`));
+    return;
+  }
+
+  if (area === "deal" && action === "feed") {
+    const dealId = rest[0];
+    if (!dealId) throw new Error("Usage: llama deal feed <dealId>");
+    print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/feed`));
     return;
   }
 

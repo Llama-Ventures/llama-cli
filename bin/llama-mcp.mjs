@@ -304,6 +304,22 @@ server.registerTool(
 );
 
 server.registerTool(
+  "deal_feed",
+  {
+    description:
+      "The unified, time-sorted stream of everything a HUMAN has added to a deal — " +
+      "facts + notes/discussion + legacy posts, merged at query time, newest first. " +
+      "Excludes AI-generated content. Each item: kind (fact|note), ts, who, text, " +
+      "and for facts: source + trust rung + category.",
+    inputSchema: {
+      dealId: z.string(),
+    },
+  },
+  async ({ dealId }) =>
+    callApi("GET", `/api/deals/${encodeURIComponent(dealId)}/feed`)
+);
+
+server.registerTool(
   "brief_add_text",
   {
     description:
