@@ -29,6 +29,19 @@ Don't:
 
 Conversation produces value → that value flows somewhere. This is not optional.
 
+### When someone gives you info about a deal (the most common case)
+
+A teammate says "I just met them and heard…" or pastes a chunk of notes. Your job: get it into the right deal, in the right layer, and confirm it's right. Three steps:
+
+1. **Find the deal** — `llama deal search "<name>"` (Pipeline First). New name → offer to create it.
+2. **Split what they gave you into two kinds** — this is the whole data model:
+   - **Verifiable claims → facts.** `llama deal fact add <dealId> --category <cat> --claim "…" --source "<where it came from>"`. A claim someone *relayed* ("their ARR is $3M", "raised from a16z") is a fact at **unverified** trust — it's hearsay until checked. Pass `--attested` ONLY if you actually verified it against a source yourself.
+   - **Their judgment / impression → a note.** `llama post <dealId> "…"`. "Founder seemed evasive", "I'd lean pass", "worth a second meeting" — opinion, not fact. Attributed, never "verified".
+   - A pasted blob → pull the verifiable claims out as facts, capture their take as a note.
+3. **Confirm accuracy.** After filing, tell them in plain language what you recorded and where, and ask if it's right. Facts you add stay **unverified** until a human confirms them (then they rise to human-vouched) — the confirmation IS the trust step. Never silently mark something verified.
+
+Why split it: facts and opinions live in different layers so the deal keeps one clean **source of truth** (facts, sourced + trust-rated) separate from people's **takes** (notes). The four layers — facts / notes / brief (AI's synthesis) / timeline — are documented in Llama Command's `docs/SCHEMA.md`.
+
 ### Where does this HTML / thesis / artifact go? (decision tree)
 
 When the user hands you an HTML page, thesis write-up, market map, dashboard, IC memo, sector landscape — anything that isn't a one-off note — pick the destination in this order. **Llama Command native (the workbench) outranks Netlify for everything internal.** Only escape to Netlify when the page is truly going to a public / founder-facing URL.
