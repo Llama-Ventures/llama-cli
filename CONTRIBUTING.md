@@ -7,7 +7,7 @@ best limited to documentation fixes and broken-flow reports.
 ## Local dev loop
 
 ```bash
-git clone https://github.com/SoujiOkita98/llama-cli.git
+git clone https://github.com/Llama-Ventures/llama-cli.git
 cd llama-cli
 npm ci
 node bin/llama.mjs --help        # CLI is ESM, runs straight from source
@@ -82,7 +82,7 @@ To cut a release:
 npm version <patch|minor|major>     # commits + tags
 git push origin main --tags
 
-# 2. Open https://github.com/SoujiOkita98/llama-cli/releases/new
+# 2. Open https://github.com/Llama-Ventures/llama-cli/releases/new
 #    Choose the tag, paste the CHANGELOG section, click "Publish release"
 #    → publish.yml fires, OIDC handshake → npm publish --provenance --access public
 ```

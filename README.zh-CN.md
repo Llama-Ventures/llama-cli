@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@llamaventures/cli"><img alt="npm" src="https://img.shields.io/npm/v/@llamaventures/cli?label=npm&color=cb3837&logo=npm&logoColor=white"></a>
-  <a href="https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/SoujiOkita98/llama-cli/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Llama-Ventures/llama-cli/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Llama-Ventures/llama-cli/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://docs.npmjs.com/trusted-publishers"><img alt="Provenance" src="https://img.shields.io/badge/provenance-signed-2e8b57?logo=npm"></a>
   <a href="https://nodejs.org/"><img alt="Node" src="https://img.shields.io/node/v/@llamaventures/cli?color=339933&logo=nodedotjs&logoColor=white"></a>
   <a href="https://modelcontextprotocol.io"><img alt="MCP 2024-11-05" src="https://img.shields.io/badge/MCP-2024--11--05-7d3aed"></a>

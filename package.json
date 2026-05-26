@@ -18,13 +18,13 @@
     "node": ">=18"
   },
   "license": "MIT",
-  "homepage": "https://github.com/SoujiOkita98/llama-cli#readme",
+  "homepage": "https://github.com/Llama-Ventures/llama-cli#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SoujiOkita98/llama-cli.git"
+    "url": "git+https://github.com/Llama-Ventures/llama-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/SoujiOkita98/llama-cli/issues"
+    "url": "https://github.com/Llama-Ventures/llama-cli/issues"
   },
   "keywords": [
     "llama-ventures",
@@ -39,7 +39,7 @@
     "anthropic"
   ],
   "author": "Llama Ventures, Inc.",
-  "funding": "https://github.com/SoujiOkita98/llama-cli",
+  "funding": "https://github.com/Llama-Ventures/llama-cli",
   "publishConfig": {
     "access": "public"
   },

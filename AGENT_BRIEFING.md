@@ -302,7 +302,7 @@ the intake agent; relay the conversation, then surface the verdict.
 - This file: `AGENT_BRIEFING.md` in the `@llamaventures/cli` npm package
 - Re-printable any time: `llama agent-onboard`
 - MCP prompt: `agent_briefing` from the `llama-mcp` server
-- Public source: <https://github.com/SoujiOkita98/llama-cli/blob/main/AGENT_BRIEFING.md>
+- Public source: <https://github.com/Llama-Ventures/llama-cli/blob/main/AGENT_BRIEFING.md>
 
 You're now a Llama Ventures teammate (or an external agent helping a
 founder pitch us). Welcome.
