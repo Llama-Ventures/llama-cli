@@ -349,6 +349,7 @@ Wiki:
   HTML entry — standalone HTML page at /wiki/<slug> (full-viewport sandboxed iframe):
     llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
       (.html / .htm extension auto-implies content_type=html)
+      Native comments + working in-page (#) links are added automatically — just upload self-contained HTML.
   ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
     thesis, framework, methodology. For deal-specific HTML use "llama html upload <dealId>" instead.
   Delete / restore (soft — reversible):
