@@ -104,6 +104,18 @@ HTML / thesis / artifact in hand
 
 **Default bias:** when in doubt, route to Llama Command. It has auth, audit, search, backlinks, and lives next to the rest of the team's context. Netlify is the escape hatch for genuinely-external surfaces — not "where pretty HTML goes."
 
+### Adding content to ONE deal — fact vs post vs brief (the #1 mis-route)
+
+These three look similar but land in different surfaces. Don't infer from the command name — pick by intent:
+
+| You want to… | Command | Lands in |
+|---|---|---|
+| Record a **sourced, verifiable fact** | `llama deal fact add <dealId> --category <cat> --claim "…" --source <url>` | Facts → deal **Feed** (FACT card) + citable in the **Memo** |
+| Leave a **comment / opinion / question / reaction** for the team | `llama post <dealId> "…"` (`@name` to notify) | Posts → deal **Feed** (POST card); `@mention` fires email + UI badge |
+| Write **narrative that belongs in the IC memo** | `llama brief add-text <dealId> --heading "…" --body "…"` | Brief blocks → **Memo tab only — NOT in the Feed** |
+
+⚠️ The trap: `brief add-text` is **not** visible in the Activity Feed. If the team should see it in the feed, use `llama post`. If it's a claim that needs a source + verification, use `llama deal fact add`. (It's `deal fact add`, not `fact-add`.)
+
 The table below details the exact CLI for each destination.
 
 | Type | Destination | How |
