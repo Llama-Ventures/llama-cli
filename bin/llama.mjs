@@ -349,6 +349,7 @@ Wiki:
   HTML entry — standalone HTML page at /wiki/<slug> (full-viewport sandboxed iframe):
     llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
       (.html / .htm extension auto-implies content_type=html)
+      Native comments + working in-page (#) links are added automatically — just upload self-contained HTML.
   ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
     thesis, framework, methodology. For deal-specific HTML use "llama html upload <dealId>" instead.
   Delete / restore (soft — reversible):
@@ -781,6 +782,14 @@ async function main() {
   }
   // `llama <area> --help` / `-h` → just that group's commands
   if (action === "--help" || action === "-h") {
+    usage(area);
+    return;
+  }
+  // `llama <area> <action> --help` (e.g. `brief add-text --help`). Without this
+  // short-circuit, "--help" falls through to the action handler, where rest[0]
+  // can be read as a positional (e.g. dealId="--help") and trigger a REAL write.
+  // Catch --help/-h anywhere in the sub-command args and print group help first.
+  if (rest.includes("--help") || rest.includes("-h")) {
     usage(area);
     return;
   }

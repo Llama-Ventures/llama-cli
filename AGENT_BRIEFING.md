@@ -104,6 +104,18 @@ HTML / thesis / artifact in hand
 
 **Default bias:** when in doubt, route to Llama Command. It has auth, audit, search, backlinks, and lives next to the rest of the team's context. Netlify is the escape hatch for genuinely-external surfaces — not "where pretty HTML goes."
 
+### Adding content to ONE deal — fact vs post vs brief (the #1 mis-route)
+
+These three look similar but land in different surfaces. Don't infer from the command name — pick by intent:
+
+| You want to… | Command | Lands in |
+|---|---|---|
+| Record a **sourced, verifiable fact** | `llama deal fact add <dealId> --category <cat> --claim "…" --source <url>` | Facts → deal **Feed** (FACT card) + citable in the **Memo** |
+| Leave a **comment / opinion / question / reaction** for the team | `llama post <dealId> "…"` (`@name` to notify) | Posts → deal **Feed** (POST card); `@mention` fires email + UI badge |
+| Write **narrative that belongs in the IC memo** | `llama brief add-text <dealId> --heading "…" --body "…"` | Brief blocks → **Memo tab only — NOT in the Feed** |
+
+⚠️ The trap: `brief add-text` is **not** visible in the Activity Feed. If the team should see it in the feed, use `llama post`. If it's a claim that needs a source + verification, use `llama deal fact add`. (It's `deal fact add`, not `fact-add`.)
+
 The table below details the exact CLI for each destination.
 
 | Type | Destination | How |
@@ -113,7 +125,7 @@ The table below details the exact CLI for each destination.
 | **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | Default path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". **You MUST declare intent — "new artifact" vs "update existing":**<br><br>**New artifact:** `llama html upload <dealId> --new --title "<artifact name>" --file <path>` (CLI slugifies the title; pass `--doc <slug>` to override).<br>**Update existing:** `llama html upload <dealId> --doc <slug> --file <path>` (slug must already exist — run `llama html docs <dealId>` first to see what's there).<br><br>The bare form `llama html upload <id> --file <path>` REFUSES if `main` already has content. Do NOT default to Netlify for internal pages. |
 | HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
 | Insights, decisions, framework improvements | Wiki (markdown) | `llama wiki save <slug> --content "..."` (with attribution — see below) |
-| **HTML wiki entry — standalone HTML page hosted at `/wiki/<slug>`** (sector landscape, market map, dashboard, hand-styled thesis page) | **Wiki (HTML)** | `llama wiki save <slug> --title "..." --file <path.html> --sources "..."`. Auto-detects content_type=html from extension. Public page is full-viewport sandboxed iframe takeover (no wiki chrome). Sources/status/title still required; appears in `wiki search` + backlinks. Use when the user says "deploy this HTML to wiki", "wiki 词条", "make this page a wiki entry". HTML must be self-contained (inline CSS/JS, image data URIs or external URLs) — asset bundles aren't supported on wiki yet. |
+| **HTML wiki entry — standalone HTML page hosted at `/wiki/<slug>`** (sector landscape, market map, dashboard, hand-styled thesis page) | **Wiki (HTML)** | `llama wiki save <slug> --title "..." --file <path.html> --sources "..."`. Auto-detects content_type=html from extension. Public page is full-viewport sandboxed iframe takeover (no wiki chrome). Sources/status/title still required; appears in `wiki search` + backlinks. Use when the user says "deploy this HTML to wiki", "wiki 词条", "make this page a wiki entry". HTML must be self-contained (inline CSS/JS, image data URIs or external URLs) — asset bundles aren't supported on wiki yet. **Native comments + working in-page (#) anchor links are injected automatically** — readers discuss inline and the table of contents scrolls; you don't wire anything up (pages that already embed the comment widget are left as-is). |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
 | Cross-team mentions | Inbox + email | `llama post <dealId> "@<teammate> ..."` — server fires email + UI badge to the recipient |
 
