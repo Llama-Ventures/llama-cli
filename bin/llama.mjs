@@ -785,6 +785,14 @@ async function main() {
     usage(area);
     return;
   }
+  // `llama <area> <action> --help` (e.g. `brief add-text --help`). Without this
+  // short-circuit, "--help" falls through to the action handler, where rest[0]
+  // can be read as a positional (e.g. dealId="--help") and trigger a REAL write.
+  // Catch --help/-h anywhere in the sub-command args and print group help first.
+  if (rest.includes("--help") || rest.includes("-h")) {
+    usage(area);
+    return;
+  }
 
   // `llama agent-onboard` — print the bundled AGENT_BRIEFING.md so an AI
   // agent reads it once and internalises the Llama Ventures workflow
