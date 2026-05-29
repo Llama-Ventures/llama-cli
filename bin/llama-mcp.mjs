@@ -971,20 +971,30 @@ server.registerTool(
       "Trigger server-side regeneration of the deal memo. Synchronous: " +
       "returns the final result (version, model, duration_ms, degraded) " +
       "once the composer finishes. Typical duration 2-3 minutes. Use " +
-      "tier='opus' for high-stakes deals (higher cost, deeper analysis).",
+      "tier='opus' for high-stakes deals (higher cost, deeper analysis). " +
+      "Pass `instructions` to steer THIS regeneration (e.g. 'focus on team " +
+      "risk', 'frame as a follow-on') — applied across all panels, never " +
+      "overrides the facts or the verdict.",
     inputSchema: {
       dealId: z.string().describe("deal uuid"),
       tier: z
         .enum(["sonnet", "opus"])
         .optional()
         .describe("LLM tier (default: sonnet)"),
+      instructions: z
+        .string()
+        .optional()
+        .describe(
+          "Free-text steering for this regeneration only, e.g. 'focus on team risk'. Applied to all panels; never overrides verified facts or the verdict anchor."
+        ),
     },
   },
-  async ({ dealId, tier }) =>
+  async ({ dealId, tier, instructions }) =>
     callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/memo`, {
       action: "regenerate",
       stream: false,
       model: tier ?? "sonnet",
+      instructions: instructions || undefined,
     })
 );
 
