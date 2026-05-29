@@ -358,7 +358,7 @@ Wiki:
 
 Memo (long-form HTML investment memo — Memo tab in the UI):
   llama memo show <dealId> [--out <path>] [--json]          # default: html → stdout (pipeable to file / browser)
-  llama memo regenerate <dealId> [--opus]                    # streams panel progress to stderr; result version → stdout
+  llama memo regenerate <dealId> [--opus] [--instructions "..."]  # --instructions steers THIS run (e.g. "focus on team risk"); progress → stderr
   llama memo save <dealId> --file <path>                     # paste a hand-written HTML as manual override
   llama memo reset <dealId> [--all]                          # default drops manual override; --all drops every version
 
@@ -1964,7 +1964,9 @@ Routing — is this the right command?
     if (sub === "regenerate") {
       const dealId = rest[0];
       if (!dealId) {
-        throw new Error("Usage: llama memo regenerate <dealId> [--opus]");
+        throw new Error(
+          'Usage: llama memo regenerate <dealId> [--opus] [--instructions "..."]'
+        );
       }
       const { flags } = parseFlags(rest.slice(1));
       const tier = flags.opus ? "opus" : "sonnet";
@@ -1983,6 +1985,9 @@ Routing — is this the right command?
             action: "regenerate",
             stream: true,
             model: tier,
+            instructions: flags.instructions
+              ? String(flags.instructions)
+              : undefined,
           }),
         }
       );
