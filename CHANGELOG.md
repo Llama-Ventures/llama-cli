@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-05-29
+
+### Added
+- **`llama memo regenerate --instructions "..."`** — steer a single memo
+  regeneration (e.g. "focus on team risk", "frame as a follow-on"). The
+  instruction is applied across the memo's narrative panels; it never
+  overrides verified facts or the GREEN/YELLOW/RED verdict. Mirrored on the
+  `memo_regenerate` MCP tool via a new optional `instructions` field.
+  Requires a Llama Command backend with memo-steering support.
+
 ## [1.7.0] — 2026-05-23
 
 ### Added
