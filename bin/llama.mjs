@@ -2,11 +2,6 @@
 
 import readline from "readline";
 import {
-  DEFAULT_BASE_URL,
-  LEGACY_DIR,
-  LEGACY_FILE,
-  TOKEN_DIR,
-  TOKEN_FILE,
   getAuthHeaders,
   getBaseUrl,
   getToken,
@@ -153,7 +148,6 @@ function clientSideMatch(deal, filters) {
   return true;
 }
 
-// Build the `?...` query string for /api/deals from CLI flags + positional q.
 function buildDealsQuery(q, flags) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
@@ -670,9 +664,10 @@ Environment:
     return;
   }
 
-  // No action → REPL mode (requires existing session)
+  // No action (or unknown bare action with no extra args) → REPL mode
+  // against existing session. Lets `llama pitch` and `llama pitch foo`
+  // both drop into REPL instead of erroring.
   if (action === undefined || (rest.length === 0 && !["start", "say", "upload", "status", "end", "finalize"].includes(action))) {
-    // Treat any unknown bare action as "join existing session in REPL mode"
     const session = readExternalSession();
     if (!session) {
       throw new Error(
@@ -1002,7 +997,6 @@ https://command.llamaventures.vc/settings/tokens, run
       created_at: Date.now(),
     });
 
-    // Verify by hitting /api/me with the new token.
     let identity = "(unable to verify — /api/me did not respond)";
     try {
       const me = await request("GET", "/api/me");

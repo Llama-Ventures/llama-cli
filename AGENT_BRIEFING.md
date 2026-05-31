@@ -258,7 +258,7 @@ Run `llama --help` for the full surface (~40 commands).
 
 ## MCP-native agents
 
-If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (20 typed tools, identical auth chain).
+If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (23 typed tools, identical auth chain).
 
 Add to your MCP client config (Claude Desktop / Claude Code / Cursor / OpenClaw / Codex / etc.):
 
@@ -274,6 +274,7 @@ Tools available:
 - `wiki_search` / `wiki_save` (accepts `content_type: 'markdown' | 'html'` — HTML entries render as full-viewport sandboxed iframe at `/wiki/<slug>`) / `wiki_delete` / `wiki_restore` (soft-delete, reversible)
 - `timeline` / `post`
 - `mentions_list`
+- `memo_show` / `memo_regenerate` / `memo_save` / `memo_reset` — long-form HTML investment memo (Memo tab)
 - `pitch_start` / `pitch_send_message` / `pitch_upload_file` / `pitch_status` / `pitch_finalize` — public intake (no Llama token needed; for founders / EAs / external agents)
 
 You can also fetch this exact briefing as an MCP prompt named `agent_briefing`.

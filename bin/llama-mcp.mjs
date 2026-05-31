@@ -23,20 +23,31 @@ import {
   uploadExternalFile,
 } from "../lib/external.mjs";
 
+// Single error-shape contract for every tool handler — keeps the
+// `Error[NO_AUTH]` / `Error[UNAUTHORIZED]` prefixes from lib/client.mjs
+// intact so agents can pattern-match, and avoids the MCP transport
+// closing on a thrown exception.
+function toErrorResult(err) {
+  return {
+    content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
+    isError: true,
+  };
+}
+
+function toTextResult(value) {
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return { content: [{ type: "text", text }] };
+}
+
 // Wrap a request() call into the MCP CallToolResult shape. Catches errors
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
 // content so the calling agent sees a clean error string instead of the
 // MCP transport closing.
 async function callApi(method, path, body) {
   try {
-    const result = await request(method, path, body);
-    const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    return { content: [{ type: "text", text }] };
+    return toTextResult(await request(method, path, body));
   } catch (err) {
-    return {
-      content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
-      isError: true,
-    };
+    return toErrorResult(err);
   }
 }
 
@@ -54,17 +65,13 @@ async function addBriefBlock(dealId, block) {
       `/api/deals/${encodeURIComponent(dealId)}/blocks`,
       { blocks: [{ id, ...block }, ...existing] }
     );
-    const text = JSON.stringify(
-      { ok: result?.ok ?? true, id, count: result?.count ?? existing.length + 1 },
-      null,
-      2
-    );
-    return { content: [{ type: "text", text }] };
+    return toTextResult({
+      ok: result?.ok ?? true,
+      id,
+      count: result?.count ?? existing.length + 1,
+    });
   } catch (err) {
-    return {
-      content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
-      isError: true,
-    };
+    return toErrorResult(err);
   }
 }
 
@@ -793,13 +800,6 @@ server.registerTool(
 // Anti-abuse rate limits are server-enforced. The MCP tools surface
 // any server-side rejections as text back to the agent.
 
-function asTextResult(text, isError = false) {
-  return {
-    content: [{ type: "text", text }],
-    ...(isError ? { isError: true } : {}),
-  };
-}
-
 server.registerTool(
   "pitch_start",
   {
@@ -818,21 +818,15 @@ server.registerTool(
   async ({ name, email }) => {
     try {
       const session = await startExternalSession({ name, email });
-      return asTextResult(
-        JSON.stringify(
-          {
-            session_id: session.session_id,
-            name: session.name,
-            email: session.email,
-            started_at: session.started_at,
-            note: "Session active. Use pitch_send_message to relay the founder's pitch to Llama's intake agent. Use pitch_upload_file to attach decks / one-pagers. The intake agent will auto-finalize once it has enough signal.",
-          },
-          null,
-          2
-        )
-      );
+      return toTextResult({
+        session_id: session.session_id,
+        name: session.name,
+        email: session.email,
+        started_at: session.started_at,
+        note: "Session active. Use pitch_send_message to relay the founder's pitch to Llama's intake agent. Use pitch_upload_file to attach decks / one-pagers. The intake agent will auto-finalize once it has enough signal.",
+      });
     } catch (err) {
-      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+      return toErrorResult(err);
     }
   }
 );
@@ -854,14 +848,13 @@ server.registerTool(
   async ({ message }) => {
     try {
       const result = await sendExternalMessage(message);
-      const out = {
+      return toTextResult({
         text: result.text,
         finalized: result.finalized,
         finalize_payload: result.finalize_payload,
-      };
-      return asTextResult(JSON.stringify(out, null, 2));
+      });
     } catch (err) {
-      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+      return toErrorResult(err);
     }
   }
 );
@@ -884,10 +877,9 @@ server.registerTool(
   },
   async ({ path: filePath }) => {
     try {
-      const result = await uploadExternalFile(filePath);
-      return asTextResult(JSON.stringify(result, null, 2));
+      return toTextResult(await uploadExternalFile(filePath));
     } catch (err) {
-      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+      return toErrorResult(err);
     }
   }
 );
@@ -903,10 +895,9 @@ server.registerTool(
   },
   async () => {
     try {
-      const status = getExternalSessionStatus();
-      return asTextResult(JSON.stringify(status, null, 2));
+      return toTextResult(getExternalSessionStatus());
     } catch (err) {
-      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+      return toErrorResult(err);
     }
   }
 );
@@ -926,19 +917,13 @@ server.registerTool(
     try {
       const before = getExternalSessionStatus();
       clearExternalSession();
-      return asTextResult(
-        JSON.stringify(
-          {
-            cleared: before.active,
-            previous_session: before.active ? before : null,
-            note: "Local pitch session state cleared. Server-side session may still be active until its idle timeout.",
-          },
-          null,
-          2
-        )
-      );
+      return toTextResult({
+        cleared: before.active,
+        previous_session: before.active ? before : null,
+        note: "Local pitch session state cleared. Server-side session may still be active until its idle timeout.",
+      });
     } catch (err) {
-      return asTextResult(`Error: ${err?.message ?? String(err)}`, true);
+      return toErrorResult(err);
     }
   }
 );
