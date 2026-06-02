@@ -6,6 +6,30 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-06-02
+
+### Changed
+- **`deal_feed` (MCP) description corrected.** It previously claimed to
+  "exclude AI-generated content" — false, and it misled agents into telling
+  users the feed filtered their AI's work. The feed shows *every* contribution
+  (from a teammate, their AI assistant, or a system agent); each item now
+  carries `who` (the accountable person) and `agent` (the assistant/system
+  label, `null` when a human typed it), so human-typed and assistant-drafted
+  are distinguishable. The AI's regenerable brief/persona synthesis stays in
+  the Memo, not the feed.
+- **Agent contract (`AGENT_BRIEFING`): read it back before claiming "saved".**
+  A tool returning `ok` is not proof the content landed where the user looks —
+  agents must run `llama deal feed <id>` and confirm the item appears before
+  reporting success (the #1 failure is writing to the brief, which is
+  Memo-only and not in the feed, then reporting success anyway). Authorship is
+  automatic — CLI/MCP writes are recorded "via assistant" and can't be faked
+  human; an agent's `--attested` caps at `agent-verified`, only a signed-in
+  human vouches.
+
+Pairs with the Llama Command server-side contribution-authorship change
+(deployed 2026-06-02): the feed badges every item human-typed (✍️) vs
+assistant-drafted (🤖) and enforces the AI trust ceiling.
+
 ## [1.10.0] — 2026-05-29
 
 ### Added
