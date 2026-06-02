@@ -307,10 +307,16 @@ server.registerTool(
   "deal_feed",
   {
     description:
-      "The unified, time-sorted stream of everything a HUMAN has added to a deal — " +
+      "The unified, time-sorted stream of every contribution to a deal — " +
       "facts + notes/discussion + legacy posts, merged at query time, newest first. " +
-      "Excludes AI-generated content. Each item: kind (fact|note), ts, who, text, " +
-      "and for facts: source + trust rung + category.",
+      "Shows contributions from ANYONE — a teammate, their AI assistant, or an " +
+      "autonomous system agent; nothing is hidden. Each item carries `who` (the " +
+      "accountable person, null only for principal-less system writes) and `agent` " +
+      "(the assistant/system label when an AI did the writing, null when a human " +
+      "typed it) so you can tell human-typed from assistant-drafted. The AI's " +
+      "regenerable brief/persona synthesis is NOT here (that's the Memo) — only " +
+      "facts + discussion notes. Each item: kind (fact|note), ts, who, agent, " +
+      "origin, text, and for facts: source + trust rung + category.",
     inputSchema: {
       dealId: z.string(),
     },

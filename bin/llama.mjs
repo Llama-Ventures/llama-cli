@@ -225,7 +225,7 @@ Manually-set \`llc_\` tokens are used as a fallback.
 Deals:
   llama deal create "Company" --source <name> --description "..." --website https://...
   llama deal show <dealId>
-  llama deal feed <dealId>                                     # everything humans added (facts + notes), newest first
+  llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
       Writable fields: status, theirStage, stage, notes, dealOwner, source,
       description, website, location, founders, proposedAmount, roundSize,
@@ -423,7 +423,7 @@ const HELP_ROOT = `Llama Command CLI — the \`llama\` command for the Llama Ven
 Common:
   llama deal search "<name>"        find a deal in the pipeline
   llama deal show <dealId>          full deal record
-  llama deal feed <dealId>          everything humans added, newest first
+  llama deal feed <dealId>          every contribution (facts + notes), newest first
   llama post <dealId> "..."         add a note to a deal
   llama agent-onboard               print the AI-agent workflow contract
 
