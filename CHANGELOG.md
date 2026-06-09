@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-06-09
+
 ### Added
 - **`llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]`** —
   turn a deal's HTML document card into a live, read-only pointer to a wiki
