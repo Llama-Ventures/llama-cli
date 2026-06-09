@@ -375,6 +375,11 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
     llama html docs create <dealId> <slug> [--title "..."]    # pre-create a slot
     llama html docs archive <dealId> <slug>                   # soft-archive (browse hides)
 
+  Link a card to a wiki article (one file, multiple entrances — the wiki
+  stays canonical, the deal card is a live, read-only pointer):
+    llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]
+    llama html unlink <dealId> <slug>                         # revert to a normal self-hosted doc
+
   Update an EXISTING artifact (slug must exist):
     llama html upload <dealId> --doc <slug> --file <path> [--assets DIR]
 
@@ -2132,6 +2137,27 @@ Routing — is this the right command?
       return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}/html`;
     }
 
+    // Surface a clean `linked_wiki` field on linked docs so the listing
+    // reads as "this card points at wiki/<slug>" rather than exposing the
+    // raw source_wiki_* columns. Non-linked docs are returned unchanged.
+    function withLinkedWiki(data) {
+      if (!data || !Array.isArray(data.documents)) return data;
+      return {
+        ...data,
+        documents: data.documents.map((d) =>
+          d && d.source_wiki_slug
+            ? {
+                ...d,
+                linked_wiki: {
+                  slug: d.source_wiki_slug,
+                  lang: d.source_wiki_lang || "en",
+                },
+              }
+            : d,
+        ),
+      };
+    }
+
     // docs — list / create / archive documents on a deal.
     //
     // Forms:
@@ -2159,7 +2185,7 @@ Routing — is this the right command?
           "GET",
           `/api/deals/${encodeURIComponent(dealId)}/documents`,
         );
-        print(data);
+        print(withLinkedWiki(data));
         return;
       }
       if (docSub === "list") {
@@ -2171,7 +2197,7 @@ Routing — is this the right command?
           "GET",
           `/api/deals/${encodeURIComponent(dealId)}/documents`,
         );
-        print(data);
+        print(withLinkedWiki(data));
         return;
       }
       if (docSub === "create") {
@@ -2208,6 +2234,82 @@ Routing — is this the right command?
       throw new Error(
         `Unknown html docs subcommand "${docSub}". Use: list / create / archive.`,
       );
+    }
+
+    // link — turn a deal doc card into a live, read-only pointer to a wiki
+    // HTML article. "One file, multiple entrances": the wiki stays the
+    // canonical home, the card just renders the wiki's HTML. Edits go to
+    // the wiki source; uploads to a linked slug are refused server-side.
+    //
+    //   llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]
+    //
+    // Default deal-side slug = the wiki slug. Default title = the wiki
+    // article's title (fetched from `llama wiki read`).
+    if (sub === "link") {
+      const dealId = rest[0];
+      const { flags } = parseFlags(rest.slice(1), ["wiki", "lang", "title", "slug"]);
+      const wikiSlug =
+        typeof flags.wiki === "string" && flags.wiki.trim()
+          ? flags.wiki.trim()
+          : null;
+      if (!dealId || !wikiSlug) {
+        throw new Error(
+          "Usage: llama html link <dealId> --wiki <slug> [--lang en|zh] [--title \"...\"]",
+        );
+      }
+      const lang = flags.lang === "zh" ? "zh" : "en";
+      // Deal-side slug defaults to the wiki slug; --slug overrides.
+      const dealSlug =
+        typeof flags.slug === "string" && flags.slug.trim()
+          ? flags.slug.trim()
+          : wikiSlug;
+      // Title defaults to the wiki article's title.
+      let title =
+        typeof flags.title === "string" && flags.title.trim()
+          ? flags.title.trim()
+          : null;
+      if (!title) {
+        try {
+          const article = await request(
+            "GET",
+            `/api/wiki/${encodeURIComponent(wikiSlug)}?lang=${lang}`,
+          );
+          title = article?.frontmatter?.title || wikiSlug;
+        } catch {
+          // Fall back to the slug as the title; the server still validates
+          // that the wiki article exists + is HTML on the POST below.
+          title = wikiSlug;
+        }
+      }
+      const data = await request(
+        "POST",
+        `/api/deals/${encodeURIComponent(dealId)}/documents`,
+        {
+          slug: dealSlug,
+          title,
+          source_wiki_slug: wikiSlug,
+          source_wiki_lang: lang,
+        },
+      );
+      print(data);
+      return;
+    }
+
+    // unlink — revert a linked card back to a normal self-hosted doc.
+    //   llama html unlink <dealId> <slug>
+    if (sub === "unlink") {
+      const dealId = rest[0];
+      const slug = rest[1];
+      if (!dealId || !slug) {
+        throw new Error("Usage: llama html unlink <dealId> <slug>");
+      }
+      const data = await request(
+        "PATCH",
+        `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}`,
+        { source_wiki_slug: null },
+      );
+      print(data);
+      return;
     }
 
     // show — fetch the current HTML. Default: print to stdout (pipeable).
@@ -2648,7 +2750,7 @@ Routing — is this the right command?
     }
 
     throw new Error(
-      `Unknown html subcommand "${sub || ""}". Use: docs / show / upload / versions / restore / reset.`,
+      `Unknown html subcommand "${sub || ""}". Use: docs / link / unlink / show / upload / versions / restore / reset.`,
     );
   }
 

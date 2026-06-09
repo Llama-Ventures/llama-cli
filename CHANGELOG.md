@@ -6,6 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- **`llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]`** —
+  turn a deal's HTML document card into a live, read-only pointer to a wiki
+  HTML article. One file, multiple entrances: the wiki stays the canonical
+  home and the card renders the wiki's HTML. The deal-side slug defaults to
+  the wiki slug and the title defaults to the wiki article's title. Uploads,
+  restores, and resets against a linked card are refused by the backend (409)
+  — edit the wiki source instead.
+- **`llama html unlink <dealId> <slug>`** — revert a linked card back to a
+  normal self-hosted document.
+- **`llama html docs <dealId>`** now surfaces a `linked_wiki` field on linked
+  cards (`{ slug, lang }`).
+- All of the above require a Llama Command backend with wiki-linked document
+  support.
+
 ## [1.11.0] — 2026-06-02
 
 ### Changed
