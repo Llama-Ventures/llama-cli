@@ -6,6 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-06-11
+
+### Added
+- **`llama deal extra set <dealId> <key> <value>`** — patch one top-level key
+  in `deals.extra` JSONB. System-admin only (server-gated, 403 otherwise).
+  Value is parsed as JSON when possible, else stored as a string. Audited to
+  `deal_events` as `field_change` with field `extra.<key>` — same
+  from→to trail as any column write. First use case: correcting stale
+  backfill provenance (`source_urls`, `identity_confidence`,
+  `enrichment_holds`) left by a mismatched-company import.
+- **`llama deal extra unset <dealId> <key>`** — delete the key (admin,
+  audited the same way).
+- Requires a Llama Command backend with the `extraKey` patch support on
+  `POST /api/deals/update`.
+
+### Fixed
+- Help text: `deal update` writable-fields list now matches the server's
+  `FIELD_TO_COLUMN` whitelist — added the missing `founderInfo`, `deckLink`,
+  `folderUrl`, `agentActive`.
+
 ## [1.12.0] — 2026-06-09
 
 ### Added
