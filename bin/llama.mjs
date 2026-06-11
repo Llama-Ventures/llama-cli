@@ -228,12 +228,18 @@ Deals:
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
       Writable fields: status, theirStage, stage, notes, dealOwner, source,
-      description, website, location, founders, proposedAmount, roundSize,
-      valuation, sector, subsector, foundedYear, leadInvestor, investors.
+      description, website, location, founders, founderInfo, proposedAmount,
+      roundSize, valuation, deckLink, folderUrl, sector, subsector,
+      foundedYear, leadInvestor, investors, agentActive.
       e.g.  llama deal update <dealId> website https://acme.ai
             llama deal update <dealId> sector "Developer Tools"
             llama deal update <dealId> foundedYear 2024
             llama deal update <dealId> leadInvestor "Acme Capital"
+  llama deal extra set <dealId> <key> <value>        # system-admin only
+      Patch one top-level key in deals.extra JSONB. Value is parsed as
+      JSON when possible ('{"a":1}', 'true', '3'), else stored as a
+      string. Audited to deal_events as field_change "extra.<key>".
+  llama deal extra unset <dealId> <key>              # delete the key (admin)
   llama deal search <query> [--founder name] [--owner <user-key>] [--status Diligence]
                             [--theirStage Raising] [--stage Seed]
                             [--limit 200] [--offset 0]
@@ -1098,6 +1104,39 @@ https://command.llamaventures.vc/settings/tokens, run
     if (!dealId || !field) throw new Error("Usage: llama deal update <dealId> <field> <value>");
     print(await request("POST", "/api/deals/update", { dealId, field, value }));
     return;
+  }
+
+  // ----- deals.extra JSONB patches (system-admin only, server-gated) -----
+  // Same endpoint as `deal update`, but `extraKey` instead of `field`.
+  // Server patches one top-level key via jsonb_set and audits the change
+  // to deal_events as field_change with field "extra.<key>". value=null
+  // deletes the key.
+  if (area === "deal" && action === "extra") {
+    const sub = rest[0];
+    const dealId = rest[1];
+    const key = rest[2];
+    if (sub === "set") {
+      const raw = rest.slice(3).join(" ");
+      if (!dealId || !key || !raw) {
+        throw new Error(
+          "Usage: llama deal extra set <dealId> <key> <value>  (value parsed as JSON when possible, else stored as string)"
+        );
+      }
+      let value;
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        value = raw;
+      }
+      print(await request("POST", "/api/deals/update", { dealId, extraKey: key, value }));
+      return;
+    }
+    if (sub === "unset") {
+      if (!dealId || !key) throw new Error("Usage: llama deal extra unset <dealId> <key>");
+      print(await request("POST", "/api/deals/update", { dealId, extraKey: key, value: null }));
+      return;
+    }
+    throw new Error("Usage: llama deal extra set|unset <dealId> <key> [value]");
   }
 
   if (area === "deal" && action === "search") {
