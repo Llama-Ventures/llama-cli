@@ -48,7 +48,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          interactive CLI for humans + bash
-└── bin/llama-mcp      stdio MCP server, 20 tools — for any MCP-native agent
+└── bin/llama-mcp      stdio MCP server, 51 typed tools — for any MCP-native agent
 ```
 
 Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
@@ -186,6 +186,8 @@ llama deal show <dealId>
 # Pipeline — write
 llama deal create "Acme AI" --description "..." --source Gavin
 llama deal update <dealId> status Diligence
+llama deal enrich <dealId> --dry-run
+llama deal enrich <dealId> --executor external_agent --prompt
 llama deal delete  <dealId>     # soft (audit-logged)
 llama deal restore <dealId>
 
@@ -223,7 +225,7 @@ llama mentions
 llama mentions resolve <mentionId>
 ```
 
-Run `llama --help` for the full surface (~40 commands across deals, briefs,
+Run `llama --help` for the full surface (50+ commands across deals, briefs,
 ownership, timeline, facts, wiki, mentions, skill corrections, and admin event
 feeds). Soft-delete is the default everywhere — every removal is reversible
 and audit-logged via `deal_events`.
@@ -245,30 +247,26 @@ agents can pattern-match without parsing prose.
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**19 typed tools** that mirror the most-used CLI surface. Every tool is named
+**51 typed tools** that mirror the most-used CLI surface. Every tool is named
 and scoped — there is no generic API passthrough, by design (a public-package
 escape hatch reachable from a prompt-injectable agent context is exactly the
 shape we want to avoid).
 
-```
-auth_status
+Coverage is grouped around the workflows agents actually need: auth
+diagnostics; deal search/show/create/update/feed; deal enrichment harnesses;
+trust-rated facts; brief blocks and version history; wiki read/write/delete/restore;
+timeline posts and mentions; skill corrections; refresh triggers; external pitch intake;
+memo show/regenerate/save/reset; and deal-scoped HTML docs, versions, bundles, and
+restore/reset.
 
-deal_search            deal_show
-deal_create            deal_update
+For the exact live list, smoke-test the server with `tools/list`:
 
-brief_blocks           brief_add_text
-brief_add_link         brief_add_callout
-
-timeline               post
-
-wiki_search            wiki_save
-wiki_delete            wiki_restore
-
-mentions_list
-
-pitch_start            pitch_send_message
-pitch_upload_file      pitch_status
-pitch_finalize
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"dev","version":"1"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  | llama-mcp
 ```
 
 Auth is identical to the CLI's chain (gcloud → `$LLAMA_TOKEN` → `~/.llama/token`).

@@ -6,6 +6,23 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-06-15
+
+### Added
+- **`llama deal enrich <dealId>`** — fetch the Llama Command deal-enrichment
+  harness for one deal. Defaults to dry-run and returns the evidence plan,
+  source plan, Monid budget/config status, write contract, memo boundary, and
+  agent handoff prompt without changing facts/links/memo.
+- **`deal_enrich` MCP tool** — same contract for MCP-native agents. External
+  agents can request `executor: "external_agent"` to receive guardrails and a
+  handoff prompt; private Monid credentials stay on the Llama Command server.
+- `--prompt` / `--handoff` on the CLI prints only the external-agent prompt.
+
+### Notes
+- Requires a Llama Command backend with `/api/deals/:dealId/enrich`.
+- Memo generation never defaults on; pass `--memo` / `generateMemo: true` only
+  when the user explicitly asks for post-enrichment Memo generation.
+
 ## [1.13.0] — 2026-06-11
 
 ### Added

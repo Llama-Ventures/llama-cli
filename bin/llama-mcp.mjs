@@ -786,6 +786,52 @@ server.registerTool(
     callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/refresh-persona`, { persona })
 );
 
+server.registerTool(
+  "deal_enrich",
+  {
+    description:
+      "Run the Llama Command deal enrichment planner/trigger for one deal. " +
+      "Default is dry-run: returns evidence plan, source plan, Monid budget/config " +
+      "status, and planned writes without changing facts/links/memo. Set apply=true " +
+      "only when the user explicitly wants the enrichment run recorded/applied. " +
+      "generateMemo never defaults on; pass true only when the user explicitly asks " +
+      "for Memo generation after enrichment.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      dryRun: z.boolean().optional().describe("default true unless apply=true"),
+      apply: z.boolean().optional().describe("record/apply the enrichment intent server-side"),
+      executor: z
+        .enum(["server_agent", "external_agent", "planner"])
+        .optional()
+        .describe("who will execute the harness; external_agent returns guardrails for a user-owned agent"),
+      sources: z
+        .array(z.enum(["website", "github", "linkedin", "yc", "launch", "web", "monid"]))
+        .optional()
+        .describe("source families to use; defaults to the standard enrichment set"),
+      budgetCents: z
+        .number()
+        .int()
+        .min(0)
+        .max(500)
+        .optional()
+        .describe("Monid spend cap for this run, in cents; default is 50 when Monid is requested"),
+      generateMemo: z
+        .boolean()
+        .optional()
+        .describe("explicitly request memo regeneration after enrichment; default false"),
+    },
+  },
+  async ({ dealId, dryRun, apply, executor, sources, budgetCents, generateMemo }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/enrich`, {
+      dryRun,
+      apply,
+      executor,
+      sources,
+      budgetCents,
+      generateMemo,
+    })
+);
+
 // ============================================================
 // External pitch (founder intake) — no Llama Command token required
 // ============================================================

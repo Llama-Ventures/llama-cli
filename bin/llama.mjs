@@ -235,6 +235,9 @@ Deals:
             llama deal update <dealId> sector "Developer Tools"
             llama deal update <dealId> foundedYear 2024
             llama deal update <dealId> leadInvestor "Acme Capital"
+  llama deal enrich <dealId> [--dry-run] [--apply] [--executor server_agent|external_agent|planner]
+                            [--sources website,github,linkedin,yc,monid] [--budget-cents 50]
+                            [--memo] [--prompt]                # evidence harness + server-side enrichment trigger
   llama deal extra set <dealId> <key> <value>        # system-admin only
       Patch one top-level key in deals.extra JSONB. Value is parsed as
       JSON when possible ('{"a":1}', 'true', '3'), else stored as a
@@ -439,7 +442,7 @@ Common:
   llama agent-onboard               print the AI-agent workflow contract
 
 Command groups — run \`llama help <group>\` for that group's commands:
-  deal        create · show · feed · update · search · collaborators · links · delete
+  deal        create · show · feed · update · enrich · search · collaborators · links · delete
   brief       brief blocks: list · add · edit · history · refresh
   facts       deal facts + skill corrections (the sourced, trust-rated layer)
   timeline    timeline · posts · mentions
@@ -1154,6 +1157,62 @@ https://command.llamaventures.vc/settings/tokens, run
   if (area === "deal" && action === "list") {
     const { flags } = parseFlags(rest);
     print(await searchDeals("", flags));
+    return;
+  }
+
+  // ----- Deal enrichment: evidence plan + server-side enrichment trigger -----
+  // The server owns Monid credentials and all write/audit behavior. CLI only
+  // passes intent; default is dry-run so agents can inspect the harness before
+  // creating facts/links or touching memo state.
+  if (area === "deal" && action === "enrich") {
+    const dealId = rest[0];
+    if (!dealId) {
+      throw new Error(
+        "Usage: llama deal enrich <dealId> [--dry-run] [--apply] " +
+        "[--executor server_agent|external_agent|planner] " +
+        "[--sources website,github,linkedin,yc,monid] [--budget-cents 50] [--memo] [--prompt]"
+      );
+    }
+    const { flags } = parseFlags(rest.slice(1), [
+      "dry-run",
+      "apply",
+      "executor",
+      "sources",
+      "budget-cents",
+      "memo",
+      "generate-memo",
+      "prompt",
+      "handoff",
+    ]);
+    const sources =
+      flags.sources && flags.sources !== true
+        ? String(flags.sources)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined;
+    const budgetCents =
+      flags["budget-cents"] !== undefined && flags["budget-cents"] !== true
+        ? Number(flags["budget-cents"])
+        : undefined;
+
+    const result = await request(
+      "POST",
+      `/api/deals/${encodeURIComponent(dealId)}/enrich`,
+      {
+        dryRun: flags.apply === true ? false : true,
+        apply: flags.apply === true,
+        executor: flags.executor && flags.executor !== true ? String(flags.executor) : undefined,
+        sources,
+        budgetCents,
+        generateMemo: flags.memo === true || flags["generate-memo"] === true,
+      }
+    );
+    if (flags.prompt === true || flags.handoff === true) {
+      print(result?.agentHarness?.handoffPrompt || result?.agentHarness?.systemInjection || "");
+    } else {
+      print(result);
+    }
     return;
   }
 
