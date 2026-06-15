@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.14.1] — 2026-06-15
+
 ### Added
 - **`llama deal agent run <dealId> --message "..."`** — starts Llama
   Command's server-side Deal Agent in a deal thread, so the service agent can
