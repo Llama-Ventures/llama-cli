@@ -33,7 +33,8 @@ printf '%s\n' \
   | node bin/llama-mcp.mjs | head -200
 ```
 
-You should see all 20 tools, including the 5 `pitch_*`.
+You should see 51 named tools, including `deal_enrich`, the 5 `pitch_*`, and
+no generic API passthrough tool.
 
 ## Conventions
 
