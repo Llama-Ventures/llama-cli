@@ -195,6 +195,82 @@ server.registerTool(
   }
 );
 
+server.registerTool(
+  "agent_bootstrap",
+  {
+    description:
+      "Fetch the live Llama Command + Llama OS runtime manifest. Use this at " +
+      "the start of an agent session to discover current skills, the skill " +
+      "bundle version, and the object-inspection contract. Unlike the bundled " +
+      "agent_briefing prompt, this comes from authenticated Command runtime.",
+    inputSchema: {
+      limit: z.number().optional().describe("number of skill summaries to include; default 25"),
+    },
+  },
+  async ({ limit } = {}) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    return callApi("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
+  }
+);
+
+server.registerTool(
+  "skills_search",
+  {
+    description:
+      "Search the authenticated Llama OS runtime skill library. Call this " +
+      "before choosing a workflow for Llama pipeline/wiki/DD/research/ops tasks. " +
+      "Returns summaries only; call skills_read for the exact SKILL.md.",
+    inputSchema: {
+      q: z.string().describe("workflow/task query, e.g. 'wiki delete tombstone' or 'deal DD memo'"),
+      limit: z.number().optional().describe("default 20"),
+    },
+  },
+  async ({ q, limit }) => {
+    const params = new URLSearchParams({ q });
+    if (limit) params.set("limit", String(limit));
+    return callApi("GET", `/api/agent/skills?${params}`);
+  }
+);
+
+server.registerTool(
+  "skills_read",
+  {
+    description:
+      "Read one runtime Llama OS skill by slug. Use after skills_search. " +
+      "Returns the full SKILL.md content from Llama Command; public npm does " +
+      "not bundle private skill text.",
+    inputSchema: {
+      slug: z.string().describe("skill slug, e.g. llama-command or llama-wiki"),
+    },
+  },
+  async ({ slug }) => callApi("GET", `/api/agent/skills/${encodeURIComponent(slug)}`)
+);
+
+server.registerTool(
+  "object_inspect",
+  {
+    description:
+      "Explain a Llama Command URL or object id. Use for 404s, deleted wiki " +
+      "pages, notifier links, deal URLs, brief blocks, HTML docs, and unknown " +
+      "Command objects before guessing that the system is broken.",
+    inputSchema: {
+      q: z.string().optional().describe("URL or compact query, e.g. wiki:my-slug or a Command URL"),
+      type: z.string().optional().describe("explicit object type if not using q"),
+      id: z.string().optional().describe("explicit object id if not using q"),
+      lang: z.enum(["en", "zh"]).optional().describe("wiki language; default en"),
+    },
+  },
+  async ({ q, type, id, lang } = {}) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (type) params.set("type", type);
+    if (id) params.set("id", id);
+    if (lang) params.set("lang", lang);
+    return callApi("GET", `/api/agent/explain?${params}`);
+  }
+);
+
 // ============================================================
 // Deals — read
 // ============================================================
@@ -1501,7 +1577,9 @@ server.registerPrompt(
       "contract: identity, Pipeline First rule, content capture, autonomy " +
       "levels (L0/L1/L2/L3), communication style, error recovery, CLI/MCP " +
       "reference, and boundaries. Read this once, internalise it, operate " +
-      "accordingly. Same content as `llama agent-onboard` from the CLI.",
+      "accordingly. Same content as `llama agent-onboard` from the CLI. " +
+      "For the live private Llama OS skill library, call agent_bootstrap, " +
+      "skills_search, and skills_read.",
   },
   async () => {
     // Gate the briefing behind a /api/me check so unauthenticated MCP

@@ -3,12 +3,23 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+assert.equal(
+  existsSync(path.join(repoRoot, "docs/agent-skills.bundle.json")),
+  false,
+  "public llama-cli must not bundle private Llama OS skill content",
+);
+assert.equal(
+  existsSync(path.join(repoRoot, "src/data/llama-os-skills.bundle.json")),
+  false,
+  "public llama-cli must not copy the Command-side skill mirror",
+);
 const calls = [];
 let threadSeq = 0;
 
@@ -49,7 +60,81 @@ const server = createServer(async (req, res) => {
   try {
     const body = await readJson(req);
     const url = new URL(req.url, "http://localhost");
-    calls.push({ method: req.method, path: url.pathname, body });
+    calls.push({
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      body,
+    });
+
+    if (req.method === "GET" && url.pathname === "/api/agent/manifest") {
+      writeJson(res, {
+        ok: true,
+        briefing: "runtime briefing: use skills_search, skills_read, and object_inspect",
+        llama_os: {
+          visible_skill_count: 49,
+          included_skill_count: Number(url.searchParams.get("limit") || 25),
+        },
+        skills: [
+          {
+            slug: "llama-command",
+            description: "Llama Command runtime skill",
+          },
+        ],
+      });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/agent/skills") {
+      writeJson(res, {
+        ok: true,
+        q: url.searchParams.get("q"),
+        count: 1,
+        skills: [
+          {
+            slug: "llama-command",
+            description: "Llama Command runtime skill",
+          },
+        ],
+      });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/agent/skills/llama-command") {
+      writeJson(res, {
+        ok: true,
+        skill: {
+          slug: "llama-command",
+          content: "---\nname: llama-command\n---\n# Llama Command runtime skill\n",
+        },
+      });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/agent/explain") {
+      writeJson(res, {
+        ok: true,
+        result: {
+          target: {
+            objectType: "wiki_article",
+            objectId: "missing-page",
+            status: "deleted",
+            title: "Missing Page",
+            detail: "Deleted by Kevin Yu",
+            url: "https://command.llamaventures.vc/wiki/missing-page",
+          },
+          lifecycle: [
+            {
+              action: "deleted",
+              actor_label: "Kevin Yu",
+              created_at: "2026-06-15T19:02:00Z",
+              reason: "user_deleted",
+            },
+          ],
+        },
+      });
+      return;
+    }
 
     if (req.method === "POST" && /^\/api\/deals\/[^/]+\/threads$/.test(url.pathname)) {
       threadSeq += 1;
@@ -229,6 +314,31 @@ const homeDir = await mkdtemp(path.join(os.tmpdir(), "llama-cli-routing-"));
 
 try {
   resetCalls();
+  const bootstrapRun = await runCli(["agent", "bootstrap", "--limit", "3"], baseUrl, homeDir);
+  assert.match(bootstrapRun.stdout, /runtime briefing/);
+  assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
+  assert.equal(calls[0].query.limit, "3");
+
+  resetCalls();
+  const skillSearchRun = await runCli(["skills", "search", "pipeline", "--limit", "5"], baseUrl, homeDir);
+  assert.match(skillSearchRun.stdout, /llama-command/);
+  assert.deepEqual(paths(), ["GET /api/agent/skills"]);
+  assert.equal(calls[0].query.q, "pipeline");
+  assert.equal(calls[0].query.limit, "5");
+
+  resetCalls();
+  const skillShowRun = await runCli(["skills", "show", "llama-command"], baseUrl, homeDir);
+  assert.match(skillShowRun.stdout, /# Llama Command runtime skill/);
+  assert.deepEqual(paths(), ["GET /api/agent/skills/llama-command"]);
+
+  resetCalls();
+  const explainRun = await runCli(["explain", "https://command.llamaventures.vc/wiki/missing-page"], baseUrl, homeDir);
+  assert.match(explainRun.stdout, /Status: deleted/);
+  assert.match(explainRun.stdout, /Deleted by Kevin Yu/);
+  assert.deepEqual(paths(), ["GET /api/agent/explain"]);
+  assert.equal(calls[0].query.q, "https://command.llamaventures.vc/wiki/missing-page");
+
+  resetCalls();
   const enrichRun = await runCli(
     [
       "deal",
@@ -298,6 +408,37 @@ try {
   assert.equal(payload.ok, true);
   assert.equal(payload.threadId, "thread-1");
   assert.equal(payload.text, "agent done");
+
+  resetCalls();
+  const mcpBootstrap = await callMcpTool("agent_bootstrap", { limit: 2 }, baseUrl, homeDir);
+  const bootstrapPayload = JSON.parse(mcpBootstrap.content?.[0]?.text ?? "{}");
+  assert.equal(bootstrapPayload.ok, true);
+  assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
+  assert.equal(calls[0].query.limit, "2");
+
+  resetCalls();
+  const mcpSkills = await callMcpTool("skills_search", { q: "command", limit: 4 }, baseUrl, homeDir);
+  const skillsPayload = JSON.parse(mcpSkills.content?.[0]?.text ?? "{}");
+  assert.equal(skillsPayload.skills?.[0]?.slug, "llama-command");
+  assert.deepEqual(paths(), ["GET /api/agent/skills"]);
+  assert.equal(calls[0].query.q, "command");
+
+  resetCalls();
+  const mcpSkillRead = await callMcpTool("skills_read", { slug: "llama-command" }, baseUrl, homeDir);
+  const skillPayload = JSON.parse(mcpSkillRead.content?.[0]?.text ?? "{}");
+  assert.match(skillPayload.skill?.content ?? "", /# Llama Command runtime skill/);
+  assert.deepEqual(paths(), ["GET /api/agent/skills/llama-command"]);
+
+  resetCalls();
+  const mcpInspect = await callMcpTool(
+    "object_inspect",
+    { q: "https://command.llamaventures.vc/wiki/missing-page" },
+    baseUrl,
+    homeDir,
+  );
+  const inspectPayload = JSON.parse(mcpInspect.content?.[0]?.text ?? "{}");
+  assert.equal(inspectPayload.result?.target?.status, "deleted");
+  assert.deepEqual(paths(), ["GET /api/agent/explain"]);
 
   console.log("agent routing verification passed");
 } finally {

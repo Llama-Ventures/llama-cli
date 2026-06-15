@@ -273,6 +273,10 @@ const HELP_FULL = `Llama Command CLI
 
 Agent onboarding (run once on first install):
   llama agent-onboard                  # print AGENT_BRIEFING.md — the workflow contract for AI agents
+  llama agent bootstrap                # fetch live Command + Llama OS skill manifest
+  llama skills search "pipeline update" # discover relevant runtime skills
+  llama skills show llama-pipeline      # read a skill from Command
+  llama explain <url-or-object>         # explain Command URL/object status + lifecycle
 
 External pitch — talk to Llama Ventures' intake agent (no token required):
   llama pitch start --name "Jane Doe" --email "jane@acme.ai"
@@ -512,6 +516,9 @@ Common:
   llama deal feed <dealId>          every contribution (facts + notes), newest first
   llama post <dealId> "..."         add a note to a deal
   llama agent-onboard               print the AI-agent workflow contract
+  llama agent bootstrap             live Llama OS skill manifest from Command
+  llama skills search "<query>"     discover which skill to read
+  llama explain <url-or-object>     explain Command URLs, 404s, deleted objects
 
 Command groups — run \`llama help <group>\` for that group's commands:
   deal        create · show · feed · update · enrich · search · collaborators · links · delete
@@ -524,6 +531,8 @@ Command groups — run \`llama help <group>\` for that group's commands:
   pitch       external founder intake (no token needed)
   ownership   claim · nominate · approvals
   admin       audit events (system admin only)
+  agent       bootstrap · skills · explain for AI agents
+  skills      search · show runtime Llama OS skills
   auth        setup · tokens · auth status
 
   llama help all     the full command reference (everything at once)
@@ -543,6 +552,8 @@ const HELP_AREA_MATCH = {
   pitch: [/^External pitch/],
   ownership: [/^Ownership/, /^Approvals/],
   admin: [/^Admin/],
+  agent: [/^Agent onboarding/],
+  skills: [/^Agent onboarding/],
   auth: [/^Setup/, /^Zero-config/, /^Token discovery/, /^Env/],
 };
 
@@ -928,6 +939,95 @@ https://command.llamaventures.vc/settings/tokens, run
       throw e;
     }
     process.stdout.write(readBriefing());
+    return;
+  }
+
+  // Live runtime bootstrap from Llama Command. Unlike agent-onboard, this is
+  // not bundled in the public npm package; Command returns the current
+  // authenticated skill manifest and object-inspection contract.
+  if (area === "agent" && action === "bootstrap") {
+    const { flags } = parseFlags(rest, ["json", "limit"]);
+    const params = new URLSearchParams();
+    if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+    const manifest = await request("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
+    if (flags.json) {
+      print(manifest);
+    } else {
+      process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
+    }
+    return;
+  }
+
+  if (area === "skills" || (area === "agent" && action === "skills")) {
+    const sub = area === "skills" ? action : rest[0];
+    const args = area === "skills" ? rest : rest.slice(1);
+    if (!sub || sub === "list") {
+      const { flags } = parseFlags(args, ["json", "limit"]);
+      const params = new URLSearchParams();
+      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+      const result = await request("GET", `/api/agent/skills${params.toString() ? `?${params}` : ""}`);
+      print(result);
+      return;
+    }
+    if (sub === "search") {
+      const { flags, positional } = parseFlags(args, ["json", "limit"]);
+      const q = positional.join(" ").trim();
+      if (!q) throw new Error("Usage: llama skills search <query> [--limit 20]");
+      const params = new URLSearchParams({ q });
+      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+      const result = await request("GET", `/api/agent/skills?${params}`);
+      print(result);
+      return;
+    }
+    if (sub === "show" || sub === "read") {
+      const { flags, positional } = parseFlags(args, ["json"]);
+      const slug = positional[0];
+      if (!slug) throw new Error("Usage: llama skills show <slug> [--json]");
+      const result = await request("GET", `/api/agent/skills/${encodeURIComponent(slug)}`);
+      if (flags.json) {
+        print(result);
+      } else {
+        process.stdout.write(`${result.skill?.content || JSON.stringify(result, null, 2)}\n`);
+      }
+      return;
+    }
+    throw new Error(`Unknown skills subcommand "${sub}". Use: list / search / show.`);
+  }
+
+  if (area === "explain" || (area === "agent" && action === "explain")) {
+    const args = area === "explain" ? [action, ...rest].filter(Boolean) : rest;
+    const { flags, positional } = parseFlags(args, ["json", "type", "id", "lang"]);
+    const params = new URLSearchParams();
+    const q = positional.join(" ").trim();
+    if (q) params.set("q", q);
+    if (flags.type && flags.type !== true) params.set("type", String(flags.type));
+    if (flags.id && flags.id !== true) params.set("id", String(flags.id));
+    if (flags.lang === "zh") params.set("lang", "zh");
+    if (!params.has("q") && !(params.has("type") && params.has("id"))) {
+      throw new Error("Usage: llama explain <url-or-object> OR llama explain --type <type> --id <id>");
+    }
+    const result = await request("GET", `/api/agent/explain?${params}`);
+    if (flags.json) {
+      print(result);
+    } else {
+      const target = result.result?.target;
+      const lifecycle = result.result?.lifecycle || [];
+      const lines = [
+        `${target?.objectType || "object"} ${target?.objectId || ""}`,
+        `Status: ${target?.status || "unknown"}`,
+        `Title: ${target?.title || "Untitled"}`,
+        target?.detail ? `Detail: ${target.detail}` : null,
+        target?.url ? `URL: ${target.url}` : null,
+        `Lifecycle events: ${lifecycle.length}`,
+      ].filter(Boolean);
+      if (lifecycle[0]) {
+        lines.push(
+          `Latest lifecycle: ${lifecycle[0].action} by ${lifecycle[0].actor_label || "unknown"} at ${lifecycle[0].created_at}`,
+        );
+        if (lifecycle[0].reason) lines.push(`Reason: ${lifecycle[0].reason}`);
+      }
+      process.stdout.write(`${lines.join("\n")}\n`);
+    }
     return;
   }
 

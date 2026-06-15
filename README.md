@@ -48,7 +48,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          interactive CLI for humans + bash
-└── bin/llama-mcp      stdio MCP server, 52 typed tools — for any MCP-native agent
+└── bin/llama-mcp      stdio MCP server, 56 typed tools — for any MCP-native agent
 ```
 
 Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
@@ -211,6 +211,12 @@ llama approvals   decide <approvalId> approved --note "..."
 llama timeline <dealId>
 llama post     <dealId> "message body" [--link url]
 
+# Agent runtime — live Command + private Llama OS skill gateway
+llama agent bootstrap
+llama skills search "wiki delete tombstone"
+llama skills show llama-command
+llama explain https://command.llamaventures.vc/wiki/some-page
+
 # Wiki
 llama wiki search "<query>"
 llama wiki read   <slug> [--lang en|zh]
@@ -249,13 +255,14 @@ agents can pattern-match without parsing prose.
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**52 typed tools** that mirror the most-used CLI surface. Every tool is named
+**56 typed tools** that mirror the most-used CLI surface. Every tool is named
 and scoped — there is no generic API passthrough, by design (a public-package
 escape hatch reachable from a prompt-injectable agent context is exactly the
 shape we want to avoid).
 
 Coverage is grouped around the workflows agents actually need: auth
-diagnostics; deal search/show/create/update/feed; server-side deal agent runs;
+diagnostics; live agent bootstrap; authenticated Llama OS skill search/read;
+Command URL/object inspection; deal search/show/create/update/feed; server-side deal agent runs;
 deal enrichment harnesses;
 trust-rated facts; brief blocks and version history; wiki read/write/delete/restore;
 timeline posts and mentions; skill corrections; refresh triggers; external pitch intake;
@@ -276,6 +283,11 @@ Auth is identical to the CLI's chain (gcloud → `$LLAMA_TOKEN` → `~/.llama/to
 The `agent_briefing` MCP **prompt** also returns
 [`AGENT_BRIEFING.md`](AGENT_BRIEFING.md) verbatim, so any new agent loading the
 server can self-onboard without leaving the protocol.
+
+For current Llama OS skills, use the runtime tools instead of looking for a
+local private repo: `agent_bootstrap`, `skills_search`, `skills_read`, and
+`object_inspect`. The public npm package does not bundle private skill text;
+Command returns only the content visible to the authenticated token.
 
 ### Wire into your agent
 

@@ -20,6 +20,17 @@ Most teammates don't know everything this CLI can do. Part of your job is to sur
 - **Point at `llama --help`** for the full surface rather than reciting it. The CLI uses progressive help: `llama --help` is a short overview, `llama <area> --help` drills in.
 - **Stay current.** If you suspect the CLI is stale, run `llama version --check`; if it reports an upgrade, tell the user the one-line `npm i -g @llamaventures/cli@latest` command. Don't nag repeatedly.
 
+## Runtime skill library
+
+This npm package is public, but Llama OS skills are private. Do not assume the skill text is bundled locally. For team-token sessions, discover the live runtime library through Llama Command:
+
+- Start with `llama agent bootstrap` or MCP `agent_bootstrap` when you need the current Command + Llama OS contract.
+- Use `llama skills search "<task>"` or MCP `skills_search` before choosing a Llama workflow.
+- Use `llama skills show <slug>` or MCP `skills_read` only for the relevant skill.
+- Use `llama explain <command-url-or-object>` or MCP `object_inspect` for 404s, deleted wiki pages, notifier links, deal URLs, and unknown Command objects before telling the user "the system is broken."
+
+The boundary matters: public CLI/MCP discovers skills, but authenticated Command decides which skill content the token may read.
+
 ## Pipeline First (hard rule)
 
 Any time the user mentions a company name or founder name:
@@ -259,7 +270,7 @@ Run `llama --help` for the full surface (~40 commands).
 
 ## MCP-native agents
 
-If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (20 typed tools, identical auth chain).
+If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (56 typed tools, identical auth chain).
 
 Add to your MCP client config (Claude Desktop / Claude Code / Cursor / OpenClaw / Codex / etc.):
 
@@ -270,6 +281,9 @@ Add to your MCP client config (Claude Desktop / Claude Code / Cursor / OpenClaw 
 Tools available:
 
 - `auth_status` — verify creds + identity (call first if anything 401s)
+- `agent_bootstrap` — fetch the live Command + Llama OS runtime manifest
+- `skills_search` / `skills_read` — discover and read authenticated runtime skills
+- `object_inspect` — explain Command URLs, 404s, deleted objects, and lifecycle trail
 - `deal_search` / `deal_show` / `deal_create` / `deal_update`
 - `brief_blocks` / `brief_add_text` / `brief_add_link` / `brief_add_callout`
 - `wiki_search` / `wiki_save` (accepts `content_type: 'markdown' | 'html'` — HTML entries render as full-viewport sandboxed iframe at `/wiki/<slug>`) / `wiki_delete` / `wiki_restore` (soft-delete, reversible)
