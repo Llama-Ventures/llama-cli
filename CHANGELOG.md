@@ -6,6 +6,25 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-06-15
+
+### Added
+- **`llama agent bootstrap`** — fetches the live Llama Command + Llama OS
+  runtime manifest, including the authenticated skill bundle metadata and
+  object-inspection contract.
+- **`llama skills search|show`** — discovers and reads runtime Llama OS skills
+  from Llama Command. The public npm package does not bundle private skill
+  content; Command returns only what the authenticated token may see.
+- **`llama explain <url-or-object>`** — asks Llama Command to explain URLs,
+  deleted objects, 404s, and lifecycle history before an agent guesses that
+  the system is broken.
+- MCP parity tools: **`agent_bootstrap`**, **`skills_search`**,
+  **`skills_read`**, and **`object_inspect`**.
+
+### Changed
+- `AGENT_BRIEFING.md` now teaches agents to use the authenticated runtime
+  skill gateway instead of assuming a local private `llama-os` checkout.
+
 ## [1.14.1] — 2026-06-15
 
 ### Added
