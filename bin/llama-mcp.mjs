@@ -11,7 +11,7 @@ import { createRequire } from "module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getAuthHeaders, readBriefing, request } from "../lib/client.mjs";
+import { getAuthHeaders, readBriefing, request, requestSse } from "../lib/client.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -37,6 +37,96 @@ async function callApi(method, path, body) {
       content: [{ type: "text", text: `Error: ${err?.message ?? String(err)}` }],
       isError: true,
     };
+  }
+}
+
+function textResult(text, isError = false) {
+  return {
+    content: [{ type: "text", text }],
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
+function splitSources(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (!value || value === true) return undefined;
+  return String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function buildEnrichmentAgentMessage(args = {}) {
+  if (args.message) return String(args.message);
+  const sources = splitSources(args.sources) ?? [
+    "website",
+    "github",
+    "linkedin",
+    "yc",
+    "launch",
+    "web",
+    "monid",
+  ];
+  const budget = args.budgetCents ?? "50";
+  const memo = args.generateMemo
+    ? "Generate memo only after enrichment because the caller explicitly requested it."
+    : "Do not generate memo.";
+  return [
+    "Run server-side deal enrichment for this deal.",
+    `Use sources: ${sources.join(", ")}.`,
+    `Private Monid budget cap: ${budget} cents.`,
+    "Read the enrichment harness first, then collect current company/founder evidence.",
+    "Write canonical evidence links, sourced deal facts, stable deal fields, and typed factual values where supported.",
+    "For typed factual values, call read_typed_factual_layer first and use upsert_typed_fact for queryable fields.",
+    "Search snippets alone are not high-confidence evidence; fetch direct sources where possible.",
+    memo,
+    "End with what was written, what was skipped, and open questions.",
+  ].join(" ");
+}
+
+function summarizeAgentEvents(events = []) {
+  return events
+    .flatMap((event) => {
+      if (event.tool_use?.name) return [{ type: "tool_use", name: event.tool_use.name }];
+      if (event.tool_result?.name) {
+        return [
+          {
+            type: "tool_result",
+            name: event.tool_result.name,
+            ok: event.tool_result.ok ?? null,
+            summary: event.tool_result.summary ?? null,
+          },
+        ];
+      }
+      if (event.error) return [{ type: "error", error: String(event.error) }];
+      return [];
+    })
+    .slice(-80);
+}
+
+async function runDealAgentTool({ dealId, message, title = "MCP agent run" }) {
+  try {
+    const thread = await request("POST", `/api/deals/${encodeURIComponent(dealId)}/threads`, { title });
+    if (!thread?.id) throw new Error("Thread creation did not return an id");
+    const result = await requestSse(
+      "POST",
+      `/api/deals/${encodeURIComponent(dealId)}/threads/${encodeURIComponent(thread.id)}`,
+      { message },
+    );
+    return textResult(
+      JSON.stringify(
+        {
+          ok: true,
+          threadId: thread.id,
+          text: result.text,
+          toolEvents: summarizeAgentEvents(result.events),
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    return textResult(`Error: ${err?.message ?? String(err)}`, true);
   }
 }
 
@@ -787,13 +877,32 @@ server.registerTool(
 );
 
 server.registerTool(
+  "deal_agent_run",
+  {
+    description:
+      "Run Llama Command's server-side Deal Agent inside a deal thread. " +
+      "Use this when the user explicitly wants the service agent to execute " +
+      "a deal-scoped task instead of the local MCP client doing the work.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      message: z.string().describe("task instruction for the server-side Deal Agent"),
+      title: z.string().optional().describe("optional thread title; defaults to MCP agent run"),
+    },
+  },
+  async ({ dealId, message, title }) =>
+    runDealAgentTool({ dealId, message, title: title || "MCP agent run" })
+);
+
+server.registerTool(
   "deal_enrich",
   {
     description:
       "Run the Llama Command deal enrichment planner/trigger for one deal. " +
       "Default is dry-run: returns evidence plan, source plan, Monid budget/config " +
-      "status, and planned writes without changing facts/links/memo. Set apply=true " +
-      "only when the user explicitly wants the enrichment run recorded/applied. " +
+      "status, and planned writes without changing facts/links/memo. With " +
+      "apply=true and executor=server_agent, this starts the server-side Deal " +
+      "Agent unless harnessOnly=true. Set apply=true only when the user " +
+      "explicitly wants the enrichment run recorded/applied. " +
       "generateMemo never defaults on; pass true only when the user explicitly asks " +
       "for Memo generation after enrichment.",
     inputSchema: {
@@ -803,7 +912,7 @@ server.registerTool(
       executor: z
         .enum(["server_agent", "external_agent", "planner"])
         .optional()
-        .describe("who will execute the harness; external_agent returns guardrails for a user-owned agent"),
+        .describe("who will execute the harness; server_agent starts Deal Agent when apply=true"),
       sources: z
         .array(z.enum(["website", "github", "linkedin", "yc", "launch", "web", "monid"]))
         .optional()
@@ -819,17 +928,34 @@ server.registerTool(
         .boolean()
         .optional()
         .describe("explicitly request memo regeneration after enrichment; default false"),
+      harnessOnly: z
+        .boolean()
+        .optional()
+        .describe("when true, return/apply the enrichment harness endpoint instead of starting Deal Agent"),
+      message: z
+        .string()
+        .optional()
+        .describe("optional override instruction for the server-side Deal Agent"),
     },
   },
-  async ({ dealId, dryRun, apply, executor, sources, budgetCents, generateMemo }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/enrich`, {
+  async ({ dealId, dryRun, apply, executor, sources, budgetCents, generateMemo, harnessOnly, message }) => {
+    const effectiveExecutor = executor ?? "server_agent";
+    if (apply === true && effectiveExecutor === "server_agent" && harnessOnly !== true) {
+      return runDealAgentTool({
+        dealId,
+        title: "MCP enrichment",
+        message: buildEnrichmentAgentMessage({ sources, budgetCents, generateMemo, message }),
+      });
+    }
+    return callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/enrich`, {
       dryRun,
       apply,
-      executor,
+      executor: effectiveExecutor,
       sources,
       budgetCents,
       generateMemo,
-    })
+    });
+  }
 );
 
 // ============================================================

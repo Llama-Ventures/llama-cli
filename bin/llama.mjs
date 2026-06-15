@@ -15,6 +15,7 @@ import {
   readCanonicalToken,
   readLegacyConfig,
   request,
+  requestSse,
   tryGcloudIdentityToken,
   writeCanonicalToken,
   writeLegacyConfig,
@@ -199,6 +200,75 @@ async function searchDeals(q, flags) {
   return result;
 }
 
+function splitCsvFlag(value) {
+  if (!value || value === true) return undefined;
+  return String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function boolFlag(flags, ...names) {
+  return names.some((name) => flags[name] === true || flags[name] === "true" || flags[name] === "1");
+}
+
+function buildEnrichmentAgentMessage(flags) {
+  if (flags.message && flags.message !== true) return String(flags.message);
+  const sources = splitCsvFlag(flags.sources) ?? [
+    "website",
+    "github",
+    "linkedin",
+    "yc",
+    "launch",
+    "web",
+    "monid",
+  ];
+  const budget = flags["budget-cents"] || flags.budgetCents || "50";
+  const memo = boolFlag(flags, "memo", "generate-memo", "generateMemo")
+    ? "Generate memo only after enrichment because the caller explicitly requested it."
+    : "Do not generate memo.";
+  return [
+    "Run server-side deal enrichment for this deal.",
+    `Use sources: ${sources.join(", ")}.`,
+    `Private Monid budget cap: ${budget} cents.`,
+    "Read the enrichment harness first, then collect current company/founder evidence.",
+    "Write canonical evidence links, sourced deal facts, stable deal fields, and typed factual values where supported.",
+    "For typed factual values, call read_typed_factual_layer first and use upsert_typed_fact for queryable fields.",
+    "Search snippets alone are not high-confidence evidence; fetch direct sources where possible.",
+    memo,
+    "End with what was written, what was skipped, and open questions.",
+  ].join(" ");
+}
+
+async function runDealAgentViaThread(dealId, message, title = "CLI agent run") {
+  const thread = await request("POST", `/api/deals/${encodeURIComponent(dealId)}/threads`, { title });
+  if (!thread?.id) throw new Error("Thread creation did not return an id");
+  process.stderr.write(`Running Deal Agent in thread ${thread.id}\n`);
+  const result = await requestSse(
+    "POST",
+    `/api/deals/${encodeURIComponent(dealId)}/threads/${encodeURIComponent(thread.id)}`,
+    { message },
+    {
+      onEvent(event) {
+        if (event.tool_use?.name) {
+          process.stderr.write(`[tool] ${event.tool_use.name}\n`);
+        }
+        if (event.tool_result?.name) {
+          const status = event.tool_result.ok ? "ok" : "error";
+          process.stderr.write(
+            `[tool] ${event.tool_result.name}: ${status} — ${event.tool_result.summary ?? ""}\n`,
+          );
+        }
+        if (event.text) {
+          process.stdout.write(event.text);
+        }
+      },
+    },
+  );
+  if (result.text && !result.text.endsWith("\n")) process.stdout.write("\n");
+  return { thread, ...result };
+}
+
 const HELP_FULL = `Llama Command CLI
 
 Agent onboarding (run once on first install):
@@ -237,7 +307,9 @@ Deals:
             llama deal update <dealId> leadInvestor "Acme Capital"
   llama deal enrich <dealId> [--dry-run] [--apply] [--executor server_agent|external_agent|planner]
                             [--sources website,github,linkedin,yc,monid] [--budget-cents 50]
-                            [--memo] [--prompt]                # evidence harness + server-side enrichment trigger
+                            [--memo] [--prompt] [--harness-only]
+      dry-run returns the harness; --apply --executor server_agent runs the server Deal Agent.
+  llama deal agent run <dealId> --message "collect founder evidence and update typed facts"
   llama deal extra set <dealId> <key> <value>        # system-admin only
       Patch one top-level key in deals.extra JSONB. Value is parsed as
       JSON when possible ('{"a":1}', 'true', '3'), else stored as a
@@ -1160,6 +1232,19 @@ https://command.llamaventures.vc/settings/tokens, run
     return;
   }
 
+  if (area === "deal" && action === "agent") {
+    const sub = rest[0];
+    const dealId = rest[1];
+    const { flags, positional } = parseFlags(rest.slice(2), ["message"]);
+    const message =
+      flags.message && flags.message !== true ? String(flags.message) : positional.join(" ").trim();
+    if (sub !== "run" || !dealId || !message) {
+      throw new Error(`Usage: llama deal agent run <dealId> --message "what the server agent should do"`);
+    }
+    await runDealAgentViaThread(dealId, message, "CLI agent run");
+    return;
+  }
+
   // ----- Deal enrichment: evidence plan + server-side enrichment trigger -----
   // The server owns Monid credentials and all write/audit behavior. CLI only
   // passes intent; default is dry-run so agents can inspect the harness before
@@ -1181,31 +1266,35 @@ https://command.llamaventures.vc/settings/tokens, run
       "budget-cents",
       "memo",
       "generate-memo",
+      "generateMemo",
       "prompt",
       "handoff",
+      "harness-only",
+      "message",
     ]);
-    const sources =
-      flags.sources && flags.sources !== true
-        ? String(flags.sources)
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : undefined;
+    const sources = splitCsvFlag(flags.sources);
     const budgetCents =
       flags["budget-cents"] !== undefined && flags["budget-cents"] !== true
         ? Number(flags["budget-cents"])
         : undefined;
+    const apply = boolFlag(flags, "apply");
+    const executor = flags.executor && flags.executor !== true ? String(flags.executor) : "server_agent";
+
+    if (apply && executor === "server_agent" && !boolFlag(flags, "harness-only")) {
+      await runDealAgentViaThread(dealId, buildEnrichmentAgentMessage(flags), "CLI enrichment");
+      return;
+    }
 
     const result = await request(
       "POST",
       `/api/deals/${encodeURIComponent(dealId)}/enrich`,
       {
-        dryRun: flags.apply === true ? false : true,
-        apply: flags.apply === true,
-        executor: flags.executor && flags.executor !== true ? String(flags.executor) : undefined,
+        dryRun: apply ? false : true,
+        apply,
+        executor,
         sources,
         budgetCents,
-        generateMemo: flags.memo === true || flags["generate-memo"] === true,
+        generateMemo: boolFlag(flags, "memo", "generate-memo", "generateMemo"),
       }
     );
     if (flags.prompt === true || flags.handoff === true) {

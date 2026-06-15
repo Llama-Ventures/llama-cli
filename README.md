@@ -48,7 +48,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          interactive CLI for humans + bash
-└── bin/llama-mcp      stdio MCP server, 51 typed tools — for any MCP-native agent
+└── bin/llama-mcp      stdio MCP server, 52 typed tools — for any MCP-native agent
 ```
 
 Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
@@ -187,7 +187,9 @@ llama deal show <dealId>
 llama deal create "Acme AI" --description "..." --source Gavin
 llama deal update <dealId> status Diligence
 llama deal enrich <dealId> --dry-run
+llama deal enrich <dealId> --apply --executor server_agent
 llama deal enrich <dealId> --executor external_agent --prompt
+llama deal agent run <dealId> --message "collect founder evidence and update typed facts"
 llama deal delete  <dealId>     # soft (audit-logged)
 llama deal restore <dealId>
 
@@ -247,13 +249,14 @@ agents can pattern-match without parsing prose.
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**51 typed tools** that mirror the most-used CLI surface. Every tool is named
+**52 typed tools** that mirror the most-used CLI surface. Every tool is named
 and scoped — there is no generic API passthrough, by design (a public-package
 escape hatch reachable from a prompt-injectable agent context is exactly the
 shape we want to avoid).
 
 Coverage is grouped around the workflows agents actually need: auth
-diagnostics; deal search/show/create/update/feed; deal enrichment harnesses;
+diagnostics; deal search/show/create/update/feed; server-side deal agent runs;
+deal enrichment harnesses;
 trust-rated facts; brief blocks and version history; wiki read/write/delete/restore;
 timeline posts and mentions; skill corrections; refresh triggers; external pitch intake;
 memo show/regenerate/save/reset; and deal-scoped HTML docs, versions, bundles, and

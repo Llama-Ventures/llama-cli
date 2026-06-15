@@ -13,6 +13,7 @@ npm ci
 node bin/llama.mjs --help        # CLI is ESM, runs straight from source
 node --check bin/llama.mjs        # syntax check
 node --check bin/llama-mcp.mjs    # syntax check
+npm test                          # mock-backed CLI/MCP agent routing checks
 ```
 
 To test the CLI end-to-end against your own credentials, point it at the
@@ -33,8 +34,8 @@ printf '%s\n' \
   | node bin/llama-mcp.mjs | head -200
 ```
 
-You should see 51 named tools, including `deal_enrich`, the 5 `pitch_*`, and
-no generic API passthrough tool.
+You should see 52 named tools, including `deal_agent_run`, `deal_enrich`, the
+5 `pitch_*`, and no generic API passthrough tool.
 
 ## Conventions
 

@@ -3,6 +3,10 @@
   "version": "1.14.0",
   "description": "CLI + MCP server for the Llama Ventures investment workbench (command.llamaventures.vc).",
   "type": "module",
+  "scripts": {
+    "test": "npm run test:agent-routing",
+    "test:agent-routing": "node scripts/verify-agent-routing.mjs"
+  },
   "bin": {
     "llama": "bin/llama.mjs",
     "llama-mcp": "bin/llama-mcp.mjs"
@@ -11,6 +15,7 @@
     "assets/",
     "bin/",
     "lib/",
+    "scripts/verify-agent-routing.mjs",
     "AGENT_BRIEFING.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",

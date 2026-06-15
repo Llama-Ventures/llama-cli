@@ -6,6 +6,19 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- **`llama deal agent run <dealId> --message "..."`** — starts Llama
+  Command's server-side Deal Agent in a deal thread, so the service agent can
+  execute deal-scoped work instead of the local CLI user doing it.
+- **`deal_agent_run` MCP tool** — the same narrow server-agent trigger for
+  MCP-native clients, without adding a generic API passthrough.
+
+### Changed
+- **`llama deal enrich <dealId> --apply --executor server_agent`** now starts
+  the server-side Deal Agent unless `--harness-only` is supplied. Dry-runs and
+  external-agent handoff prompts still use the enrichment harness endpoint.
+- **`deal_enrich` MCP tool** now mirrors the same behavior with `harnessOnly`.
+
 ## [1.14.0] — 2026-06-15
 
 ### Added
