@@ -6,6 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.15.1] — 2026-06-16
+
+### Changed
+- Documented the new `Outreached` Our Stage across CLI, MCP, and agent
+  briefing surfaces. Agents should use `Outreached` for logged outreach
+  without a response/effective relationship, and reserve `Sourced` for real
+  relationship signals.
+- Added `sourceDirection` / `--source-direction` guidance across CLI, MCP, and
+  agent briefing surfaces. Use `Inbound` for deals that came into the firm and
+  `Outbound` for companies Llama found/listed/reached out to first.
+
 ## [1.15.0] — 2026-06-15
 
 ### Added

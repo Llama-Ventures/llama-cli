@@ -280,7 +280,7 @@ server.registerTool(
   {
     description:
       "Search the Llama Ventures deal pipeline. Fuzzy match on company name, " +
-      "founders, description, founder info, notes, deal owner, source, and location. " +
+      "founders, description, founder info, notes, deal owner, source, source direction, and location. " +
       "Returns up to `limit` deals (default 200, cap 1000).",
     inputSchema: {
       q: z.string().optional().describe("fuzzy search query across all text fields"),
@@ -291,7 +291,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "exact match on 'Our Stage' (Sourced, First Meeting, Diligence, Partner Meeting, Term Sheet, Invested, Passed, Stalled, Future, Unknown)"
+          "exact match on 'Our Stage' (Outreached, Sourced, First Meeting, Diligence, Partner Meeting, Term Sheet, Invested, Passed, Stalled, Future, Unknown). Outreached means contact was logged but no effective relationship/response exists yet."
         ),
       theirStage: z.string().optional().describe("exact match on 'Their Stage'"),
       stage: z
@@ -300,6 +300,10 @@ server.registerTool(
         .describe(
           "exact match on Round (Pre-Seed, Seed, Series A, Series B, Series C+, Stealth)"
         ),
+      sourceDirection: z
+        .string()
+        .optional()
+        .describe("exact match on source direction: Inbound, Outbound, or Unknown"),
       limit: z.number().optional().describe("max results (default 200, cap 1000)"),
       offset: z.number().optional(),
     },
@@ -318,7 +322,7 @@ server.registerTool(
   {
     description:
       "Get the full canonical record for one deal by uuid. Includes status, " +
-      "stage, founders, owner, source, valuation, all whitelisted writable fields, " +
+      "stage, founders, owner, source, sourceDirection, valuation, all whitelisted writable fields, " +
       "and the `extra` JSONB blob.",
     inputSchema: {
       dealId: z.string().describe("deal uuid"),
@@ -348,8 +352,17 @@ server.registerTool(
         .string()
         .optional()
         .describe("Pre-Seed | Seed | Series A | Series B | Series C+ | Stealth"),
-      status: z.string().optional().describe("Our Stage workflow position"),
+      status: z
+        .string()
+        .optional()
+        .describe(
+          "Our Stage workflow position. Use Outreached when we only contacted/logged them and have no response/effective relationship; use Sourced only once there is a response, intro, meeting, or other real relationship signal."
+        ),
       source: z.string().optional().describe("free-form sourced-by; recommend nominating a user"),
+      sourceDirection: z
+        .string()
+        .optional()
+        .describe("Separate direction tag: Inbound if the deal came into the firm; Outbound if Llama found/listed/reached out first; Unknown if unclear."),
       notes: z.string().optional(),
       location: z.string().optional(),
     },
@@ -362,7 +375,7 @@ server.registerTool(
   {
     description:
       "Update a single whitelisted field on a deal. Writable fields: status, theirStage, " +
-      "notes, stage, dealOwner, source, description, website, location, founders, " +
+      "notes, stage, dealOwner, source, sourceDirection, description, website, location, founders, " +
       "proposedAmount, roundSize, valuation, sector, subsector, foundedYear, leadInvestor, " +
       "investors. Logs a field_change event in deal_events.",
     inputSchema: {

@@ -38,6 +38,9 @@ Any time the user mentions a company name or founder name:
 1. **Run `llama deal search "<name>"` BEFORE web search.** Always. No exceptions.
 2. If pipeline has it → pull the data, integrate into your reply silently.
 3. If pipeline doesn't have it → ask once: "New name. Add to pipeline? (Y/n)". On yes, `llama deal create`.
+   - Use `--status Outreached` when we only contacted/logged the company and have no response or effective relationship yet.
+   - Use `--status Sourced` only once there is a response, intro, meeting, or another real relationship signal.
+   - Also set `--source-direction Inbound` if the deal came into the firm; set `--source-direction Outbound` if Llama found/listed/reached out first.
 4. If user gives you new facts (status / valuation / founder note) → `llama deal update` immediately, tell the user **one line** afterward.
 
 Don't:
@@ -201,11 +204,19 @@ llama deal show <dealId>
 llama deal list [--owner ...] [--status ...]
 
 # Pipeline — write
-llama deal create "Company" --description "..."
+llama deal create "Company" --description "..." --source-direction Outbound --status Outreached
+llama deal create "Company" --description "..." --source-direction Inbound --status Sourced
 llama deal update <dealId> <field> <value>
-#   writable: status theirStage stage notes dealOwner source description website
+#   writable: status theirStage stage notes dealOwner source sourceDirection description website
 #             location founders proposedAmount roundSize valuation sector subsector
 #             foundedYear leadInvestor investors   (each write logs a deal_events row)
+
+# Our Stage vocabulary starts with:
+#   Outreached → Sourced → First Meeting → Diligence → Partner Meeting → Term Sheet → Invested
+# `Outreached` is relationship memory only. Do not inflate it to `Sourced`
+# unless a real relationship signal exists.
+# `sourceDirection` is separate: Inbound = came into the firm; Outbound =
+# we found/listed/reached out first.
 
 # Brief blocks
 llama brief blocks <dealId>

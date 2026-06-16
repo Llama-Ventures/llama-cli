@@ -201,11 +201,14 @@ llama token show
 
 # Pipeline——读
 llama deal search "acme ai"
+llama deal list --owner alex --status Outreached
+llama deal list --source-direction Outbound --status Outreached
 llama deal list --owner alex --status Diligence
 llama deal show <dealId>
 
 # Pipeline——写
-llama deal create "Acme AI" --description "..." --source Gavin
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
 llama deal update <dealId> status Diligence
 llama deal enrich <dealId> --dry-run
 llama deal enrich <dealId> --apply --executor server_agent
@@ -213,6 +216,13 @@ llama deal enrich <dealId> --executor external_agent --prompt
 llama deal agent run <dealId> --message "collect founder evidence and update typed facts"
 llama deal delete  <dealId>     # 软删除（审计日志记录）
 llama deal restore <dealId>
+
+# Status 语义
+# Outreached = 只是联系/记录了，还没有回复或有效关系。
+# Sourced    = 已有回复、intro、会议，或其它真实关系信号。
+# sourceDirection 是单独维度：
+# Inbound    = 自然流入公司。
+# Outbound   = 我们主动发现/建名单/触达。
 
 # Deal Brief——有序的、有类型的 block（text · link · embed · callout）
 llama brief blocks       <dealId>

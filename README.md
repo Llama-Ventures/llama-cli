@@ -180,11 +180,14 @@ llama token show
 
 # Pipeline — read
 llama deal search "acme ai"
+llama deal list --owner alex --status Outreached
+llama deal list --source-direction Outbound --status Outreached
 llama deal list --owner alex --status Diligence
 llama deal show <dealId>
 
 # Pipeline — write
-llama deal create "Acme AI" --description "..." --source Gavin
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
 llama deal update <dealId> status Diligence
 llama deal enrich <dealId> --dry-run
 llama deal enrich <dealId> --apply --executor server_agent
@@ -192,6 +195,13 @@ llama deal enrich <dealId> --executor external_agent --prompt
 llama deal agent run <dealId> --message "collect founder evidence and update typed facts"
 llama deal delete  <dealId>     # soft (audit-logged)
 llama deal restore <dealId>
+
+# Status semantics
+# Outreached = contact/logged, but no response or effective relationship yet.
+# Sourced    = response, intro, meeting, or another real relationship signal exists.
+# sourceDirection is separate:
+# Inbound    = came into the firm.
+# Outbound   = we found/listed/reached out first.
 
 # Deal Brief — ordered, typed blocks (text · link · embed · callout)
 llama brief blocks       <dealId>

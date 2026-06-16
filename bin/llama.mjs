@@ -141,7 +141,7 @@ function clientSideMatch(deal, filters) {
     const fields = [
       deal.companyName, deal.founders, deal.founderInfo,
       deal.description, deal.notes, deal.dealOwner,
-      deal.source, deal.location,
+      deal.source, deal.sourceDirection, deal.location,
     ];
     if (!fields.some((f) => incl(f, filters.q))) return false;
   }
@@ -151,6 +151,7 @@ function clientSideMatch(deal, filters) {
   if (filters.status && !eq(deal.status, filters.status)) return false;
   if (filters.theirStage && !eq(deal.theirStage, filters.theirStage)) return false;
   if (filters.stage && !eq(deal.stage, filters.stage)) return false;
+  if (filters.sourceDirection && !eq(deal.sourceDirection, filters.sourceDirection)) return false;
   return true;
 }
 
@@ -158,10 +159,13 @@ function clientSideMatch(deal, filters) {
 function buildDealsQuery(q, flags) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
-  for (const key of ["companyName", "founder", "owner", "status", "theirStage", "stage", "limit", "offset"]) {
+  for (const key of ["companyName", "founder", "owner", "status", "theirStage", "stage", "sourceDirection", "limit", "offset"]) {
     if (flags[key] !== undefined && flags[key] !== true) {
       params.set(key, String(flags[key]));
     }
+  }
+  if (flags["source-direction"] !== undefined && flags["source-direction"] !== true) {
+    params.set("sourceDirection", String(flags["source-direction"]));
   }
   return params;
 }
@@ -185,6 +189,7 @@ async function searchDeals(q, flags) {
       status: flags.status,
       theirStage: flags.theirStage,
       stage: flags.stage,
+      sourceDirection: flags.sourceDirection || flags["source-direction"],
     };
     const filtered = result.filter((d) => clientSideMatch(d, filters));
     const limit = Number(flags.limit) > 0 ? Number(flags.limit) : 200;
@@ -297,15 +302,16 @@ auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
 Deals:
-  llama deal create "Company" --source <name> --description "..." --website https://...
+  llama deal create "Company" --source <name> --source-direction Inbound|Outbound --description "..." --status Outreached|Sourced --website https://...
   llama deal show <dealId>
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
-      Writable fields: status, theirStage, stage, notes, dealOwner, source,
+      Writable fields: status, theirStage, stage, notes, dealOwner, source, sourceDirection,
       description, website, location, founders, founderInfo, proposedAmount,
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
       e.g.  llama deal update <dealId> website https://acme.ai
+            llama deal update <dealId> status Outreached
             llama deal update <dealId> sector "Developer Tools"
             llama deal update <dealId> foundedYear 2024
             llama deal update <dealId> leadInvestor "Acme Capital"
@@ -320,7 +326,7 @@ Deals:
       string. Audited to deal_events as field_change "extra.<key>".
   llama deal extra unset <dealId> <key>              # delete the key (admin)
   llama deal search <query> [--founder name] [--owner <user-key>] [--status Diligence]
-                            [--theirStage Raising] [--stage Seed]
+                            [--theirStage Raising] [--stage Seed] [--source-direction Inbound]
                             [--limit 200] [--offset 0]
   llama deal list [--owner ...] [--status ...] [...same flags as search]
 
@@ -1243,6 +1249,7 @@ https://command.llamaventures.vc/settings/tokens, run
     const body = {
       companyName,
       source: flags.source,
+      sourceDirection: flags.sourceDirection || flags["source-direction"],
       description: flags.description,
       website: flags.website,
       notes: flags.notes,
@@ -1319,7 +1326,7 @@ https://command.llamaventures.vc/settings/tokens, run
     const q = positional.join(" ").trim();
     if (!q && Object.keys(flags).length === 0) {
       throw new Error(
-        `Usage: llama deal search <query> [--founder ...] [--owner ...] [--status ...] [--stage ...] [--limit N]`
+        `Usage: llama deal search <query> [--founder ...] [--owner ...] [--status ...] [--stage ...] [--source-direction Inbound|Outbound] [--limit N]`
       );
     }
     print(await searchDeals(q, flags));
