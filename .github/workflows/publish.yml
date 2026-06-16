@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm-publish  # gates on environment-protection rules
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Check out the exact commit the release tag points at, not main.
           ref: ${{ github.event.release.tag_name }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           # Node 24 ships with npm 11.5.1+, required for the new OIDC
           # handshake that Trusted Publishers needs. Node 20/22<14 ships
