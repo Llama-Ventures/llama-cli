@@ -290,9 +290,11 @@ printf '%s\n' \
 ```
 
 Auth is identical to the CLI's chain (gcloud → `$LLAMA_TOKEN` → `~/.llama/token`).
-The `agent_briefing` MCP **prompt** also returns
-[`AGENT_BRIEFING.md`](AGENT_BRIEFING.md) verbatim, so any new agent loading the
-server can self-onboard without leaving the protocol.
+The `agent_briefing` MCP **prompt** returns the server-owned Agent Runtime
+Contract when authenticated, so any new agent loading the server can
+self-onboard without leaving the protocol. The bundled
+[`AGENT_BRIEFING.md`](AGENT_BRIEFING.md) is only a fallback if the server
+briefing route is temporarily unavailable.
 
 For current Llama OS skills, use the runtime tools instead of looking for a
 local private repo: `agent_bootstrap`, `skills_search`, `skills_read`, and
@@ -352,8 +354,8 @@ extensions, no transport flags.
 
 > If you're new and want the agent to onboard itself, run
 > `llama agent-onboard` from the CLI or fetch the `agent_briefing` prompt from
-> the MCP server. It's the workflow contract — autonomy levels, attribution
-> grammar, error recovery, anti-pollution rules.
+> the MCP server. It pulls the Command-owned workflow contract — current CLI
+> guidance, attribution grammar, error recovery, and anti-pollution rules.
 
 ---
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createRequire } from "module";
 import readline from "readline";
 import {
   DEFAULT_BASE_URL,
@@ -32,6 +33,9 @@ import {
 import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
 import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
+
+const requireFromHere = createRequire(import.meta.url);
+const { version: PKG_VERSION } = requireFromHere("../package.json");
 
 function parseFlags(args, knownFlags = null) {
   const flags = {};
@@ -69,6 +73,34 @@ function parseFlags(args, knownFlags = null) {
     }
   }
   return { flags, positional };
+}
+
+function agentOnboardNoAuthMessage() {
+  return `Llama Ventures team onboarding requires credentials.
+
+Team member?
+  - Run \`gcloud auth login\` with your @llamaventures.vc account, OR
+  - Mint a token at https://command.llamaventures.vc/settings/tokens
+    then \`llama token set <llc_...>\`.
+  Re-run \`llama agent-onboard\` after — the workflow contract will print.
+
+Founder or external visitor (no Llama account)?
+  Run \`llama pitch start --name "Your Name" --email "you@company.com"\`
+  to chat with our intake agent — no token required.`;
+}
+
+function agentOnboardRejectedMessage() {
+  return `Llama Ventures team onboarding requires valid credentials.
+
+Server rejected the credentials we sent. Re-mint at
+https://command.llamaventures.vc/settings/tokens, run
+\`llama token set <llc_...>\`, then re-run \`llama agent-onboard\`.`;
+}
+
+async function fetchServerAgentBriefing() {
+  const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+  const result = await request("GET", `/api/agent/briefing?${params}`);
+  return result?.briefing || "";
 }
 
 function closestKnownFlag(input, candidates) {
@@ -865,18 +897,15 @@ async function runPitchRepl() {
 async function main() {
   const [area, action, ...rest] = process.argv.slice(2);
   if (area === "--version" || area === "-v" || area === "version") {
-    const { createRequire } = await import("module");
-    const requireFromHere = createRequire(import.meta.url);
-    const { version } = requireFromHere("../package.json");
     // `llama version --check` — explicitly check npm for a newer release and
     // print the upgrade line (or "up to date"). Lets an agent surface the
     // nudge on demand, separate from the throttled, TTY-gated auto-nudge.
     if (action === "--check" || action === "check") {
       const nudge = await getUpdateNudge();
-      console.log(nudge || `llama CLI ${version} — up to date`);
+      console.log(nudge || `llama CLI ${PKG_VERSION} — up to date`);
       return;
     }
-    console.log(version);
+    console.log(PKG_VERSION);
     return;
   }
   if (!area || area === "help" || area === "--help" || area === "-h") {
@@ -897,12 +926,13 @@ async function main() {
     return;
   }
 
-  // `llama agent-onboard` — print the bundled AGENT_BRIEFING.md so an AI
-  // agent reads it once and internalises the Llama Ventures workflow
-  // contract. Same content the `agent_briefing` MCP prompt returns.
+  // `llama agent-onboard` — fetch the server-owned Agent Runtime Contract
+  // so an AI agent reads the current Llama Ventures workflow contract. The
+  // bundled AGENT_BRIEFING.md is now only a fallback when the server route
+  // is unavailable during rollout.
   // Also: `llama agent onboard` (two-word form) for symmetry.
   //
-  // Gated behind /api/me — without valid credentials we print a short
+  // Gated behind Command auth — without valid credentials we print a short
   // bootstrap stub instead. Stops unauthenticated callers from harvesting
   // internal command surface / workflow conventions just by running the
   // public CLI.
@@ -912,39 +942,24 @@ async function main() {
   ) {
     const headers = await getAuthHeaders();
     if (Object.keys(headers).length === 0) {
-      console.log(
-`Llama Ventures team onboarding requires credentials.
-
-Team member?
-  - Run \`gcloud auth login\` with your @llamaventures.vc account, OR
-  - Mint a token at https://command.llamaventures.vc/settings/tokens
-    then \`llama token set <llc_...>\`.
-  Re-run \`llama agent-onboard\` after — the workflow contract will print.
-
-Founder or external visitor (no Llama account)?
-  Run \`llama pitch start --name "Your Name" --email "you@company.com"\`
-  to chat with our intake agent — no token required.`
-      );
+      console.log(agentOnboardNoAuthMessage());
       return;
     }
     try {
-      await request("GET", "/api/me");
+      const briefing = await fetchServerAgentBriefing();
+      process.stdout.write(briefing || readBriefing());
     } catch (e) {
       const msg = e?.message || "";
       if (msg.includes("Error[UNAUTHORIZED]") || msg.includes("Error[NO_AUTH]")) {
-        console.log(
-`Llama Ventures team onboarding requires valid credentials.
-
-Server rejected the credentials we sent. Re-mint at
-https://command.llamaventures.vc/settings/tokens, run
-\`llama token set <llc_...>\`, then re-run \`llama agent-onboard\`.`
-        );
+        console.log(agentOnboardRejectedMessage());
         process.exitCode = 1;
         return;
       }
-      throw e;
+      process.stderr.write(
+        `warning: server agent briefing unavailable (${msg}); using bundled fallback.\n`,
+      );
+      process.stdout.write(readBriefing());
     }
-    process.stdout.write(readBriefing());
     return;
   }
 
@@ -954,6 +969,7 @@ https://command.llamaventures.vc/settings/tokens, run
   if (area === "agent" && action === "bootstrap") {
     const { flags } = parseFlags(rest, ["json", "limit"]);
     const params = new URLSearchParams();
+    params.set("clientVersion", PKG_VERSION);
     if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
     const manifest = await request("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
     if (flags.json) {

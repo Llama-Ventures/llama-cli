@@ -70,6 +70,13 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/agent/manifest") {
       writeJson(res, {
         ok: true,
+        contract: {
+          contract_version: "agent-contract.v1",
+          cli: {
+            client_version: url.searchParams.get("clientVersion"),
+            status: "ok",
+          },
+        },
         briefing: "runtime briefing: use skills_search, skills_read, and object_inspect",
         llama_os: {
           visible_skill_count: 49,
@@ -81,6 +88,21 @@ const server = createServer(async (req, res) => {
             description: "Llama Command runtime skill",
           },
         ],
+      });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/agent/briefing") {
+      writeJson(res, {
+        ok: true,
+        contract: {
+          contract_version: "agent-contract.v1",
+          cli: {
+            client_version: url.searchParams.get("clientVersion"),
+            status: "ok",
+          },
+        },
+        briefing: "server-owned briefing: check CLI, use Pipeline First, prefer CLI/MCP",
       });
       return;
     }
@@ -314,10 +336,17 @@ const homeDir = await mkdtemp(path.join(os.tmpdir(), "llama-cli-routing-"));
 
 try {
   resetCalls();
+  const onboardRun = await runCli(["agent-onboard"], baseUrl, homeDir);
+  assert.match(onboardRun.stdout, /server-owned briefing/);
+  assert.deepEqual(paths(), ["GET /api/agent/briefing"]);
+  assert.ok(calls[0].query.clientVersion, "agent-onboard passes clientVersion");
+
+  resetCalls();
   const bootstrapRun = await runCli(["agent", "bootstrap", "--limit", "3"], baseUrl, homeDir);
   assert.match(bootstrapRun.stdout, /runtime briefing/);
   assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
   assert.equal(calls[0].query.limit, "3");
+  assert.ok(calls[0].query.clientVersion, "agent bootstrap passes clientVersion");
 
   resetCalls();
   const skillSearchRun = await runCli(["skills", "search", "pipeline", "--limit", "5"], baseUrl, homeDir);
@@ -415,6 +444,7 @@ try {
   assert.equal(bootstrapPayload.ok, true);
   assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
   assert.equal(calls[0].query.limit, "2");
+  assert.ok(calls[0].query.clientVersion, "mcp agent_bootstrap passes clientVersion");
 
   resetCalls();
   const mcpSkills = await callMcpTool("skills_search", { q: "command", limit: 4 }, baseUrl, homeDir);

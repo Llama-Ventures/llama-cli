@@ -299,9 +299,10 @@ printf '%s\n' \
 ```
 
 认证链跟 CLI 完全一样（gcloud → `$LLAMA_TOKEN` → `~/.llama/token`）。
-`agent_briefing` 这个 MCP **prompt** 还会原样吐出
-[`AGENT_BRIEFING.md`](AGENT_BRIEFING.md)——刚装上 server 的 agent
-不用离开协议就能给自己 onboard。
+`agent_briefing` 这个 MCP **prompt** 会在认证后拉取 Command 服务端的
+Agent Runtime Contract——刚装上 server 的 agent 不用离开协议就能给自己
+onboard。包内 [`AGENT_BRIEFING.md`](AGENT_BRIEFING.md) 只是服务端 briefing
+临时不可用时的 fallback。
 
 要读当前 Llama OS skills，用 runtime tools：`agent_bootstrap`、
 `skills_search`、`skills_read`、`object_inspect`。公开 npm 包不打包私有
@@ -358,7 +359,7 @@ claude mcp add llama -- llama-mcp
 </details>
 
 > 想让 agent 自己 onboard？跑 `llama agent-onboard`，或者从 MCP server
-> 拉 `agent_briefing` prompt——那是 AI agent 的工作合约（autonomy 等级、
+> 拉 `agent_briefing` prompt——它会拿 Command 服务端的工作合约（CLI 状态、
 > attribution 语法、错误恢复、anti-pollution 规则）。
 
 ---
