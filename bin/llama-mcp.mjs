@@ -209,6 +209,7 @@ server.registerTool(
   },
   async ({ limit } = {}) => {
     const params = new URLSearchParams();
+    params.set("clientVersion", PKG_VERSION);
     if (limit) params.set("limit", String(limit));
     return callApi("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
   }
@@ -1595,11 +1596,12 @@ server.registerPrompt(
       "skills_search, and skills_read.",
   },
   async () => {
-    // Gate the briefing behind a /api/me check so unauthenticated MCP
-    // clients can't harvest internal workflow / command surface just by
-    // requesting the prompt. Mirrors the CLI gate in bin/llama.mjs.
+    // Gate the briefing behind authenticated Command runtime. The server-owned
+    // /api/agent/briefing contract is canonical; bundled AGENT_BRIEFING.md is
+    // only a rollout/offline fallback for authenticated users.
     const headers = await getAuthHeaders();
     let stub = null;
+    let briefing = null;
     if (Object.keys(headers).length === 0) {
       stub =
         "Llama Ventures team onboarding requires credentials.\n\n" +
@@ -1610,19 +1612,28 @@ server.registerPrompt(
         "Founder / external visitor: use the `pitch_*` tools — no token required.";
     } else {
       try {
-        await request("GET", "/api/me");
+        const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+        const body = await request("GET", `/api/agent/briefing?${params}`);
+        briefing = body?.briefing || null;
       } catch (err) {
-        stub =
-          "Llama Ventures team onboarding requires valid credentials. " +
-          "Server rejected the credentials we sent. Re-mint at " +
-          "https://command.llamaventures.vc/settings/tokens.";
+        const msg = err?.message || "";
+        if (msg.includes("Error[UNAUTHORIZED]") || msg.includes("Error[NO_AUTH]")) {
+          stub =
+            "Llama Ventures team onboarding requires valid credentials. " +
+            "Server rejected the credentials we sent. Re-mint at " +
+            "https://command.llamaventures.vc/settings/tokens.";
+        } else {
+          briefing =
+            "Warning: server agent briefing unavailable; using bundled fallback.\n\n" +
+            readBriefing();
+        }
       }
     }
     return {
       messages: [
         {
           role: "user",
-          content: { type: "text", text: stub ?? readBriefing() },
+          content: { type: "text", text: stub ?? briefing ?? readBriefing() },
         },
       ],
     };

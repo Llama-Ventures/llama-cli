@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+- `llama agent-onboard` and MCP `agent_briefing` now prefer the authenticated
+  Llama Command `/api/agent/briefing` runtime contract, with bundled
+  `AGENT_BRIEFING.md` retained as fallback only.
+- `llama agent bootstrap` and MCP `agent_bootstrap` now pass the local CLI
+  version to Command so the server can return stale/ok CLI guidance as part of
+  the agent contract.
+
 ## [1.15.1] — 2026-06-16
 
 ### Changed
