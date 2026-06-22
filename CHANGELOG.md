@@ -6,6 +6,19 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-06-22
+
+### Added
+- CLI and MCP requests now send bounded local-agent telemetry metadata to
+  Llama Command: client kind/version, detected agent client, session id,
+  normalized command, latency, status, sanitized args, result ids, and bounded
+  result summaries.
+- `llama eval good|bad --last` and `llama eval add "<query>" --expect ...`
+  let agents and humans turn real search usage into Golden Query Eval
+  feedback.
+- MCP tool `record_eval_feedback` mirrors the CLI eval feedback path for
+  MCP-native agents.
+
 ### Changed
 - `llama agent-onboard` and MCP `agent_briefing` now prefer the authenticated
   Llama Command `/api/agent/briefing` runtime contract, with bundled

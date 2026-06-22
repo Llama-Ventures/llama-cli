@@ -22,6 +22,7 @@ assert.equal(
 );
 const calls = [];
 let threadSeq = 0;
+let eventSeq = 0;
 
 async function readJson(req) {
   let raw = "";
@@ -65,7 +66,36 @@ const server = createServer(async (req, res) => {
       path: url.pathname,
       query: Object.fromEntries(url.searchParams.entries()),
       body,
+      headers: {
+        client: req.headers["x-llama-client"] ?? null,
+        clientVersion: req.headers["x-llama-client-version"] ?? null,
+        agentClient: req.headers["x-llama-agent-client"] ?? null,
+        session: req.headers["x-llama-agent-session"] ?? null,
+        command: req.headers["x-llama-command"] ?? null,
+      },
     });
+
+    if (req.method === "POST" && url.pathname === "/api/agent/client-events") {
+      eventSeq += 1;
+      writeJson(res, {
+        ok: true,
+        eventId: eventSeq,
+        candidateId: body?.command?.endsWith(".search") ? eventSeq + 1000 : null,
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/agent/eval-feedback") {
+      writeJson(res, {
+        ok: true,
+        candidate: {
+          id: 42,
+          source_event_id: body?.eventId ?? null,
+          feedback: body?.action ?? null,
+        },
+      });
+      return;
+    }
 
     if (req.method === "GET" && url.pathname === "/api/agent/manifest") {
       writeJson(res, {
@@ -158,6 +188,16 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/wiki/search") {
+      writeJson(res, [
+        {
+          slug: "llama-weekly-2026-06-16",
+          title: "Llama Weekly 2026-06-16",
+        },
+      ]);
+      return;
+    }
+
     if (req.method === "POST" && /^\/api\/deals\/[^/]+\/threads$/.test(url.pathname)) {
       threadSeq += 1;
       writeJson(res, { id: `thread-${threadSeq}` });
@@ -213,25 +253,34 @@ function resetCalls() {
   threadSeq = 0;
 }
 
+function businessCalls() {
+  return calls.filter((call) => call.path !== "/api/agent/client-events");
+}
+
+function telemetryCalls() {
+  return calls.filter((call) => call.path === "/api/agent/client-events");
+}
+
 function paths() {
-  return calls.map((call) => `${call.method} ${call.path}`);
+  return businessCalls().map((call) => `${call.method} ${call.path}`);
 }
 
 function assertNoEnrichCall() {
   assert.equal(
-    calls.some((call) => call.path.endsWith("/enrich")),
+    businessCalls().some((call) => call.path.endsWith("/enrich")),
     false,
     `expected no /enrich call, got ${paths().join(", ")}`,
   );
 }
 
 function assertThreadRun({ title, messageIncludes }) {
-  assert.equal(calls.length, 2, `expected thread create + SSE run, got ${paths().join(", ")}`);
-  assert.match(calls[0].path, /^\/api\/deals\/[^/]+\/threads$/);
-  assert.equal(calls[0].body?.title, title);
-  assert.match(calls[1].path, /^\/api\/deals\/[^/]+\/threads\/thread-1$/);
+  const relevant = businessCalls();
+  assert.equal(relevant.length, 2, `expected thread create + SSE run, got ${paths().join(", ")}`);
+  assert.match(relevant[0].path, /^\/api\/deals\/[^/]+\/threads$/);
+  assert.equal(relevant[0].body?.title, title);
+  assert.match(relevant[1].path, /^\/api\/deals\/[^/]+\/threads\/thread-1$/);
   for (const needle of messageIncludes) {
-    assert.match(calls[1].body?.message ?? "", new RegExp(escapeRegExp(needle)));
+    assert.match(relevant[1].body?.message ?? "", new RegExp(escapeRegExp(needle)));
   }
 }
 
@@ -339,21 +388,25 @@ try {
   const onboardRun = await runCli(["agent-onboard"], baseUrl, homeDir);
   assert.match(onboardRun.stdout, /server-owned briefing/);
   assert.deepEqual(paths(), ["GET /api/agent/briefing"]);
-  assert.ok(calls[0].query.clientVersion, "agent-onboard passes clientVersion");
+  assert.ok(businessCalls()[0].query.clientVersion, "agent-onboard passes clientVersion");
+  assert.equal(telemetryCalls()[0].body?.command, "agent.briefing");
+  assert.equal(telemetryCalls()[0].body?.client, "cli");
+  assert.ok(telemetryCalls()[0].body?.sessionId, "telemetry includes an agent session id");
+  assert.equal(businessCalls()[0].headers.command, "agent.briefing");
 
   resetCalls();
   const bootstrapRun = await runCli(["agent", "bootstrap", "--limit", "3"], baseUrl, homeDir);
   assert.match(bootstrapRun.stdout, /runtime briefing/);
   assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
-  assert.equal(calls[0].query.limit, "3");
-  assert.ok(calls[0].query.clientVersion, "agent bootstrap passes clientVersion");
+  assert.equal(businessCalls()[0].query.limit, "3");
+  assert.ok(businessCalls()[0].query.clientVersion, "agent bootstrap passes clientVersion");
 
   resetCalls();
   const skillSearchRun = await runCli(["skills", "search", "pipeline", "--limit", "5"], baseUrl, homeDir);
   assert.match(skillSearchRun.stdout, /llama-command/);
   assert.deepEqual(paths(), ["GET /api/agent/skills"]);
-  assert.equal(calls[0].query.q, "pipeline");
-  assert.equal(calls[0].query.limit, "5");
+  assert.equal(businessCalls()[0].query.q, "pipeline");
+  assert.equal(businessCalls()[0].query.limit, "5");
 
   resetCalls();
   const skillShowRun = await runCli(["skills", "show", "llama-command"], baseUrl, homeDir);
@@ -365,7 +418,34 @@ try {
   assert.match(explainRun.stdout, /Status: deleted/);
   assert.match(explainRun.stdout, /Deleted by Kevin Yu/);
   assert.deepEqual(paths(), ["GET /api/agent/explain"]);
-  assert.equal(calls[0].query.q, "https://command.llamaventures.vc/wiki/missing-page");
+  assert.equal(businessCalls()[0].query.q, "https://command.llamaventures.vc/wiki/missing-page");
+
+  resetCalls();
+  const wikiRun = await runCli(["wiki", "search", "llama weekly"], baseUrl, homeDir);
+  assert.match(wikiRun.stdout, /llama-weekly-2026-06-16/);
+  assert.deepEqual(paths(), ["GET /api/wiki/search"]);
+  assert.equal(telemetryCalls()[0].body?.command, "wiki.search");
+  assert.equal(telemetryCalls()[0].body?.query, "llama weekly");
+
+  resetCalls();
+  const evalRun = await runCli(
+    [
+      "eval",
+      "bad",
+      "--last",
+      "--reason",
+      "missed dev weekly",
+      "--expect",
+      "wiki:llamaos-weekly-2026-06-17",
+    ],
+    baseUrl,
+    homeDir,
+  );
+  assert.match(evalRun.stdout, /"feedback": "bad"/);
+  assert.deepEqual(paths(), ["POST /api/agent/eval-feedback"]);
+  assert.equal(businessCalls()[0].body?.action, "bad");
+  assert.equal(businessCalls()[0].body?.eventId, 6);
+  assert.equal(businessCalls()[0].body?.expected?.wikiSlugs?.[0], "llamaos-weekly-2026-06-17");
 
   resetCalls();
   const enrichRun = await runCli(
@@ -398,9 +478,9 @@ try {
     homeDir,
   );
   assert.deepEqual(paths(), ["POST /api/deals/deal-cli/enrich"]);
-  assert.equal(calls[0].body?.apply, true);
-  assert.equal(calls[0].body?.dryRun, false);
-  assert.equal(calls[0].body?.executor, "server_agent");
+  assert.equal(businessCalls()[0].body?.apply, true);
+  assert.equal(businessCalls()[0].body?.dryRun, false);
+  assert.equal(businessCalls()[0].body?.executor, "server_agent");
 
   resetCalls();
   const agentRun = await runCli(
@@ -443,15 +523,16 @@ try {
   const bootstrapPayload = JSON.parse(mcpBootstrap.content?.[0]?.text ?? "{}");
   assert.equal(bootstrapPayload.ok, true);
   assert.deepEqual(paths(), ["GET /api/agent/manifest"]);
-  assert.equal(calls[0].query.limit, "2");
-  assert.ok(calls[0].query.clientVersion, "mcp agent_bootstrap passes clientVersion");
+  assert.equal(businessCalls()[0].query.limit, "2");
+  assert.ok(businessCalls()[0].query.clientVersion, "mcp agent_bootstrap passes clientVersion");
+  assert.equal(telemetryCalls()[0].body?.client, "mcp");
 
   resetCalls();
   const mcpSkills = await callMcpTool("skills_search", { q: "command", limit: 4 }, baseUrl, homeDir);
   const skillsPayload = JSON.parse(mcpSkills.content?.[0]?.text ?? "{}");
   assert.equal(skillsPayload.skills?.[0]?.slug, "llama-command");
   assert.deepEqual(paths(), ["GET /api/agent/skills"]);
-  assert.equal(calls[0].query.q, "command");
+  assert.equal(businessCalls()[0].query.q, "command");
 
   resetCalls();
   const mcpSkillRead = await callMcpTool("skills_read", { slug: "llama-command" }, baseUrl, homeDir);
