@@ -10,6 +10,7 @@ import {
   TOKEN_FILE,
   getAuthHeaders,
   getBaseUrl,
+  getLastAgentEvent,
   getToken,
   print,
   readBriefing,
@@ -157,6 +158,45 @@ function slugifyTitle(title) {
     .slice(0, 64);
   if (!slug || !/^[a-z0-9]/.test(slug)) return null;
   return slug;
+}
+
+function parseExpectedIds(raw) {
+  const text = typeof raw === "string" ? raw : "";
+  const expected = { dealIds: [], wikiSlugs: [], raw: [] };
+  for (const item of text.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const [kind, ...rest] = item.split(":");
+    const value = rest.join(":").trim();
+    if (kind === "deal" && value) expected.dealIds.push(value);
+    else if ((kind === "wiki" || kind === "slug") && value) expected.wikiSlugs.push(value);
+    else expected.raw.push(item);
+  }
+  return expected;
+}
+
+async function submitEvalFeedback(action, flags, queryText = "") {
+  const useLast = flags.last !== false;
+  const last = useLast ? getLastAgentEvent() : null;
+  const eventId =
+    flags.event && flags.event !== true
+      ? Number(flags.event)
+      : last?.lastEventId ?? null;
+  if ((action === "good" || action === "bad") && !eventId && !queryText) {
+    throw new Error(`Usage: llama eval ${action} [--last] [--reason "..."]`);
+  }
+  const body = {
+    action,
+    eventId: Number.isFinite(eventId) ? eventId : undefined,
+    query: queryText || undefined,
+    surface: flags.surface && flags.surface !== true ? String(flags.surface) : last?.lastSurface ?? undefined,
+    expected:
+      flags.expect && flags.expect !== true
+        ? parseExpectedIds(String(flags.expect))
+        : {},
+    reason: flags.reason && flags.reason !== true ? String(flags.reason) : undefined,
+    privacyLevel:
+      flags.privacy && flags.privacy !== true ? String(flags.privacy) : "internal",
+  };
+  return request("POST", "/api/agent/eval-feedback", body);
 }
 
 // Client-side fuzzy match — used as a fallback when the server hasn't yet
@@ -314,6 +354,8 @@ Agent onboarding (run once on first install):
   llama skills search "pipeline update" # discover relevant runtime skills
   llama skills show llama-pipeline      # read a skill from Command
   llama explain <url-or-object>         # explain Command URL/object status + lifecycle
+  llama eval good|bad --last            # mark the latest CLI/MCP result for eval
+  llama eval add "<query>" --expect wiki:<slug>|deal:<uuid>
 
 External pitch — talk to Llama Ventures' intake agent (no token required):
   llama pitch start --name "Jane Doe" --email "jane@acme.ai"
@@ -557,6 +599,7 @@ Common:
   llama agent bootstrap             live Llama OS skill manifest from Command
   llama skills search "<query>"     discover which skill to read
   llama explain <url-or-object>     explain Command URLs, 404s, deleted objects
+  llama eval bad --last              mark latest CLI/MCP result as an eval candidate
 
 Command groups — run \`llama help <group>\` for that group's commands:
   deal        create · show · feed · update · enrich · search · collaborators · links · delete
@@ -564,6 +607,7 @@ Command groups — run \`llama help <group>\` for that group's commands:
   facts       deal facts + skill corrections (the sourced, trust-rated layer)
   timeline    timeline · posts · mentions
   wiki        cross-deal knowledge entries (markdown or HTML)
+  eval        mark real CLI/MCP searches good/bad or add a golden-query candidate
   memo        long-form HTML investment memo
   html        deal-specific HTML artifacts (/deals/<id>/browse/<slug>)
   pitch       external founder intake (no token needed)
@@ -1051,6 +1095,43 @@ async function main() {
       process.stdout.write(`${lines.join("\n")}\n`);
     }
     return;
+  }
+
+  if (area === "eval") {
+    const sub = action;
+    if (sub === "good" || sub === "bad") {
+      const { flags, positional } = parseFlags(rest, [
+        "last",
+        "event",
+        "reason",
+        "expect",
+        "surface",
+        "privacy",
+      ]);
+      const q = positional.join(" ").trim();
+      print(await submitEvalFeedback(sub, flags, q));
+      return;
+    }
+    if (sub === "add") {
+      const { flags, positional } = parseFlags(rest, [
+        "event",
+        "expect",
+        "reason",
+        "surface",
+        "privacy",
+      ]);
+      const q = positional.join(" ").trim();
+      if (!q && !flags.event) {
+        throw new Error(
+          `Usage: llama eval add "<query>" --surface deal|wiki --expect wiki:<slug>|deal:<uuid>`,
+        );
+      }
+      print(await submitEvalFeedback("add", flags, q));
+      return;
+    }
+    throw new Error(
+      "Usage: llama eval good|bad [--last] [--reason ...] OR llama eval add \"<query>\" --expect wiki:<slug>|deal:<uuid>",
+    );
   }
 
   // `llama pitch ...` — external founder-pitch family. No Llama token

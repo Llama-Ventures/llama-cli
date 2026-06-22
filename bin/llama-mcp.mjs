@@ -11,7 +11,14 @@ import { createRequire } from "module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getAuthHeaders, readBriefing, request, requestSse } from "../lib/client.mjs";
+import {
+  getAuthHeaders,
+  getLastAgentEvent,
+  readBriefing,
+  request,
+  requestSse,
+  setClientRuntime,
+} from "../lib/client.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -22,6 +29,8 @@ import {
   startExternalSession,
   uploadExternalFile,
 } from "../lib/external.mjs";
+
+setClientRuntime({ client: "mcp" });
 
 // Wrap a request() call into the MCP CallToolResult shape. Catches errors
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
@@ -54,6 +63,20 @@ function splitSources(value) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function expectedIds(value) {
+  const expected = { dealIds: [], wikiSlugs: [], raw: [] };
+  if (!value) return expected;
+  const items = Array.isArray(value) ? value : String(value).split(",");
+  for (const item of items.map((s) => String(s).trim()).filter(Boolean)) {
+    const [kind, ...rest] = item.split(":");
+    const id = rest.join(":").trim();
+    if (kind === "deal" && id) expected.dealIds.push(id);
+    else if ((kind === "wiki" || kind === "slug") && id) expected.wikiSlugs.push(id);
+    else expected.raw.push(item);
+  }
+  return expected;
 }
 
 function buildEnrichmentAgentMessage(args = {}) {
@@ -212,6 +235,41 @@ server.registerTool(
     params.set("clientVersion", PKG_VERSION);
     if (limit) params.set("limit", String(limit));
     return callApi("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
+  }
+);
+
+server.registerTool(
+  "record_eval_feedback",
+  {
+    description:
+      "Mark the latest llama CLI/MCP result as good/bad or add a real query " +
+      "to the Golden Query Eval candidate pool. Use when the user says a " +
+      "Llama Command search/result was right, wrong, missing a source, or should be regression-tested.",
+    inputSchema: {
+      action: z.enum(["good", "bad", "add"]).describe("feedback action"),
+      eventId: z.number().optional().describe("agent_client_events id; defaults to latest local event"),
+      query: z.string().optional().describe("required for manual add when no source event is available"),
+      surface: z.string().optional().describe("deal, wiki, activity, people, or manual"),
+      expect: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe("expected ids like wiki:llamaos-weekly-2026-06-17 or deal:<uuid>"),
+      reason: z.string().optional().describe("why this was good/bad or should be tracked"),
+      privacyLevel: z.string().optional().describe("default internal"),
+    },
+  },
+  async ({ action, eventId, query, surface, expect, reason, privacyLevel }) => {
+    const last = getLastAgentEvent();
+    const body = {
+      action,
+      eventId: eventId ?? last?.lastEventId,
+      query,
+      surface: surface ?? last?.lastSurface,
+      expected: expectedIds(expect),
+      reason,
+      privacyLevel: privacyLevel ?? "internal",
+    };
+    return callApi("POST", "/api/agent/eval-feedback", body);
   }
 );
 

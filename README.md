@@ -226,6 +226,8 @@ llama agent bootstrap
 llama skills search "wiki delete tombstone"
 llama skills show llama-command
 llama explain https://command.llamaventures.vc/wiki/some-page
+llama eval bad --last --reason "missed the llamaos weekly note"
+llama eval add "last week llama dev weekly" --expect wiki:llamaos-weekly-2026-06-17
 
 # Wiki
 llama wiki search "<query>"
@@ -262,10 +264,31 @@ agents can pattern-match without parsing prose.
 
 ---
 
+### Golden Query Eval feedback
+
+The CLI and MCP server send lightweight client telemetry to Command for each
+authenticated request: client kind/version, detected agent client, local session
+id, normalized command, sanitized args, canonical result ids, status, latency,
+and bounded summaries. It records what Llama Command was asked to do, not the
+user's private Claude Code/Codex/Cursor conversation or local files.
+
+Search commands automatically become eval candidates. Agents can mark the latest
+result explicitly:
+
+```bash
+llama eval good --last
+llama eval bad --last --reason "wrong top wiki"
+llama eval add "AI陪伴" --surface deal --expect deal:<uuid>
+```
+
+MCP-native agents use `record_eval_feedback` for the same flow.
+
+---
+
 ## MCP server
 
 The bundled `llama-mcp` is a **stdio Model Context Protocol** server exposing
-**56 typed tools** that mirror the most-used CLI surface. Every tool is named
+typed tools that mirror the most-used CLI surface. Every tool is named
 and scoped — there is no generic API passthrough, by design (a public-package
 escape hatch reachable from a prompt-injectable agent context is exactly the
 shape we want to avoid).
