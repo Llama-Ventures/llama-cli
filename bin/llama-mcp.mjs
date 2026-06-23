@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   getAuthHeaders,
+  getBaseUrl,
   getLastAgentEvent,
   readBriefing,
   request,
@@ -54,6 +55,10 @@ function textResult(text, isError = false) {
     content: [{ type: "text", text }],
     ...(isError ? { isError: true } : {}),
   };
+}
+
+function jsonResult(value, isError = false) {
+  return textResult(JSON.stringify(value, null, 2), isError);
 }
 
 function splitSources(value) {
@@ -1379,8 +1384,205 @@ server.registerTool(
 // All html_* tools take an optional documentSlug param. Default 'main'.
 // Each deal can hold multiple named documents (different HTMLs); use
 // html_docs_list to discover slugs.
+const INLINE_HTML_UPLOAD_LIMIT = 50 * 1024;
+const MAX_HTML_BYTES = 5 * 1024 * 1024;
+const MAX_ASSET_BYTES = 50 * 1024 * 1024;
+const MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
+
 function htmlUrl(dealId, slug) {
   return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug ?? "main")}/html`;
+}
+
+function looksLikeHtml(html) {
+  const head = String(html || "").trim().slice(0, 256).toLowerCase();
+  return head.startsWith("<!doctype html") || head.startsWith("<html");
+}
+
+function mimeForAsset(path) {
+  const ext = (String(path).split(".").pop() || "").toLowerCase();
+  return (
+    {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      ico: "image/x-icon",
+      avif: "image/avif",
+      css: "text/css",
+      js: "text/javascript",
+      json: "application/json",
+      woff: "font/woff",
+      woff2: "font/woff2",
+      ttf: "font/ttf",
+      otf: "font/otf",
+      mp4: "video/mp4",
+      webm: "video/webm",
+      pdf: "application/pdf",
+    }[ext] || "application/octet-stream"
+  );
+}
+
+async function detectSiblingAssetsDir(filePath) {
+  const { existsSync, statSync } = await import("node:fs");
+  const { dirname, basename, extname, join } = await import("node:path");
+  const dir = dirname(filePath);
+  const stem = basename(filePath, extname(filePath));
+  const candidates = [
+    `${stem}_files`,
+    `${stem} files`,
+    `${basename(filePath)}_files`,
+  ];
+  for (const name of candidates) {
+    const p = join(dir, name);
+    if (existsSync(p) && statSync(p).isDirectory()) return p;
+  }
+  return null;
+}
+
+async function collectAssets(assetsRoot) {
+  const { readFileSync, readdirSync, statSync } = await import("node:fs");
+  const { join, relative, sep, basename } = await import("node:path");
+  const rootStat = statSync(assetsRoot);
+  if (!rootStat.isDirectory()) {
+    throw new Error(`assetsDir must point to a directory: ${assetsRoot}`);
+  }
+  const collected = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const absPath = join(dir, name);
+      const st = statSync(absPath);
+      if (st.isDirectory()) {
+        walk(absPath);
+      } else if (st.isFile()) {
+        const relPath = relative(assetsRoot, absPath).split(sep).join("/");
+        collected.push({ absPath, relPath, bytes: st.size });
+      }
+    }
+  };
+  walk(assetsRoot);
+  if (collected.length === 0) {
+    throw new Error(`assetsDir is empty: ${assetsRoot}`);
+  }
+  const rootName = basename(assetsRoot);
+  const looksLikeSavePageDir = /[_ ]files$/i.test(rootName);
+  const finalPaths = looksLikeSavePageDir
+    ? collected.map((c) => ({ ...c, relPath: `${rootName}/${c.relPath}` }))
+    : collected;
+  let totalBytes = 0;
+  for (const item of finalPaths) {
+    if (item.relPath.split("/").some((seg) => seg === "..")) {
+      throw new Error(`asset path "${item.relPath}" contains "..", refused`);
+    }
+    if (item.bytes > MAX_ASSET_BYTES) {
+      throw new Error(
+        `asset "${item.relPath}" is ${item.bytes} bytes; cap is ${MAX_ASSET_BYTES}`,
+      );
+    }
+    totalBytes += item.bytes;
+    if (totalBytes > MAX_BUNDLE_BYTES) {
+      throw new Error(`total asset bytes exceeds ${MAX_BUNDLE_BYTES}`);
+    }
+  }
+  return {
+    assets: finalPaths.map((item) => ({
+      ...item,
+      data: readFileSync(item.absPath),
+      contentType: mimeForAsset(item.relPath),
+    })),
+    totalBytes,
+  };
+}
+
+async function uploadHtmlFromFile({
+  dealId,
+  filePath,
+  documentSlug,
+  source = "agent",
+  assetsDir,
+  autoDetectAssets = true,
+  verify = true,
+}) {
+  const { readFileSync, statSync } = await import("node:fs");
+  const st = statSync(filePath);
+  if (!st.isFile()) throw new Error(`filePath must point to a file: ${filePath}`);
+  const html = readFileSync(filePath, "utf8");
+  if (!html.trim()) throw new Error("HTML body is empty.");
+  const htmlBytes = Buffer.byteLength(html, "utf8");
+  if (htmlBytes > MAX_HTML_BYTES) {
+    throw new Error(
+      `HTML body is ${(htmlBytes / 1024 / 1024).toFixed(2)} MB; cap is 5 MB.`,
+    );
+  }
+  if (!looksLikeHtml(html)) {
+    throw new Error("HTML must start with <!doctype html> or <html.");
+  }
+
+  let effectiveAssetsDir = assetsDir || null;
+  if (!effectiveAssetsDir && autoDetectAssets !== false) {
+    effectiveAssetsDir = await detectSiblingAssetsDir(filePath);
+  }
+
+  let body;
+  if (!effectiveAssetsDir) {
+    body = await request("PUT", htmlUrl(dealId, documentSlug), { html, source });
+  } else {
+    const { assets, totalBytes } = await collectAssets(effectiveAssetsDir);
+    const form = new FormData();
+    form.append("html", html);
+    form.append("source", source);
+    for (const asset of assets) {
+      form.append(
+        `asset:${asset.relPath}`,
+        new Blob([asset.data], { type: asset.contentType }),
+        asset.relPath,
+      );
+    }
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${getBaseUrl()}${htmlUrl(dealId, documentSlug)}`, {
+      method: "PUT",
+      headers,
+      body: form,
+    });
+    body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
+      );
+    }
+    body = { ...body, asset_bytes: body.asset_bytes ?? totalBytes };
+  }
+
+  let verified = { ok: false, skipped: true };
+  if (verify !== false) {
+    const latest = await request("GET", htmlUrl(dealId, documentSlug));
+    if (latest?.empty) throw new Error("verification failed: document came back empty after upload");
+    if (body?.version != null && Number(latest.version) !== Number(body.version)) {
+      throw new Error(`verification failed: expected version ${body.version}, got ${latest.version}`);
+    }
+    if (body?.bytes != null && latest.bytes != null && Number(latest.bytes) !== Number(body.bytes)) {
+      throw new Error(`verification failed: expected ${body.bytes} bytes, got ${latest.bytes}`);
+    }
+    verified = {
+      ok: true,
+      version: latest.version,
+      bytes: latest.bytes,
+      created_at: latest.created_at,
+    };
+  }
+
+  return {
+    ok: true,
+    document_slug: documentSlug || "main",
+    version: body?.version,
+    bytes: body?.bytes ?? verified.bytes ?? htmlBytes,
+    asset_count: body?.asset_count,
+    asset_bytes: body?.asset_bytes,
+    assets_dir: effectiveAssetsDir,
+    verified,
+    viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(documentSlug || "main")}`,
+  };
 }
 
 server.registerTool(
@@ -1424,7 +1626,9 @@ server.registerTool(
       "Creates a NEW version row — the previous version is retained " +
       "and restorable. Triggers SSE push so any open viewer auto- " +
       "refreshes. Constraints: HTML body MUST start with " +
-      "<!doctype html> or <html (case-insensitive); max 5 MB. ALWAYS " +
+      "<!doctype html> or <html (case-insensitive); max 5 MB. Reliability guard: " +
+      "this inline-string tool refuses bodies over 50KB; use html_upload_file " +
+      "or `llama html publish --file` for memos/reports. ALWAYS " +
       "call html_show first if anything exists — replace only the " +
       "relevant section, don't lose unrelated content. Source defaults " +
       "to 'agent' for MCP-originated uploads. Pass documentSlug to " +
@@ -1442,11 +1646,62 @@ server.registerTool(
         .describe("default: agent"),
     },
   },
-  async ({ dealId, html, documentSlug, source }) =>
-    callApi("PUT", htmlUrl(dealId, documentSlug), {
+  async ({ dealId, html, documentSlug, source }) => {
+    const bytes = Buffer.byteLength(String(html || ""), "utf8");
+    if (bytes > INLINE_HTML_UPLOAD_LIMIT) {
+      return textResult(
+        `Error: html_upload received ${(bytes / 1024).toFixed(1)} KB of inline HTML. ` +
+          `For reliability, do not pass large HTML through MCP tool arguments. ` +
+          `Use html_upload_file({ dealId, filePath, documentSlug }) or run ` +
+          `\`llama html publish <deal-id-or-name> --file <path> --doc <slug>\` instead.`,
+        true,
+      );
+    }
+    return callApi("PUT", htmlUrl(dealId, documentSlug), {
       html,
       source: source ?? "agent",
-    })
+    });
+  }
+);
+
+server.registerTool(
+  "html_upload_file",
+  {
+    description:
+      "Agent-safe HTML upload from a LOCAL FILE PATH. Use this instead " +
+      "of html_upload for any substantial memo/report; it avoids moving " +
+      "large HTML through the model/tool-call context. Reads filePath on " +
+      "the machine running this MCP server, preflights size/HTML shape, " +
+      "optionally auto-detects a sibling *_files asset folder, uploads, " +
+      "then reads the document back to verify version/bytes. For a higher " +
+      "level CLI flow that can resolve deal names and choose create/update, " +
+      "run `llama html publish <deal-id-or-name> --file <path>`.",
+    inputSchema: {
+      dealId: z.string().describe("deal uuid"),
+      filePath: z.string().describe("absolute or relative local filesystem path to the HTML file"),
+      documentSlug: z.string().optional().describe("default: 'main'"),
+      source: z.enum(["web", "cli", "agent"]).optional().describe("default: agent"),
+      assetsDir: z.string().optional().describe("optional local directory of relative assets"),
+      autoDetectAssets: z.boolean().optional().describe("default true; detects sibling *_files folders"),
+      verify: z.boolean().optional().describe("default true; read-after-write verification"),
+    },
+  },
+  async ({ dealId, filePath, documentSlug, source, assetsDir, autoDetectAssets, verify }) => {
+    try {
+      const result = await uploadHtmlFromFile({
+        dealId,
+        filePath,
+        documentSlug,
+        source: source ?? "agent",
+        assetsDir,
+        autoDetectAssets,
+        verify,
+      });
+      return jsonResult(result);
+    } catch (err) {
+      return textResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
+  },
 );
 
 server.registerTool(

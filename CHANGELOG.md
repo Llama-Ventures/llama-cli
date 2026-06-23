@@ -6,6 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- **`llama html publish <deal-id-or-name> --file <path>`** — agent-safe
+  HTML artifact publishing for deal pages. It resolves deal names, preflights
+  file size/HTML shape, chooses a non-overwriting slug by default, auto-detects
+  sibling `*_files` asset folders, uploads, and performs read-after-write
+  verification before returning the viewer URL.
+- **`html_upload_file` MCP tool** — file-path based HTML upload for MCP-native
+  agents, including preflight checks, optional asset-folder upload, and
+  read-after-write verification.
+
+### Changed
+- MCP `html_upload` now refuses inline HTML bodies over 50KB and instructs
+  agents to use `html_upload_file` or `llama html publish --file`. This avoids
+  moving large memos through model/tool-call context, the main reliability
+  failure mode for long IC memos.
+- `AGENT_BRIEFING.md` now teaches coding agents to use file-path based HTML
+  publishing as the default Llama Command route.
+
 ## [1.16.0] - 2026-06-22
 
 ### Added

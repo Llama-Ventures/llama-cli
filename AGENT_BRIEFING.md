@@ -82,9 +82,9 @@ HTML / thesis / artifact in hand
   └──────────────┬──────────────────────────────────┘
                  │
         yes ────►│  → Llama Command DEAL page
-                 │    `llama html upload <dealId> --new --title "..." --file <path>`
+                 │    `llama html publish <deal-id-or-name> --file <path> --title "..."`
                  │    Renders at /deals/<id>/browse/<slug>.
-                 │    Use --doc <slug> + --file to update an existing one.
+                 │    Use --doc <slug> or --update when updating an existing one.
                  │
         no  ────►│  Is it cross-deal / institutional knowledge?
                  │   (sector landscape · market map · framework · firm-level
@@ -138,7 +138,7 @@ The table below details the exact CLI for each destination.
 |---|---|---|
 | Deal metadata (status, stage, valuation, founders, notes, etc.) | Pipeline (Postgres) | `llama deal create` / `llama deal update` |
 | Brief blocks (text / link / embed / callout) | Pipeline | `llama brief add-text` / `add-link` / `add-callout` |
-| **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | Default path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". **You MUST declare intent — "new artifact" vs "update existing":**<br><br>**New artifact:** `llama html upload <dealId> --new --title "<artifact name>" --file <path>` (CLI slugifies the title; pass `--doc <slug>` to override).<br>**Update existing:** `llama html upload <dealId> --doc <slug> --file <path>` (slug must already exist — run `llama html docs <dealId>` first to see what's there).<br><br>The bare form `llama html upload <id> --file <path>` REFUSES if `main` already has content. Do NOT default to Netlify for internal pages. |
+| **HTML artifact, internal — IC report, dashboard, market map, 2×2, any hand-authored page** | **Llama Command native** (Postgres + sandboxed iframe at `/deals/<id>/browse/<slug>`) | Default path when the user says "deploy to llama", "deploy to llama command", "部署到 llama command", "put this HTML on the deal page", "在 deal 里看这个". **Preferred agent-safe path:** `llama html publish <deal-id-or-name> --file <path> --title "<artifact name>" [--doc <slug>]`. It resolves deal names, avoids silent overwrite, auto-detects sibling asset folders, uploads, then verifies by reading the version back.<br><br>Low-level explicit path remains available: new artifact `llama html upload <dealId> --new --title "<artifact name>" --file <path>`; update existing `llama html upload <dealId> --doc <slug> --file <path>`.<br><br>Never paste large HTML into chat or MCP tool arguments. Use file paths. Do NOT default to Netlify for internal pages. |
 | HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
 | Insights, decisions, framework improvements | Wiki (markdown) | `llama wiki save <slug> --content "..."` (with attribution — see below) |
 | **HTML wiki entry — standalone HTML page hosted at `/wiki/<slug>`** (sector landscape, market map, dashboard, hand-styled thesis page) | **Wiki (HTML)** | `llama wiki save <slug> --title "..." --file <path.html> --sources "..."`. Auto-detects content_type=html from extension. Public page is full-viewport sandboxed iframe takeover (no wiki chrome). Sources/status/title still required; appears in `wiki search` + backlinks. Use when the user says "deploy this HTML to wiki", "wiki 词条", "make this page a wiki entry". HTML must be self-contained (inline CSS/JS, image data URIs or external URLs) — asset bundles aren't supported on wiki yet. **Native comments + working in-page (#) anchor links are injected automatically** — readers discuss inline and the table of contents scrolls; you don't wire anything up (pages that already embed the comment widget are left as-is). |
@@ -229,6 +229,10 @@ llama brief add-callout <dealId> --tone insight|warning|info|success --heading "
 # Default path when user says "deploy to llama / 部署到 llama command / put this HTML on the deal page".
 # Each deal can host many slug-scoped artifacts. ALWAYS declare intent: new vs update.
 
+# Agent-safe default: pass a file path, not inline HTML.
+llama html publish "<deal name or id>" --file ./report.html --title "Consumer-Facing Thesis"
+llama html publish "<deal name or id>" --file ./report.html --doc thesis --update
+
 llama html docs <dealId>                                                 # list slugs currently on this deal
 llama html docs create <dealId> <slug> [--title "..."]                   # pre-create a slot (optional; upload --new also creates)
 llama html docs archive <dealId> <slug>                                  # soft-archive a doc
@@ -247,6 +251,8 @@ llama html restore <dealId> <version> [--doc <slug>]                     # promo
 llama html reset <dealId> [--doc <slug>]                                 # soft-delete latest (browse reverts to empty)
 
 # Safety contract (since 1.5.0):
+#  - Coding agents should use `llama html publish ... --file <path>` for memos/reports.
+#    Do not move large HTML through chat text or MCP `html_upload` string args.
 #  - Bare `llama html upload <id> --file X` REFUSES if 'main' already has content.
 #    The error names the existing artifact and suggests --doc main / --new --title "...".
 #  - --slug is silently accepted as an alias for --doc (agent-confusion mitigation).

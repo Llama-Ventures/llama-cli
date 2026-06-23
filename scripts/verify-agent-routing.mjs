@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,12 @@ assert.equal(
 const calls = [];
 let threadSeq = 0;
 let eventSeq = 0;
+const htmlDocs = new Map();
+
+function docsForDeal(dealId) {
+  if (!htmlDocs.has(dealId)) htmlDocs.set(dealId, new Map());
+  return htmlDocs.get(dealId);
+}
 
 async function readJson(req) {
   let raw = "";
@@ -196,6 +202,92 @@ const server = createServer(async (req, res) => {
         },
       ]);
       return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/deals") {
+      writeJson(res, {
+        deals: [
+          {
+            uuid: "deal-html",
+            companyName: "Acme AI",
+            founders: "Ada Founder",
+            description: "mock deal for HTML upload tests",
+          },
+        ],
+        total: 1,
+        limit: Number(url.searchParams.get("limit") || 200),
+        offset: 0,
+      });
+      return;
+    }
+
+    const docsMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/documents$/);
+    if (docsMatch) {
+      const dealId = decodeURIComponent(docsMatch[1]);
+      if (dealId !== "deal-html") {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "deal not found" }));
+        return;
+      }
+      if (req.method === "GET") {
+        const docs = Array.from(docsForDeal(dealId).entries()).map(([slug, doc]) => ({
+          slug,
+          title: doc.title,
+          latest_version: doc.version ?? null,
+          latest_updated_at: doc.version ? "2026-06-23T04:00:00Z" : null,
+        }));
+        writeJson(res, { documents: docs });
+        return;
+      }
+      if (req.method === "POST") {
+        const docs = docsForDeal(dealId);
+        const slug = body?.slug;
+        docs.set(slug, {
+          ...(docs.get(slug) || {}),
+          title: body?.title || slug,
+        });
+        writeJson(res, { ok: true, slug, title: body?.title || slug });
+        return;
+      }
+    }
+
+    const htmlMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/documents\/([^/]+)\/html$/);
+    if (htmlMatch) {
+      const dealId = decodeURIComponent(htmlMatch[1]);
+      const slug = decodeURIComponent(htmlMatch[2]);
+      const docs = docsForDeal(dealId);
+      if (req.method === "PUT") {
+        const html = typeof body?.html === "string" ? body.html : "";
+        const previous = docs.get(slug) || { title: slug, version: 0 };
+        const version = Number(previous.version || 0) + 1;
+        const bytes = Buffer.byteLength(html, "utf8");
+        docs.set(slug, {
+          ...previous,
+          html,
+          version,
+          bytes,
+          source: body?.source || "cli",
+        });
+        writeJson(res, { ok: true, document_slug: slug, version, bytes });
+        return;
+      }
+      if (req.method === "GET") {
+        const doc = docs.get(slug);
+        if (!doc?.html) {
+          writeJson(res, { empty: true });
+          return;
+        }
+        writeJson(res, {
+          empty: false,
+          document_slug: slug,
+          version: doc.version,
+          bytes: doc.bytes,
+          source: doc.source,
+          created_at: "2026-06-23T04:00:00Z",
+          html: doc.html,
+        });
+        return;
+      }
     }
 
     if (req.method === "POST" && /^\/api\/deals\/[^/]+\/threads$/.test(url.pathname)) {
@@ -495,6 +587,45 @@ try {
     messageIncludes: ["custom server task"],
   });
 
+  const largeHtmlPath = path.join(homeDir, "full-memo.html");
+  const largeHtml =
+    "<!doctype html><html><head><title>Full Memo</title></head><body>" +
+    `<p>${"agent-safe upload ".repeat(5000)}</p>` +
+    "</body></html>";
+  await writeFile(largeHtmlPath, largeHtml);
+
+  resetCalls();
+  const publishRun = await runCli(
+    [
+      "html",
+      "publish",
+      "Acme AI",
+      "--file",
+      largeHtmlPath,
+      "--title",
+      "Full Memo",
+      "--doc",
+      "full-memo",
+    ],
+    baseUrl,
+    homeDir,
+  );
+  const publishPayload = JSON.parse(publishRun.stdout);
+  assert.equal(publishPayload.ok, true);
+  assert.equal(publishPayload.deal_uuid, "deal-html");
+  assert.equal(publishPayload.document_slug, "full-memo");
+  assert.equal(publishPayload.verified?.ok, true);
+  assert.deepEqual(paths(), [
+    "GET /api/deals/Acme%20AI/documents",
+    "GET /api/deals",
+    "GET /api/deals/deal-html/documents",
+    "POST /api/deals/deal-html/documents",
+    "PUT /api/deals/deal-html/documents/full-memo/html",
+    "GET /api/deals/deal-html/documents/full-memo/html",
+  ]);
+  assert.equal(businessCalls()[4].body?.html, largeHtml);
+  assert.equal(businessCalls()[4].body?.source, "cli");
+
   resetCalls();
   const mcpResult = await callMcpTool(
     "deal_enrich",
@@ -517,6 +648,40 @@ try {
   assert.equal(payload.ok, true);
   assert.equal(payload.threadId, "thread-1");
   assert.equal(payload.text, "agent done");
+
+  resetCalls();
+  const inlineGuard = await callMcpTool(
+    "html_upload",
+    {
+      dealId: "deal-html",
+      documentSlug: "inline-too-large",
+      html: largeHtml,
+    },
+    baseUrl,
+    homeDir,
+  );
+  assert.equal(inlineGuard.isError, true);
+  assert.match(inlineGuard.content?.[0]?.text ?? "", /Use html_upload_file/);
+  assert.deepEqual(paths(), []);
+
+  resetCalls();
+  const mcpFile = await callMcpTool(
+    "html_upload_file",
+    {
+      dealId: "deal-html",
+      documentSlug: "mcp-file",
+      filePath: largeHtmlPath,
+    },
+    baseUrl,
+    homeDir,
+  );
+  const mcpFilePayload = JSON.parse(mcpFile.content?.[0]?.text ?? "{}");
+  assert.equal(mcpFilePayload.ok, true);
+  assert.equal(mcpFilePayload.verified?.ok, true);
+  assert.deepEqual(paths(), [
+    "PUT /api/deals/deal-html/documents/mcp-file/html",
+    "GET /api/deals/deal-html/documents/mcp-file/html",
+  ]);
 
   resetCalls();
   const mcpBootstrap = await callMcpTool("agent_bootstrap", { limit: 2 }, baseUrl, homeDir);

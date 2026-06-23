@@ -535,6 +535,11 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
   Each one has a stable slug. UPLOAD must declare intent — update an existing
   artifact or add a new one — to avoid silent overwrites.
 
+  Agent-safe publish path (recommended for Claude Code / Codex / Cursor):
+    llama html publish <deal-id-or-name> --file <path> [--title "..."] [--doc <slug>]
+      # Defaults to NEW doc unless --doc points at an existing slug; verifies after upload.
+      # Auto-detects sibling *_files asset folders unless --no-auto-assets is set.
+
   List existing artifacts:
     llama html docs <dealId>                                  # who-has-what
     llama html docs create <dealId> <slug> [--title "..."]    # pre-create a slot
@@ -2524,8 +2529,249 @@ Routing — is this the right command?
     // --doc <slug> selects which named document on the deal (default 'main').
     // Slugs match /^[a-z0-9][a-z0-9_-]{0,63}$/. Use `llama html docs <dealId>`
     // to list available slugs.
+    const MAX_HTML_BYTES = 5 * 1024 * 1024;
+    const MAX_ASSET_BYTES = 50 * 1024 * 1024;
+    const MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
+
     function htmlEndpoint(dealId, slug) {
       return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}/html`;
+    }
+
+    function looksLikeHtml(html) {
+      const head = String(html || "").trim().slice(0, 256).toLowerCase();
+      return head.startsWith("<!doctype html") || head.startsWith("<html");
+    }
+
+    function extractHtmlTitle(html) {
+      const title = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+      if (!title) return null;
+      const clean = title.replace(/\s+/g, " ").trim();
+      return clean ? clean.slice(0, 200) : null;
+    }
+
+    function docHasHtml(d) {
+      return Boolean(d && (d.latest_version > 0 || d.latest_updated_at));
+    }
+
+    function findDocBySlug(docs, slug) {
+      return docs.find((d) => d && d.slug === slug) || null;
+    }
+
+    function nextAvailableSlug(base, docs) {
+      let candidate = base;
+      let suffix = 2;
+      while (findDocBySlug(docs, candidate)) {
+        candidate = `${base.slice(0, Math.max(1, 64 - String(suffix).length - 1))}-${suffix}`;
+        suffix += 1;
+      }
+      return candidate;
+    }
+
+    function mimeForAsset(path) {
+      const ext = (String(path).split(".").pop() || "").toLowerCase();
+      return (
+        {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          gif: "image/gif",
+          webp: "image/webp",
+          svg: "image/svg+xml",
+          ico: "image/x-icon",
+          avif: "image/avif",
+          css: "text/css",
+          js: "text/javascript",
+          json: "application/json",
+          woff: "font/woff",
+          woff2: "font/woff2",
+          ttf: "font/ttf",
+          otf: "font/otf",
+          mp4: "video/mp4",
+          webm: "video/webm",
+          pdf: "application/pdf",
+        }[ext] || "application/octet-stream"
+      );
+    }
+
+    async function listHtmlDocs(dealId) {
+      const docList = await request(
+        "GET",
+        `/api/deals/${encodeURIComponent(dealId)}/documents`,
+      );
+      return Array.isArray(docList?.documents) ? docList.documents : [];
+    }
+
+    async function resolveDealForHtmlPublish(dealRef) {
+      const ref = String(dealRef || "").trim();
+      if (!ref) throw new Error("deal id or name is required");
+      try {
+        await listHtmlDocs(ref);
+        return { dealId: ref, resolvedFrom: "id" };
+      } catch {
+        // Not a readable deal id; fall through to pipeline search.
+      }
+
+      const result = await searchDeals(ref, { limit: 10 });
+      const deals = Array.isArray(result?.deals) ? result.deals : [];
+      if (deals.length === 0) {
+        throw new Error(
+          `No deal matched "${ref}". Run \`llama deal search "${ref}"\` first and pass the exact deal id.`,
+        );
+      }
+      const exact = deals.filter(
+        (d) => String(d.companyName || "").toLowerCase() === ref.toLowerCase(),
+      );
+      const candidates = exact.length > 0 ? exact : deals;
+      if (candidates.length !== 1) {
+        const lines = candidates
+          .slice(0, 8)
+          .map((d) => `- ${d.companyName || "(unnamed)"} — ${d.uuid || d.id}`)
+          .join("\n");
+        throw new Error(
+          `Deal name "${ref}" matched multiple records. Re-run with the exact deal id:\n${lines}`,
+        );
+      }
+      const dealId = candidates[0]?.uuid || candidates[0]?.id;
+      if (!dealId) {
+        throw new Error(`Deal search matched "${ref}" but did not return a deal id.`);
+      }
+      return {
+        dealId,
+        dealName: candidates[0]?.companyName || ref,
+        resolvedFrom: "search",
+      };
+    }
+
+    async function detectSiblingAssetsDir(filePath) {
+      const { existsSync, statSync } = await import("fs");
+      const { dirname, basename, extname, join } = await import("path");
+      const dir = dirname(filePath);
+      const ext = extname(filePath);
+      const stem = basename(filePath, ext);
+      const candidates = [
+        `${stem}_files`,
+        `${stem} files`,
+        `${basename(filePath)}_files`,
+      ];
+      for (const name of candidates) {
+        const p = join(dir, name);
+        if (existsSync(p) && statSync(p).isDirectory()) return p;
+      }
+      return null;
+    }
+
+    async function collectAssets(assetsRoot) {
+      const { readFileSync, readdirSync, statSync } = await import("fs");
+      const { join, relative, sep, basename } = await import("path");
+      const rootStat = statSync(assetsRoot);
+      if (!rootStat.isDirectory()) {
+        throw new Error(`assets path must be a directory: ${assetsRoot}`);
+      }
+      const collected = [];
+      const walk = (dir) => {
+        for (const name of readdirSync(dir)) {
+          const absPath = join(dir, name);
+          const st = statSync(absPath);
+          if (st.isDirectory()) {
+            walk(absPath);
+          } else if (st.isFile()) {
+            const relPath = relative(assetsRoot, absPath).split(sep).join("/");
+            collected.push({ absPath, relPath, bytes: st.size });
+          }
+        }
+      };
+      walk(assetsRoot);
+      if (collected.length === 0) {
+        throw new Error(`assets directory is empty: ${assetsRoot}`);
+      }
+      const rootName = basename(assetsRoot);
+      const looksLikeSavePageDir = /[_ ]files$/i.test(rootName);
+      const finalPaths = looksLikeSavePageDir
+        ? collected.map((c) => ({ ...c, relPath: `${rootName}/${c.relPath}` }))
+        : collected;
+      let totalBytes = 0;
+      for (const item of finalPaths) {
+        if (item.relPath.split("/").some((seg) => seg === "..")) {
+          throw new Error(`asset path "${item.relPath}" contains "..", refused`);
+        }
+        if (item.bytes > MAX_ASSET_BYTES) {
+          throw new Error(
+            `asset "${item.relPath}" is ${item.bytes} bytes; cap is ${MAX_ASSET_BYTES}`,
+          );
+        }
+        totalBytes += item.bytes;
+        if (totalBytes > MAX_BUNDLE_BYTES) {
+          throw new Error(`total asset bytes exceeds ${MAX_BUNDLE_BYTES}`);
+        }
+      }
+      return {
+        assets: finalPaths.map((item) => ({
+          ...item,
+          data: readFileSync(item.absPath),
+          contentType: mimeForAsset(item.relPath),
+        })),
+        totalBytes,
+      };
+    }
+
+    async function uploadHtmlPayload({ dealId, slug, html, source, assetsDir }) {
+      if (!assetsDir) {
+        return request("PUT", htmlEndpoint(dealId, slug), { html, source });
+      }
+      const { assets, totalBytes } = await collectAssets(assetsDir);
+      const form = new FormData();
+      form.append("html", html);
+      form.append("source", source);
+      for (const asset of assets) {
+        form.append(
+          `asset:${asset.relPath}`,
+          new Blob([asset.data], { type: asset.contentType }),
+          asset.relPath,
+        );
+      }
+      console.error(
+        `Uploading bundle: html ${Buffer.byteLength(html, "utf8")} bytes + ${assets.length} assets (${totalBytes} bytes)`,
+      );
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
+        method: "PUT",
+        headers,
+        body: form,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
+        );
+      }
+      return body;
+    }
+
+    async function verifyHtmlUpload({ dealId, slug, expectedVersion, expectedBytes }) {
+      const latest = await request("GET", htmlEndpoint(dealId, slug));
+      if (latest?.empty) {
+        throw new Error(`verification failed: ${slug} came back empty after upload`);
+      }
+      if (expectedVersion != null && Number(latest.version) !== Number(expectedVersion)) {
+        throw new Error(
+          `verification failed: expected version ${expectedVersion}, got ${latest.version}`,
+        );
+      }
+      if (
+        expectedBytes != null &&
+        latest.bytes != null &&
+        Number(latest.bytes) !== Number(expectedBytes)
+      ) {
+        throw new Error(
+          `verification failed: expected ${expectedBytes} bytes, got ${latest.bytes}`,
+        );
+      }
+      return {
+        ok: true,
+        version: latest.version,
+        bytes: latest.bytes,
+        created_at: latest.created_at,
+      };
     }
 
     // Surface a clean `linked_wiki` field on linked docs so the listing
@@ -2736,6 +2982,168 @@ Routing — is this the right command?
       // Stdout — supports `llama html show <id> > page.html` and piping
       // to e.g. `open -f -a Safari` for quick preview.
       process.stdout.write(html);
+      return;
+    }
+
+    // publish — agent-safe high-level upload path. The agent gives us a file
+    // path + a deal id/name; the CLI handles search, slug decisions, asset
+    // discovery, upload, and read-after-write verification.
+    if (sub === "publish") {
+      const dealRef = rest[0];
+      const knownFlags = [
+        "file", "title", "doc", "slug", "new", "update",
+        "assets", "no-auto-assets", "source", "no-verify",
+      ];
+      const { flags } = parseFlags(rest.slice(1), knownFlags);
+      if (!dealRef || !flags.file || flags.file === true) {
+        throw new Error(
+          "Usage: llama html publish <deal-id-or-name> --file PATH [--title \"...\"] [--doc <slug>] [--update|--new] [--assets DIR]",
+        );
+      }
+      if (flags.slug && !flags.doc) {
+        process.stderr.write("note: --slug accepted as alias for --doc.\n");
+        flags.doc = flags.slug;
+      }
+      const wantsNew = boolFlag(flags, "new");
+      const wantsUpdate = boolFlag(flags, "update");
+      if (wantsNew && wantsUpdate) {
+        throw new Error("Choose only one of --new or --update.");
+      }
+
+      const filePath = String(flags.file);
+      const { readFileSync, statSync } = await import("fs");
+      const { basename, extname } = await import("path");
+      const fileStat = statSync(filePath);
+      if (!fileStat.isFile()) {
+        throw new Error(`--file must point to a readable HTML file: ${filePath}`);
+      }
+      const html = readFileSync(filePath, "utf8");
+      if (!html.trim()) throw new Error("HTML body is empty.");
+      const htmlBytes = Buffer.byteLength(html, "utf8");
+      if (htmlBytes > MAX_HTML_BYTES) {
+        throw new Error(
+          `HTML body is ${(htmlBytes / 1024 / 1024).toFixed(2)} MB; cap is 5 MB. Put large media in an asset folder or Drive, not inline HTML.`,
+        );
+      }
+      if (!looksLikeHtml(html)) {
+        throw new Error("HTML must start with <!doctype html> or <html.");
+      }
+
+      const resolved = await resolveDealForHtmlPublish(dealRef);
+      const docs = await listHtmlDocs(resolved.dealId);
+      const explicitDoc =
+        typeof flags.doc === "string" && flags.doc.trim()
+          ? flags.doc.trim()
+          : null;
+      const title =
+        typeof flags.title === "string" && flags.title.trim()
+          ? flags.title.trim()
+          : extractHtmlTitle(html) || basename(filePath, extname(filePath));
+      let slug;
+      let mode;
+      let createdMetadata = false;
+
+      if (explicitDoc) {
+        if (!isValidDocSlug(explicitDoc)) {
+          throw new Error(
+            `slug "${explicitDoc}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
+          );
+        }
+        const existingDoc = findDocBySlug(docs, explicitDoc);
+        if (wantsNew && existingDoc) {
+          throw new Error(
+            `--new requested, but document "${explicitDoc}" already exists on this deal.`,
+          );
+        }
+        if (wantsUpdate && !existingDoc) {
+          throw new Error(
+            `--update requested, but document "${explicitDoc}" does not exist on this deal.`,
+          );
+        }
+        slug = explicitDoc;
+        mode = existingDoc && docHasHtml(existingDoc) ? "updated" : "created";
+        if (!existingDoc) createdMetadata = true;
+      } else {
+        const baseSlug = slugifyTitle(title) || slugifyTitle(basename(filePath, extname(filePath)));
+        if (!baseSlug) {
+          throw new Error(
+            "Could not derive a valid slug from the title or filename. Pass --doc <slug>.",
+          );
+        }
+        const existingDoc = findDocBySlug(docs, baseSlug);
+        if (wantsUpdate) {
+          if (!existingDoc) {
+            throw new Error(
+              `--update requested, but derived document "${baseSlug}" does not exist. Pass --doc <existing-slug> or drop --update to create a new doc.`,
+            );
+          }
+          slug = baseSlug;
+          mode = docHasHtml(existingDoc) ? "updated" : "created";
+        } else {
+          slug = existingDoc ? nextAvailableSlug(baseSlug, docs) : baseSlug;
+          mode = "created";
+          createdMetadata = true;
+          if (existingDoc) {
+            process.stderr.write(
+              `note: "${baseSlug}" already exists; publishing as new document "${slug}". Use --update or --doc ${baseSlug} to replace it.\n`,
+            );
+          }
+        }
+      }
+
+      if (createdMetadata) {
+        await request(
+          "POST",
+          `/api/deals/${encodeURIComponent(resolved.dealId)}/documents`,
+          { slug, title },
+        );
+      }
+
+      let assetsDir =
+        typeof flags.assets === "string" && flags.assets.trim()
+          ? flags.assets.trim()
+          : null;
+      if (!assetsDir && !boolFlag(flags, "no-auto-assets")) {
+        assetsDir = await detectSiblingAssetsDir(filePath);
+        if (assetsDir) {
+          process.stderr.write(`note: auto-detected asset folder ${assetsDir}\n`);
+        }
+      }
+      const source =
+        typeof flags.source === "string" && flags.source.trim()
+          ? flags.source.trim()
+          : "cli";
+      const uploaded = await uploadHtmlPayload({
+        dealId: resolved.dealId,
+        slug,
+        html,
+        source,
+        assetsDir,
+      });
+      const verification = boolFlag(flags, "no-verify")
+        ? { ok: false, skipped: true }
+        : await verifyHtmlUpload({
+            dealId: resolved.dealId,
+            slug,
+            expectedVersion: uploaded?.version,
+            expectedBytes: uploaded?.bytes,
+          });
+
+      print({
+        ok: true,
+        mode,
+        deal_uuid: resolved.dealId,
+        resolved_from: resolved.resolvedFrom,
+        deal_name: resolved.dealName,
+        document_slug: slug,
+        title,
+        version: uploaded?.version,
+        bytes: uploaded?.bytes ?? verification.bytes ?? htmlBytes,
+        asset_count: uploaded?.asset_count,
+        asset_bytes: uploaded?.asset_bytes,
+        verified: verification,
+        viewer: `${getBaseUrl()}/deals/${encodeURIComponent(resolved.dealId)}/browse/${encodeURIComponent(slug)}`,
+      });
       return;
     }
 
@@ -3141,7 +3549,7 @@ Routing — is this the right command?
     }
 
     throw new Error(
-      `Unknown html subcommand "${sub || ""}". Use: docs / link / unlink / show / upload / versions / restore / reset.`,
+      `Unknown html subcommand "${sub || ""}". Use: docs / link / unlink / show / publish / upload / versions / restore / reset.`,
     );
   }
 
