@@ -21,7 +21,9 @@ this project adheres to [Semantic Versioning](https://semver.org).
 ### Changed
 - HTML publishing now sends a per-attempt `client_upload_id` and verifies the
   server copy by `sha256` when Command returns it. Retrying the same failed
-  attempt with `--upload-id` avoids duplicate versions.
+  attempt with `--upload-id` avoids duplicate versions. JSON and multipart
+  uploads also send the same id as `X-Llama-Upload-Id` so server logs and
+  retry/debug paths can correlate the attempt.
 - MCP `html_upload` now refuses inline HTML bodies over 50KB and instructs
   agents to use `html_upload_file` or `llama html publish --file`. This avoids
   moving large memos through model/tool-call context, the main reliability

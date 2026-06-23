@@ -51,9 +51,9 @@ function normalizeUploadId(value) {
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
 // content so the calling agent sees a clean error string instead of the
 // MCP transport closing.
-async function callApi(method, path, body) {
+async function callApi(method, path, body, opts = {}) {
   try {
-    const result = await request(method, path, body);
+    const result = await request(method, path, body, opts);
     const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
     return { content: [{ type: "text", text }] };
   } catch (err) {
@@ -1546,6 +1546,8 @@ async function uploadHtmlFromFile({
       html,
       source,
       client_upload_id: uploadId,
+    }, {
+      headers: { "X-Llama-Upload-Id": uploadId },
     });
   } else {
     const { assets, totalBytes } = await collectAssets(effectiveAssetsDir);
@@ -1696,6 +1698,8 @@ server.registerTool(
       html,
       source: source ?? "agent",
       client_upload_id: uploadId,
+    }, {
+      headers: { "X-Llama-Upload-Id": uploadId },
     });
   }
 );

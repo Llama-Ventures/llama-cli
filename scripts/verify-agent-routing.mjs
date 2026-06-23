@@ -619,8 +619,12 @@ try {
   const largeHtmlPath = path.join(homeDir, "full-memo.html");
   const largeHtml =
     "<!doctype html><html><head><title>Full Memo</title></head><body>" +
-    `<p>${"agent-safe upload ".repeat(5000)}</p>` +
+    `<p>${"agent-safe upload ".repeat(18000)}</p>` +
     "</body></html>";
+  assert.ok(
+    Buffer.byteLength(largeHtml, "utf8") > 252 * 1024,
+    "routing test HTML must exceed the incident-sized 252KB memo",
+  );
   await writeFile(largeHtmlPath, largeHtml);
 
   resetCalls();
@@ -658,6 +662,7 @@ try {
   assert.equal(businessCalls()[4].body?.html, largeHtml);
   assert.equal(businessCalls()[4].body?.source, "cli");
   assert.equal(businessCalls()[4].body?.client_upload_id, publishPayload.client_upload_id);
+  assert.equal(businessCalls()[4].headers.uploadId, publishPayload.client_upload_id);
 
   resetCalls();
   const mcpResult = await callMcpTool(
@@ -719,6 +724,7 @@ try {
     "GET /api/deals/deal-html/documents/mcp-file/html",
   ]);
   assert.equal(businessCalls()[0].body?.client_upload_id, mcpFilePayload.client_upload_id);
+  assert.equal(businessCalls()[0].headers.uploadId, mcpFilePayload.client_upload_id);
 
   resetCalls();
   const mcpBootstrap = await callMcpTool("agent_bootstrap", { limit: 2 }, baseUrl, homeDir);

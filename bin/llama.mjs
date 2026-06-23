@@ -2734,6 +2734,8 @@ Routing — is this the right command?
           html,
           source,
           client_upload_id: uploadId,
+        }, {
+          headers: { "X-Llama-Upload-Id": uploadId },
         });
       }
       const { assets, totalBytes } = await collectAssets(assetsDir);
@@ -3393,6 +3395,8 @@ Routing — is this the right command?
           html,
           source,
           client_upload_id: uploadId,
+        }, {
+          headers: { "X-Llama-Upload-Id": uploadId },
         });
         print({
           ok: true,
