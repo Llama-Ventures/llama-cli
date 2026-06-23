@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:agent-routing",
-    "test:agent-routing": "node scripts/verify-agent-routing.mjs"
+    "test:agent-routing": "node scripts/verify-agent-routing.mjs",
+    "verify:release": "npm test && npm pack --dry-run"
   },
   "bin": {
     "llama": "bin/llama.mjs",

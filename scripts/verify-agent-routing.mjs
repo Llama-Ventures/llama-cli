@@ -11,6 +11,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+assert.equal(
+  packageJson.scripts?.["verify:release"],
+  "npm test && npm pack --dry-run",
+  "CLI release gate must run agent routing tests and npm pack dry-run",
+);
 assert.equal(
   existsSync(path.join(repoRoot, "docs/agent-skills.bundle.json")),
   false,
