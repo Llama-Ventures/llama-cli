@@ -669,6 +669,20 @@ try {
   assert.equal(businessCalls()[4].body?.source, "cli");
   assert.equal(businessCalls()[4].body?.client_upload_id, publishPayload.client_upload_id);
   assert.equal(businessCalls()[4].headers.uploadId, publishPayload.client_upload_id);
+  const publishTelemetry = telemetryCalls().find(
+    (call) =>
+      call.body?.method === "PUT" &&
+      call.body?.endpoint === "/api/deals/deal-html/documents/full-memo/html",
+  );
+  assert.ok(publishTelemetry, "publish upload request must record telemetry");
+  assert.equal(publishTelemetry.body?.args?.html?.redacted, true);
+  assert.equal(publishTelemetry.body?.args?.html?.bytes, Buffer.byteLength(largeHtml, "utf8"));
+  assert.equal(publishTelemetry.body?.args?.html?.sha256, sha256Hex(largeHtml));
+  assert.doesNotMatch(
+    JSON.stringify(telemetryCalls()),
+    /agent-safe upload agent-safe upload agent-safe upload/,
+    "telemetry must not contain raw memo HTML text",
+  );
 
   resetCalls();
   const mcpResult = await callMcpTool(
@@ -753,6 +767,14 @@ try {
   ]);
   assert.equal(businessCalls()[0].body?.client_upload_id, mcpFilePayload.client_upload_id);
   assert.equal(businessCalls()[0].headers.uploadId, mcpFilePayload.client_upload_id);
+  const mcpFileTelemetry = telemetryCalls().find(
+    (call) =>
+      call.body?.method === "PUT" &&
+      call.body?.endpoint === "/api/deals/deal-html/documents/mcp-file/html",
+  );
+  assert.ok(mcpFileTelemetry, "MCP file upload request must record telemetry");
+  assert.equal(mcpFileTelemetry.body?.args?.html?.redacted, true);
+  assert.equal(mcpFileTelemetry.body?.args?.html?.sha256, sha256Hex(largeHtml));
 
   resetCalls();
   const mcpBootstrap = await callMcpTool("agent_bootstrap", { limit: 2 }, baseUrl, homeDir);

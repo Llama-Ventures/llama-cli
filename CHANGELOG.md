@@ -35,6 +35,10 @@ this project adheres to [Semantic Versioning](https://semver.org).
   publishing as the default Llama Command route.
 - Top-level CLI help now routes deal-specific HTML artifacts to `llama html
   publish --file` instead of the lower-level upload command.
+- Local-agent telemetry now redacts content payload fields such as `html`,
+  `body`, `content`, `markdown`, `message`, and `text`, keeping only
+  chars/bytes/sha256. Incident-sized memo uploads remain observable without
+  storing memo text in the telemetry stream.
 
 ## [1.16.0] - 2026-06-22
 
