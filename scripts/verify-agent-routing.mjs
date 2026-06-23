@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +20,17 @@ assert.equal(
   existsSync(path.join(repoRoot, "src/data/llama-os-skills.bundle.json")),
   false,
   "public llama-cli must not copy the Command-side skill mirror",
+);
+const cliSource = readFileSync(path.join(repoRoot, "bin/llama.mjs"), "utf8");
+assert.match(
+  cliSource,
+  /About ONE specific deal\? \.{8} llama html publish <deal-id-or-name> --file <path> --title "\.\.\."/,
+  "top-level help must route deal-specific HTML to the agent-safe publish path",
+);
+assert.doesNotMatch(
+  cliSource,
+  /For deal-specific HTML use "llama html upload <dealId>"/,
+  "wiki help must not route deal-specific HTML to the low-level upload path",
 );
 const calls = [];
 let threadSeq = 0;

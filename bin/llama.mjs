@@ -512,7 +512,7 @@ Mentions / Inbox:
   llama mentions unread                                # just the badge count
 
 Where does this HTML / thesis / artifact go?
-  About ONE specific deal? ........ llama html upload <dealId> --new --title "..." --file <path>
+  About ONE specific deal? ........ llama html publish <deal-id-or-name> --file <path> --title "..."
                                       (renders at /deals/<id>/browse/<slug>; see "Deal page HTML" below)
   Cross-deal / institutional? ..... llama wiki save <slug> --title "..." --file <path>.html --sources "..."
                                       (renders at /wiki/<slug>; see "Wiki" below)
@@ -530,7 +530,7 @@ Wiki:
       (.html / .htm extension auto-implies content_type=html)
       Native comments + working in-page (#) links are added automatically — just upload self-contained HTML.
   ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
-    thesis, framework, methodology. For deal-specific HTML use "llama html upload <dealId>" instead.
+    thesis, framework, methodology. For deal-specific HTML use "llama html publish <deal>" instead.
   Delete / restore (soft — reversible):
     llama wiki delete <slug> [--lang en|zh]
     llama wiki restore <slug> [--lang en|zh]
