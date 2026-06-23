@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-06-23
+
 ### Added
 - **`llama html publish <deal-id-or-name> --file <path>`** — agent-safe
   HTML artifact publishing for deal pages. It resolves deal names, preflights
@@ -444,7 +446,21 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.16.0...v1.17.0
+[1.16.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.15.1...v1.16.0
+[1.15.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.15.0...v1.15.1
+[1.15.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.14.1...v1.15.0
+[1.14.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.14.0...v1.14.1
+[1.14.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.13.0...v1.14.0
+[1.13.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.7.0...v1.10.0
+[1.7.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.5.0...v1.7.0
+[1.5.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.4.4...v1.5.0
+[1.4.4]: https://github.com/Llama-Ventures/llama-cli/compare/v1.4.0...v1.4.4
+[1.4.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.2.4...v1.3.0
 [1.2.4]: https://github.com/Llama-Ventures/llama-cli/compare/v1.2.3...v1.2.4
