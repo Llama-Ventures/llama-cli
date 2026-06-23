@@ -8,6 +8,7 @@
 // CLI: gcloud (preferred) → $LLAMA_TOKEN → ~/.llama/token.
 
 import { createRequire } from "module";
+import { randomUUID } from "crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -32,6 +33,19 @@ import {
 } from "../lib/external.mjs";
 
 setClientRuntime({ client: "mcp" });
+
+function newHtmlUploadId() {
+  return `mcp-${randomUUID()}`;
+}
+
+function normalizeUploadId(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const id = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)) {
+    throw new Error("clientUploadId must be 1-128 chars: letters, numbers, dot, underscore, colon, or hyphen");
+  }
+  return id;
+}
 
 // Wrap a request() call into the MCP CallToolResult shape. Catches errors
 // (NO_AUTH / 401 / 5xx / network) and surfaces them as `isError: true`
@@ -1503,6 +1517,7 @@ async function uploadHtmlFromFile({
   assetsDir,
   autoDetectAssets = true,
   verify = true,
+  clientUploadId,
 }) {
   const { readFileSync, statSync } = await import("node:fs");
   const st = statSync(filePath);
@@ -1523,15 +1538,21 @@ async function uploadHtmlFromFile({
   if (!effectiveAssetsDir && autoDetectAssets !== false) {
     effectiveAssetsDir = await detectSiblingAssetsDir(filePath);
   }
+  const uploadId = normalizeUploadId(clientUploadId) || newHtmlUploadId();
 
   let body;
   if (!effectiveAssetsDir) {
-    body = await request("PUT", htmlUrl(dealId, documentSlug), { html, source });
+    body = await request("PUT", htmlUrl(dealId, documentSlug), {
+      html,
+      source,
+      client_upload_id: uploadId,
+    });
   } else {
     const { assets, totalBytes } = await collectAssets(effectiveAssetsDir);
     const form = new FormData();
     form.append("html", html);
     form.append("source", source);
+    form.append("client_upload_id", uploadId);
     for (const asset of assets) {
       form.append(
         `asset:${asset.relPath}`,
@@ -1542,7 +1563,7 @@ async function uploadHtmlFromFile({
     const headers = await getAuthHeaders();
     const res = await fetch(`${getBaseUrl()}${htmlUrl(dealId, documentSlug)}`, {
       method: "PUT",
-      headers,
+      headers: { ...headers, "X-Llama-Upload-Id": uploadId },
       body: form,
     });
     body = await res.json().catch(() => ({}));
@@ -1564,10 +1585,14 @@ async function uploadHtmlFromFile({
     if (body?.bytes != null && latest.bytes != null && Number(latest.bytes) !== Number(body.bytes)) {
       throw new Error(`verification failed: expected ${body.bytes} bytes, got ${latest.bytes}`);
     }
+    if (body?.sha256 && latest.sha256 && String(latest.sha256) !== String(body.sha256)) {
+      throw new Error(`verification failed: expected sha256 ${body.sha256}, got ${latest.sha256}`);
+    }
     verified = {
       ok: true,
       version: latest.version,
       bytes: latest.bytes,
+      sha256: latest.sha256,
       created_at: latest.created_at,
     };
   }
@@ -1577,6 +1602,9 @@ async function uploadHtmlFromFile({
     document_slug: documentSlug || "main",
     version: body?.version,
     bytes: body?.bytes ?? verified.bytes ?? htmlBytes,
+    sha256: body?.sha256 ?? verified.sha256,
+    client_upload_id: body?.client_upload_id ?? uploadId,
+    idempotent_replay: body?.idempotent_replay,
     asset_count: body?.asset_count,
     asset_bytes: body?.asset_bytes,
     assets_dir: effectiveAssetsDir,
@@ -1591,7 +1619,7 @@ server.registerTool(
     description:
       "Read the current hand-authored HTML 'deal page' for a deal. " +
       "Returns {empty: true} if no one has uploaded HTML yet, or " +
-      "{empty: false, version, html, bytes, uploaded_by, source, " +
+      "{empty: false, version, html, bytes, sha256, uploaded_by, source, " +
       "created_at}. The HTML can be 5-500KB — be deliberate about " +
       "including the body in your reply. Use html_versions if you " +
       "just want the version list without the body. Each deal can " +
@@ -1644,9 +1672,10 @@ server.registerTool(
         .enum(["web", "cli", "agent"])
         .optional()
         .describe("default: agent"),
+      clientUploadId: z.string().optional().describe("optional retry id; reuse the same value if retrying the same small inline upload"),
     },
   },
-  async ({ dealId, html, documentSlug, source }) => {
+  async ({ dealId, html, documentSlug, source, clientUploadId }) => {
     const bytes = Buffer.byteLength(String(html || ""), "utf8");
     if (bytes > INLINE_HTML_UPLOAD_LIMIT) {
       return textResult(
@@ -1657,9 +1686,16 @@ server.registerTool(
         true,
       );
     }
+    let uploadId;
+    try {
+      uploadId = normalizeUploadId(clientUploadId) || newHtmlUploadId();
+    } catch (err) {
+      return textResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
     return callApi("PUT", htmlUrl(dealId, documentSlug), {
       html,
       source: source ?? "agent",
+      client_upload_id: uploadId,
     });
   }
 );
@@ -1673,7 +1709,7 @@ server.registerTool(
       "large HTML through the model/tool-call context. Reads filePath on " +
       "the machine running this MCP server, preflights size/HTML shape, " +
       "optionally auto-detects a sibling *_files asset folder, uploads, " +
-      "then reads the document back to verify version/bytes. For a higher " +
+      "then reads the document back to verify version/bytes/sha256. For a higher " +
       "level CLI flow that can resolve deal names and choose create/update, " +
       "run `llama html publish <deal-id-or-name> --file <path>`.",
     inputSchema: {
@@ -1684,9 +1720,10 @@ server.registerTool(
       assetsDir: z.string().optional().describe("optional local directory of relative assets"),
       autoDetectAssets: z.boolean().optional().describe("default true; detects sibling *_files folders"),
       verify: z.boolean().optional().describe("default true; read-after-write verification"),
+      clientUploadId: z.string().optional().describe("optional retry id; reuse the same value if retrying the same failed upload"),
     },
   },
-  async ({ dealId, filePath, documentSlug, source, assetsDir, autoDetectAssets, verify }) => {
+  async ({ dealId, filePath, documentSlug, source, assetsDir, autoDetectAssets, verify, clientUploadId }) => {
     try {
       const result = await uploadHtmlFromFile({
         dealId,
@@ -1696,6 +1733,7 @@ server.registerTool(
         assetsDir,
         autoDetectAssets,
         verify,
+        clientUploadId,
       });
       return jsonResult(result);
     } catch (err) {
@@ -1709,7 +1747,7 @@ server.registerTool(
   {
     description:
       "List version history for a deal's /browse page HTML. Returns " +
-      "an array of {version, bytes, uploaded_by, source, created_at, " +
+      "an array of {version, bytes, sha256, uploaded_by, source, created_at, " +
       "deleted_at} — newest first, including soft-deleted versions. " +
       "Use to find a target version for html_restore.",
     inputSchema: {
@@ -1842,12 +1880,20 @@ server.registerTool(
         .enum(["web", "cli", "agent"])
         .optional()
         .describe("default: agent"),
+      clientUploadId: z.string().optional().describe("optional retry id; reuse the same value if retrying the same bundle upload"),
     },
   },
-  async ({ dealId, html, assets, documentSlug, source }) => {
+  async ({ dealId, html, assets, documentSlug, source, clientUploadId }) => {
+    let uploadId;
+    try {
+      uploadId = normalizeUploadId(clientUploadId) || newHtmlUploadId();
+    } catch (err) {
+      return textResult(`Error: ${err?.message ?? String(err)}`, true);
+    }
     const form = new FormData();
     form.append("html", html);
     form.append("source", source ?? "agent");
+    form.append("client_upload_id", uploadId);
     for (const a of assets) {
       const bytes = Buffer.from(a.base64, "base64");
       form.append(
@@ -1859,7 +1905,7 @@ server.registerTool(
     const headers = await getAuthHeaders();
     const res = await fetch(`${getBaseUrl()}${htmlUrl(dealId, documentSlug)}`, {
       method: "PUT",
-      headers, // let fetch set multipart Content-Type with boundary
+      headers: { ...headers, "X-Llama-Upload-Id": uploadId }, // let fetch set multipart Content-Type with boundary
       body: form,
     });
     const body = await res.json().catch(() => ({}));

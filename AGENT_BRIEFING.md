@@ -253,6 +253,9 @@ llama html reset <dealId> [--doc <slug>]                                 # soft-
 # Safety contract (since 1.5.0):
 #  - Coding agents should use `llama html publish ... --file <path>` for memos/reports.
 #    Do not move large HTML through chat text or MCP `html_upload` string args.
+#  - Successful uploads return `sha256` and `client_upload_id`; verification
+#    reads the server copy back and compares version/bytes/sha256 when available.
+#    If a network retry is needed for the same attempt, reuse `--upload-id`.
 #  - Bare `llama html upload <id> --file X` REFUSES if 'main' already has content.
 #    The error names the existing artifact and suggests --doc main / --new --title "...".
 #  - --slug is silently accepted as an alias for --doc (agent-confusion mitigation).

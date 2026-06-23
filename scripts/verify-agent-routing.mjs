@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -24,6 +25,10 @@ const calls = [];
 let threadSeq = 0;
 let eventSeq = 0;
 const htmlDocs = new Map();
+
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function docsForDeal(dealId) {
   if (!htmlDocs.has(dealId)) htmlDocs.set(dealId, new Map());
@@ -78,6 +83,7 @@ const server = createServer(async (req, res) => {
         agentClient: req.headers["x-llama-agent-client"] ?? null,
         session: req.headers["x-llama-agent-session"] ?? null,
         command: req.headers["x-llama-command"] ?? null,
+        uploadId: req.headers["x-llama-upload-id"] ?? null,
       },
     });
 
@@ -261,14 +267,25 @@ const server = createServer(async (req, res) => {
         const previous = docs.get(slug) || { title: slug, version: 0 };
         const version = Number(previous.version || 0) + 1;
         const bytes = Buffer.byteLength(html, "utf8");
+        const sha256 = sha256Hex(html);
         docs.set(slug, {
           ...previous,
           html,
           version,
           bytes,
+          sha256,
           source: body?.source || "cli",
+          client_upload_id: body?.client_upload_id || null,
         });
-        writeJson(res, { ok: true, document_slug: slug, version, bytes });
+        writeJson(res, {
+          ok: true,
+          document_slug: slug,
+          version,
+          bytes,
+          sha256,
+          client_upload_id: body?.client_upload_id || null,
+          idempotent_replay: false,
+        });
         return;
       }
       if (req.method === "GET") {
@@ -282,6 +299,7 @@ const server = createServer(async (req, res) => {
           document_slug: slug,
           version: doc.version,
           bytes: doc.bytes,
+          sha256: doc.sha256,
           source: doc.source,
           created_at: "2026-06-23T04:00:00Z",
           html: doc.html,
@@ -615,6 +633,9 @@ try {
   assert.equal(publishPayload.deal_uuid, "deal-html");
   assert.equal(publishPayload.document_slug, "full-memo");
   assert.equal(publishPayload.verified?.ok, true);
+  assert.match(publishPayload.client_upload_id, /^cli-[0-9a-f-]{36}$/);
+  assert.match(publishPayload.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(publishPayload.verified?.sha256, publishPayload.sha256);
   assert.deepEqual(paths(), [
     "GET /api/deals/Acme%20AI/documents",
     "GET /api/deals",
@@ -625,6 +646,7 @@ try {
   ]);
   assert.equal(businessCalls()[4].body?.html, largeHtml);
   assert.equal(businessCalls()[4].body?.source, "cli");
+  assert.equal(businessCalls()[4].body?.client_upload_id, publishPayload.client_upload_id);
 
   resetCalls();
   const mcpResult = await callMcpTool(
@@ -678,10 +700,14 @@ try {
   const mcpFilePayload = JSON.parse(mcpFile.content?.[0]?.text ?? "{}");
   assert.equal(mcpFilePayload.ok, true);
   assert.equal(mcpFilePayload.verified?.ok, true);
+  assert.match(mcpFilePayload.client_upload_id, /^mcp-[0-9a-f-]{36}$/);
+  assert.match(mcpFilePayload.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(mcpFilePayload.verified?.sha256, mcpFilePayload.sha256);
   assert.deepEqual(paths(), [
     "PUT /api/deals/deal-html/documents/mcp-file/html",
     "GET /api/deals/deal-html/documents/mcp-file/html",
   ]);
+  assert.equal(businessCalls()[0].body?.client_upload_id, mcpFilePayload.client_upload_id);
 
   resetCalls();
   const mcpBootstrap = await callMcpTool("agent_bootstrap", { limit: 2 }, baseUrl, homeDir);

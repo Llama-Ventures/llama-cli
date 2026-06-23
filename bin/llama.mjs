@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createRequire } from "module";
+import { randomUUID } from "crypto";
 import readline from "readline";
 import {
   DEFAULT_BASE_URL,
@@ -37,6 +38,19 @@ import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
+
+function newHtmlUploadId() {
+  return `cli-${randomUUID()}`;
+}
+
+function normalizeUploadId(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const id = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)) {
+    throw new Error("--upload-id must be 1-128 chars: letters, numbers, dot, underscore, colon, or hyphen");
+  }
+  return id;
+}
 
 function parseFlags(args, knownFlags = null) {
   const flags = {};
@@ -537,7 +551,7 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
 
   Agent-safe publish path (recommended for Claude Code / Codex / Cursor):
     llama html publish <deal-id-or-name> --file <path> [--title "..."] [--doc <slug>]
-      # Defaults to NEW doc unless --doc points at an existing slug; verifies after upload.
+      # Defaults to NEW doc unless --doc points at an existing slug; verifies version/bytes/sha256 after upload.
       # Auto-detects sibling *_files asset folders unless --no-auto-assets is set.
 
   List existing artifacts:
@@ -2714,14 +2728,19 @@ Routing — is this the right command?
       };
     }
 
-    async function uploadHtmlPayload({ dealId, slug, html, source, assetsDir }) {
+    async function uploadHtmlPayload({ dealId, slug, html, source, assetsDir, uploadId }) {
       if (!assetsDir) {
-        return request("PUT", htmlEndpoint(dealId, slug), { html, source });
+        return request("PUT", htmlEndpoint(dealId, slug), {
+          html,
+          source,
+          client_upload_id: uploadId,
+        });
       }
       const { assets, totalBytes } = await collectAssets(assetsDir);
       const form = new FormData();
       form.append("html", html);
       form.append("source", source);
+      form.append("client_upload_id", uploadId);
       for (const asset of assets) {
         form.append(
           `asset:${asset.relPath}`,
@@ -2735,7 +2754,7 @@ Routing — is this the right command?
       const headers = await getAuthHeaders();
       const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
         method: "PUT",
-        headers,
+        headers: { ...headers, "X-Llama-Upload-Id": uploadId },
         body: form,
       });
       const body = await res.json().catch(() => ({}));
@@ -2747,7 +2766,7 @@ Routing — is this the right command?
       return body;
     }
 
-    async function verifyHtmlUpload({ dealId, slug, expectedVersion, expectedBytes }) {
+    async function verifyHtmlUpload({ dealId, slug, expectedVersion, expectedBytes, expectedSha256 }) {
       const latest = await request("GET", htmlEndpoint(dealId, slug));
       if (latest?.empty) {
         throw new Error(`verification failed: ${slug} came back empty after upload`);
@@ -2766,10 +2785,20 @@ Routing — is this the right command?
           `verification failed: expected ${expectedBytes} bytes, got ${latest.bytes}`,
         );
       }
+      if (
+        expectedSha256 &&
+        latest.sha256 &&
+        String(latest.sha256) !== String(expectedSha256)
+      ) {
+        throw new Error(
+          `verification failed: expected sha256 ${expectedSha256}, got ${latest.sha256}`,
+        );
+      }
       return {
         ok: true,
         version: latest.version,
         bytes: latest.bytes,
+        sha256: latest.sha256,
         created_at: latest.created_at,
       };
     }
@@ -2992,7 +3021,7 @@ Routing — is this the right command?
       const dealRef = rest[0];
       const knownFlags = [
         "file", "title", "doc", "slug", "new", "update",
-        "assets", "no-auto-assets", "source", "no-verify",
+        "assets", "no-auto-assets", "source", "no-verify", "upload-id",
       ];
       const { flags } = parseFlags(rest.slice(1), knownFlags);
       if (!dealRef || !flags.file || flags.file === true) {
@@ -3113,12 +3142,14 @@ Routing — is this the right command?
         typeof flags.source === "string" && flags.source.trim()
           ? flags.source.trim()
           : "cli";
+      const uploadId = normalizeUploadId(flags["upload-id"]) || newHtmlUploadId();
       const uploaded = await uploadHtmlPayload({
         dealId: resolved.dealId,
         slug,
         html,
         source,
         assetsDir,
+        uploadId,
       });
       const verification = boolFlag(flags, "no-verify")
         ? { ok: false, skipped: true }
@@ -3127,6 +3158,7 @@ Routing — is this the right command?
             slug,
             expectedVersion: uploaded?.version,
             expectedBytes: uploaded?.bytes,
+            expectedSha256: uploaded?.sha256,
           });
 
       print({
@@ -3139,6 +3171,9 @@ Routing — is this the right command?
         title,
         version: uploaded?.version,
         bytes: uploaded?.bytes ?? verification.bytes ?? htmlBytes,
+        sha256: uploaded?.sha256 ?? verification.sha256,
+        client_upload_id: uploaded?.client_upload_id ?? uploadId,
+        idempotent_replay: uploaded?.idempotent_replay,
         asset_count: uploaded?.asset_count,
         asset_bytes: uploaded?.asset_bytes,
         verified: verification,
@@ -3181,7 +3216,7 @@ Routing — is this the right command?
       }
       const knownFlags = [
         "doc", "slug", "new", "title",
-        "file", "stdin", "assets", "source",
+        "file", "stdin", "assets", "source", "upload-id",
       ];
       const { flags } = parseFlags(rest.slice(1), knownFlags);
 
@@ -3350,12 +3385,14 @@ Routing — is this the right command?
         typeof flags.source === "string" && flags.source.trim()
           ? flags.source.trim()
           : "cli";
+      const uploadId = normalizeUploadId(flags["upload-id"]) || newHtmlUploadId();
 
       // No --assets → JSON path (small, faster).
       if (!flags.assets) {
         const data = await request("PUT", htmlEndpoint(dealId, slug), {
           html,
           source,
+          client_upload_id: uploadId,
         });
         print({
           ok: true,
@@ -3363,6 +3400,9 @@ Routing — is this the right command?
           document_slug: slug,
           version: data?.version,
           bytes: data?.bytes ?? Buffer.byteLength(html, "utf8"),
+          sha256: data?.sha256,
+          client_upload_id: data?.client_upload_id ?? uploadId,
+          idempotent_replay: data?.idempotent_replay,
           deal_uuid: dealId,
           viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(slug)}`,
         });
@@ -3442,6 +3482,7 @@ Routing — is this the right command?
       const form = new FormData();
       form.append("html", html);
       form.append("source", source);
+      form.append("client_upload_id", uploadId);
       let totalBytes = 0;
       for (const { absPath, relPath } of finalPaths) {
         const buf = readFileSync(absPath);
@@ -3461,7 +3502,11 @@ Routing — is this the right command?
       const headers = await getAuthHeaders();
       const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
         method: "PUT",
-        headers: { ...headers /* let fetch set the multipart boundary */ },
+        headers: {
+          ...headers,
+          "X-Llama-Upload-Id": uploadId,
+          /* let fetch set the multipart boundary */
+        },
         body: form,
       });
       const body = await res.json().catch(() => ({}));
@@ -3475,6 +3520,10 @@ Routing — is this the right command?
         mode,
         document_slug: slug,
         version: body.version,
+        bytes: body.bytes,
+        sha256: body.sha256,
+        client_upload_id: body.client_upload_id ?? uploadId,
+        idempotent_replay: body.idempotent_replay,
         asset_count: body.asset_count,
         asset_bytes: body.asset_bytes,
         deal_uuid: dealId,
