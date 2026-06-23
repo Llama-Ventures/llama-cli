@@ -709,6 +709,28 @@ try {
   assert.deepEqual(paths(), []);
 
   resetCalls();
+  const inlineBundleGuard = await callMcpTool(
+    "html_upload_bundle",
+    {
+      dealId: "deal-html",
+      documentSlug: "bundle-too-large",
+      html: largeHtml,
+      assets: [
+        {
+          path: "full-memo_files/cover.txt",
+          contentType: "text/plain",
+          base64: Buffer.from("asset").toString("base64"),
+        },
+      ],
+    },
+    baseUrl,
+    homeDir,
+  );
+  assert.equal(inlineBundleGuard.isError, true);
+  assert.match(inlineBundleGuard.content?.[0]?.text ?? "", /Use html_upload_file/);
+  assert.deepEqual(paths(), []);
+
+  resetCalls();
   const mcpFile = await callMcpTool(
     "html_upload_file",
     {

@@ -582,7 +582,7 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
   Caps: HTML 5 MB, each asset 50 MB, total bundle 100 MB. Every write
   triggers SSE push — any browser viewing /deals/<id>/browse refreshes
   automatically. Same write path as the in-app deal agent's
-  update_deal_browse_html tool and the MCP html_upload_bundle tool.
+  update_deal_browse_html tool and the MCP html_upload_file tool.
 
 Admin (system admin only — server returns 403 for non-admin tokens):
   llama admin auth-events  [--kind X] [--actor email] [--subject email] [--since 24h|7d|30d|<ISO>] [--limit 100]

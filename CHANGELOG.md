@@ -28,6 +28,9 @@ this project adheres to [Semantic Versioning](https://semver.org).
   agents to use `html_upload_file` or `llama html publish --file`. This avoids
   moving large memos through model/tool-call context, the main reliability
   failure mode for long IC memos.
+- MCP `html_upload_bundle` is now treated as a small inline fallback and refuses
+  tool-call payloads over 50KB. Agents should use `html_upload_file` with
+  `assetsDir` or `llama html publish --file --assets` for saved-page exports.
 - `AGENT_BRIEFING.md` now teaches coding agents to use file-path based HTML
   publishing as the default Llama Command route.
 - Top-level CLI help now routes deal-specific HTML artifacts to `llama html

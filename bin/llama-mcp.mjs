@@ -1844,11 +1844,12 @@ server.registerTool(
   "html_upload_bundle",
   {
     description:
-      "Upload HTML + binary assets as one atomic version. Use this " +
-      "INSTEAD of html_upload when the HTML references local images / " +
-      "fonts / CSS files via relative src=/href= attributes (typical " +
-      "of 'Save Page As Complete' exports). The server stores HTML + " +
-      "each asset as one transactional bundle (deal_browse_assets " +
+      "Legacy small inline upload for HTML + binary assets as one atomic version. " +
+      "For substantial memos/reports or 'Save Page As Complete' exports, use " +
+      "html_upload_file with filePath + assetsDir instead so large HTML/assets " +
+      "do not move through the model/tool-call context. This inline bundle " +
+      "tool refuses payloads over 50KB. The server stores HTML + each asset as " +
+      "one transactional bundle (deal_browse_assets " +
       "table), rewrites the HTML refs to version-pinned URLs at " +
       "/api/deals/<id>/asset/<path>?v=N, and triggers SSE push. " +
       "Constraints: HTML <= 5 MB; each asset <= 50 MB; total bundle " +
@@ -1888,6 +1889,18 @@ server.registerTool(
     },
   },
   async ({ dealId, html, assets, documentSlug, source, clientUploadId }) => {
+    const inlineBytes =
+      Buffer.byteLength(String(html || ""), "utf8") +
+      assets.reduce((sum, a) => sum + Buffer.byteLength(String(a.base64 || ""), "utf8"), 0);
+    if (inlineBytes > INLINE_HTML_UPLOAD_LIMIT) {
+      return textResult(
+        `Error: html_upload_bundle received ${(inlineBytes / 1024).toFixed(1)} KB of inline tool-call payload. ` +
+          `For reliability, do not pass large HTML/assets through MCP arguments. ` +
+          `Use html_upload_file({ dealId, filePath, documentSlug, assetsDir }) or run ` +
+          `\`llama html publish <deal-id-or-name> --file <path> --assets <dir>\` instead.`,
+        true,
+      );
+    }
     let uploadId;
     try {
       uploadId = normalizeUploadId(clientUploadId) || newHtmlUploadId();
