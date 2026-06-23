@@ -28,6 +28,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
   failure mode for long IC memos.
 - `AGENT_BRIEFING.md` now teaches coding agents to use file-path based HTML
   publishing as the default Llama Command route.
+- Top-level CLI help now routes deal-specific HTML artifacts to `llama html
+  publish --file` instead of the lower-level upload command.
 
 ## [1.16.0] - 2026-06-22
 
