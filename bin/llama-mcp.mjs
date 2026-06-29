@@ -369,7 +369,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "exact match on 'Our Stage' (Outreached, Sourced, First Meeting, Diligence, Partner Meeting, Term Sheet, Invested, Passed, Stalled, Future, Unknown). Outreached means contact was logged but no effective relationship/response exists yet."
+          "exact match on 'Our Stage' (Interested, Outreached, Sourced, First Meeting, Diligence, Partner Meeting, Term Sheet, Invested, Passed, Stalled, Future, Unknown). Interested means we want to record/track before contact; Outreached means contact was logged but no effective relationship/response exists yet."
         ),
       theirStage: z.string().optional().describe("exact match on 'Their Stage'"),
       stage: z
@@ -434,7 +434,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          "Our Stage workflow position. Use Outreached when we only contacted/logged them and have no response/effective relationship; use Sourced only once there is a response, intro, meeting, or other real relationship signal."
+          "Our Stage workflow position. Use Interested when we want to record/track before contact; use Outreached when we contacted/logged them and have no response/effective relationship; use Sourced only once there is a response, intro, meeting, or other real relationship signal."
         ),
       source: z.string().optional().describe("free-form sourced-by; recommend nominating a user"),
       sourceDirection: z

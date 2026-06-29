@@ -39,6 +39,7 @@ Any time the user mentions a company name or founder name:
 1. **Run `llama deal search "<name>"` BEFORE web search.** Always. No exceptions.
 2. If pipeline has it → pull the data, integrate into your reply silently.
 3. If pipeline doesn't have it → ask once: "New name. Add to pipeline? (Y/n)". On yes, `llama deal create`.
+   - Use `--status Interested` when Llama wants to record/track the company before any outreach, intro, response, deck submission, or meeting.
    - Use `--status Outreached` when we only contacted/logged the company and have no response or effective relationship yet.
    - Use `--status Sourced` only once there is a response, intro, meeting, or another real relationship signal.
    - Also set `--source-direction Inbound` if the deal came into the firm; set `--source-direction Outbound` if Llama found/listed/reached out first.
@@ -205,6 +206,7 @@ llama deal show <dealId>
 llama deal list [--owner ...] [--status ...]
 
 # Pipeline — write
+llama deal create "Company" --description "..." --source-direction Outbound --status Interested
 llama deal create "Company" --description "..." --source-direction Outbound --status Outreached
 llama deal create "Company" --description "..." --source-direction Inbound --status Sourced
 llama deal update <dealId> <field> <value>
@@ -213,7 +215,9 @@ llama deal update <dealId> <field> <value>
 #             foundedYear leadInvestor investors   (each write logs a deal_events row)
 
 # Our Stage vocabulary starts with:
-#   Outreached → Sourced → First Meeting → Diligence → Partner Meeting → Term Sheet → Invested
+#   Interested → Outreached → Sourced → First Meeting → Diligence → Partner Meeting → Term Sheet → Invested
+# `Interested` is pre-contact intent to track. Do not use `manualTags=Interested`
+# for new writes.
 # `Outreached` is relationship memory only. Do not inflate it to `Sourced`
 # unless a real relationship signal exists.
 # `sourceDirection` is separate: Inbound = came into the firm; Outbound =

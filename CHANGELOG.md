@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-06-29
+
+### Changed
+- Documented `Interested` as the canonical pre-outreach Our Stage across CLI
+  help, MCP tool schemas, README examples, and the bundled agent briefing.
+  Agents should use `status=Interested` for "record/track before contact" and
+  avoid writing new `manualTags=Interested` records.
+
 ## [1.17.0] - 2026-06-23
 
 ### Added
@@ -457,7 +465,8 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.15.0...v1.15.1
