@@ -180,12 +180,14 @@ llama token show
 
 # Pipeline — read
 llama deal search "acme ai"
+llama deal list --owner alex --status Interested
 llama deal list --owner alex --status Outreached
 llama deal list --source-direction Outbound --status Outreached
 llama deal list --owner alex --status Diligence
 llama deal show <dealId>
 
 # Pipeline — write
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Interested
 llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
 llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
 llama deal update <dealId> status Diligence
@@ -197,6 +199,7 @@ llama deal delete  <dealId>     # soft (audit-logged)
 llama deal restore <dealId>
 
 # Status semantics
+# Interested = record/track before outreach, intro, response, deck submission, or meeting.
 # Outreached = contact/logged, but no response or effective relationship yet.
 # Sourced    = response, intro, meeting, or another real relationship signal exists.
 # sourceDirection is separate:

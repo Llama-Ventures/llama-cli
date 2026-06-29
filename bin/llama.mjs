@@ -390,7 +390,7 @@ auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
 Deals:
-  llama deal create "Company" --source <name> --source-direction Inbound|Outbound --description "..." --status Outreached|Sourced --website https://...
+  llama deal create "Company" --source <name> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
   llama deal show <dealId>
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
@@ -399,7 +399,7 @@ Deals:
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
       e.g.  llama deal update <dealId> website https://acme.ai
-            llama deal update <dealId> status Outreached
+            llama deal update <dealId> status Interested
             llama deal update <dealId> sector "Developer Tools"
             llama deal update <dealId> foundedYear 2024
             llama deal update <dealId> leadInvestor "Acme Capital"
@@ -413,7 +413,7 @@ Deals:
       JSON when possible ('{"a":1}', 'true', '3'), else stored as a
       string. Audited to deal_events as field_change "extra.<key>".
   llama deal extra unset <dealId> <key>              # delete the key (admin)
-  llama deal search <query> [--founder name] [--owner <user-key>] [--status Diligence]
+  llama deal search <query> [--founder name] [--owner <user-key>] [--status Interested]
                             [--theirStage Raising] [--stage Seed] [--source-direction Inbound]
                             [--limit 200] [--offset 0]
   llama deal list [--owner ...] [--status ...] [...same flags as search]

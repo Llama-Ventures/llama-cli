@@ -201,12 +201,14 @@ llama token show
 
 # Pipeline——读
 llama deal search "acme ai"
+llama deal list --owner alex --status Interested
 llama deal list --owner alex --status Outreached
 llama deal list --source-direction Outbound --status Outreached
 llama deal list --owner alex --status Diligence
 llama deal show <dealId>
 
 # Pipeline——写
+llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Interested
 llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
 llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
 llama deal update <dealId> status Diligence
@@ -218,6 +220,7 @@ llama deal delete  <dealId>     # 软删除（审计日志记录）
 llama deal restore <dealId>
 
 # Status 语义
+# Interested = 先记录/关注，还没有 outreach、intro、回复、deck submission 或 meeting。
 # Outreached = 只是联系/记录了，还没有回复或有效关系。
 # Sourced    = 已有回复、intro、会议，或其它真实关系信号。
 # sourceDirection 是单独维度：
