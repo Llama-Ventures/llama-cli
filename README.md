@@ -27,6 +27,7 @@
 <p align="center">
   <a href="#install">Install</a> ·
   <a href="#authenticate">Authenticate</a> ·
+  <a href="#integrate-your-ai-system">Integrate your AI</a> ·
   <a href="#cli-tour">CLI</a> ·
   <a href="#mcp-server">MCP</a> ·
   <a href="#external-pitch-no-llama-account-required">External pitch</a> ·
@@ -48,7 +49,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          interactive CLI for humans + bash
-└── bin/llama-mcp      stdio MCP server, 56 typed tools — for any MCP-native agent
+└── bin/llama-mcp      stdio MCP server, 58 typed tools — for any MCP-native agent
 ```
 
 Both binaries share `lib/client.mjs` — the **same** auth chain, **same** HTTP
@@ -88,12 +89,6 @@ llama auth status     # round-trips against /api/me
 ```
 
 The same install puts `llama-mcp` on your `PATH` for the MCP server — no second package.
-
-> **Upgrading from `npm link`?** The CLI used to live in the `llama-os/cli/`
-> directory and was distributed via `npm link`. As of CLI v1.x it ships as
-> `@llamaventures/cli`. Run `npm i -g @llamaventures/cli@latest`; the legacy
-> directory keeps working during the soak window but is no longer the source
-> of truth. See [`llama-os/cli/DEPRECATED.md`](https://github.com/SoujiOkita98/llama-os/blob/main/cli/DEPRECATED.md).
 
 ---
 
@@ -166,6 +161,39 @@ llama deal search acme-ai  # ready
 
 ---
 
+## Integrate your AI system
+
+This package is the **supported integration surface** for Llama Command. If
+you're wiring an in-house agent, a coding assistant, or any LLM app into the
+workbench, come through here — **not the raw HTTP API**. The CLI/MCP layer owns
+the auth chain, the stable `Error[…]` contract, and forward-compatibility
+across server schema changes ([SemVer](#stability)); raw API routes carry no
+such promise and can change without notice.
+
+The five-minute path:
+
+1. **Get credentials** — a team account signs in with `llama auth login`; for
+   headless systems, have the admin mint a PAT at
+   [`/settings/tokens`](https://command.llamaventures.vc/settings/tokens) and
+   set it via `llama token set` or `$LLAMA_TOKEN`.
+2. **Install** — `npm i -g @llamaventures/cli` (Node 18+).
+3. **Wire it in:**
+   - **MCP-native agent** (Claude, Cursor, any stdio client) → point it at
+     `llama-mcp`: 58 typed tools, no generic passthrough.
+     See [MCP server](#mcp-server) for per-client config.
+   - **Anything else** → shell out to `llama …`. Output is agent-friendly
+     plain text; failures use the stable
+     [`Error[…]` prefixes](#error-codes--for-agents).
+4. **Onboard the agent** — have it run `llama agent-onboard` (or fetch the MCP
+   `agent_briefing` prompt) at session start. It returns the **server-owned
+   Agent Runtime Contract** — current workflow rules, attribution grammar,
+   error recovery — always in sync with the live server, so this README never
+   becomes your integration bottleneck.
+5. **Verify** — `llama auth status` round-trips the resolved identity;
+   `llama deal search "<anything>"` proves read access.
+
+---
+
 ## CLI tour
 
 The CLI is the canonical interface. The HTTP API beneath it is stable, but the
@@ -180,16 +208,12 @@ llama token show
 
 # Pipeline — read
 llama deal search "acme ai"
-llama deal list --owner alex --status Interested
-llama deal list --owner alex --status Outreached
-llama deal list --source-direction Outbound --status Outreached
-llama deal list --owner alex --status Diligence
+llama deal list --owner alex --status Diligence      # same filters as search
 llama deal show <dealId>
+llama deal feed <dealId>                             # every contribution, newest first
 
 # Pipeline — write
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Interested
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
+llama deal create "Acme AI" --description "..." --source alex --source-direction Outbound --status Interested
 llama deal update <dealId> status Diligence
 llama deal enrich <dealId> --dry-run
 llama deal enrich <dealId> --apply --executor server_agent
@@ -248,10 +272,11 @@ llama mentions
 llama mentions resolve <mentionId>
 ```
 
-Run `llama --help` for the full surface (50+ commands across deals, briefs,
-ownership, timeline, facts, wiki, mentions, skill corrections, and admin event
-feeds). Soft-delete is the default everywhere — every removal is reversible
-and audit-logged via `deal_events`.
+Run `llama --help` for the group index, or `llama help all` for the full
+reference — 100+ commands across deals, briefs, facts, ownership, timeline,
+wiki, memos, deal-scoped HTML artifacts, mentions, skill corrections, evals,
+and admin event feeds. Soft-delete is the default everywhere — every removal
+is reversible and audit-logged via `deal_events`.
 
 ### Error codes — for agents
 
@@ -419,9 +444,9 @@ intake agent extracts the structured fields and produces the verdict.
   the `Error[…]` prefixes are part of the public contract and won't change
   inside a major version.
 - **Server schema drift:** When the API gains an endpoint, the CLI / MCP gain
-  a typed wrapper in the next minor release. While you wait, the `llama` CLI
-  itself ships the full `llama` command surface (40+ commands) — use it for
-  ad-hoc HTTP work that the MCP doesn't yet wrap.
+  a typed wrapper in the next minor release. There is deliberately no raw-API
+  passthrough — if a wrapper you need hasn't landed yet, open an issue rather
+  than calling the HTTP API directly.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the per-version log.
 

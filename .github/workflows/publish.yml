@@ -53,6 +53,11 @@ jobs:
           fi
           echo "OK: no leak-shape identifiers detected"
 
+      - name: Hygiene guard — denylist scan of the publish surface
+        env:
+          REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
+        run: node scripts/verify-tarball-clean.mjs
+
       - name: Sanity — package.json version matches release tag
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")

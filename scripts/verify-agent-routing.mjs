@@ -14,8 +14,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 assert.equal(
   packageJson.scripts?.["verify:release"],
-  "npm test && npm pack --dry-run",
-  "CLI release gate must run agent routing tests and npm pack dry-run",
+  "npm test && node scripts/verify-tarball-clean.mjs && npm pack --dry-run",
+  "CLI release gate must run agent routing tests, the publish-surface hygiene scan, and npm pack dry-run",
 );
 assert.equal(
   existsSync(path.join(repoRoot, "docs/agent-skills.bundle.json")),
@@ -201,13 +201,13 @@ const server = createServer(async (req, res) => {
             objectId: "missing-page",
             status: "deleted",
             title: "Missing Page",
-            detail: "Deleted by Kevin Yu",
+            detail: "Deleted by Alex Chen",
             url: "https://command.llamaventures.vc/wiki/missing-page",
           },
           lifecycle: [
             {
               action: "deleted",
-              actor_label: "Kevin Yu",
+              actor_label: "Alex Chen",
               created_at: "2026-06-15T19:02:00Z",
               reason: "user_deleted",
             },
@@ -543,7 +543,7 @@ try {
   resetCalls();
   const explainRun = await runCli(["explain", "https://command.llamaventures.vc/wiki/missing-page"], baseUrl, homeDir);
   assert.match(explainRun.stdout, /Status: deleted/);
-  assert.match(explainRun.stdout, /Deleted by Kevin Yu/);
+  assert.match(explainRun.stdout, /Deleted by Alex Chen/);
   assert.deepEqual(paths(), ["GET /api/agent/explain"]);
   assert.equal(businessCalls()[0].query.q, "https://command.llamaventures.vc/wiki/missing-page");
 

@@ -69,3 +69,10 @@ jobs:
           ! grep -q '^package/\.github' /tmp/contents.txt
           ! grep -q 'node_modules' /tmp/contents.txt
           ! grep -q '\.env' /tmp/contents.txt
+
+      - name: Hygiene guard — denylist scan of the publish surface
+        # Secret is absent on fork PRs; the script warns and passes there.
+        # The publish workflow runs the same scan as a hard gate.
+        env:
+          REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
+        run: node scripts/verify-tarball-clean.mjs

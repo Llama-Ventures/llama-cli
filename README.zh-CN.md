@@ -26,6 +26,7 @@
 
 <p align="center">
   <a href="#给华人创业者-向-llama-pitch">🚀 向 Llama pitch（无需账号）</a> ·
+  <a href="#接入你的-ai-系统">接入你的 AI</a> ·
   <a href="#安装">安装</a> ·
   <a href="#认证">认证</a> ·
   <a href="#cli-速览">CLI</a> ·
@@ -48,7 +49,7 @@
 ```
 @llamaventures/cli
 ├── bin/llama          给人 + bash 用的交互式 CLI
-└── bin/llama-mcp      给 MCP 原生 agent 用的 stdio MCP server，56 个工具
+└── bin/llama-mcp      给 MCP 原生 agent 用的 stdio MCP server，58 个类型化工具
 ```
 
 两个 binary 共享 `lib/client.mjs`——**同一**认证链、**同一** HTTP 客户端、
@@ -133,12 +134,6 @@ llama auth status     # 会跑一次 /api/me 验证
 
 同一次安装会把 `llama-mcp` 也放到 `PATH` 上——MCP server 不用单独装包。
 
-> **从 `npm link` 升级过来？** CLI 以前住在 `llama-os/cli/` 目录，靠 `npm link`
-> 分发。从 v1.x 起改名 `@llamaventures/cli` 走 npm。
-> 跑一次 `npm i -g @llamaventures/cli@latest` 就完事；旧目录在 soak 期间
-> 还能用，但已经不是 source of truth。详见
-> [`llama-os/cli/DEPRECATED.md`](https://github.com/SoujiOkita98/llama-os/blob/main/cli/DEPRECATED.md)。
-
 ---
 
 ## 认证
@@ -147,16 +142,29 @@ llama auth status     # 会跑一次 /api/me 验证
 
 | # | 来源 | 发送的 header | 适合谁 |
 |---|------|--------------|--------|
-| 1 | `gcloud auth print-identity-token` | `Authorization: Bearer …` | Llama 团队成员（零配置） |
-| 2 | `$LLAMA_TOKEN` 环境变量 | `X-Llama-Token` | CI runner、云上 sandbox agent |
-| 3 | `~/.llama/token`（mode `0600`） | `X-Llama-Token` | 本地常驻安装 |
-| 4 | `~/.llama-command/config.json` | `X-Llama-Token` | CLI v0.1 老路径——首次读取自动迁移到 `~/.llama/token` |
+| 1 | `llama auth login`（OAuth 2.1，存 OS Keychain） | `Authorization: Bearer …` | **所有人的推荐方式。** 浏览器一次登录，token 自动刷新、重启不丢 |
+| 2 | `gcloud auth print-identity-token` | `Authorization: Bearer …` | 已经配好 gcloud 的工作机（零配置） |
+| 3 | `$LLAMA_TOKEN` 环境变量 | `X-Llama-Token` | CI runner、云上 sandbox agent |
+| 4 | `~/.llama/token`（mode `0600`） | `X-Llama-Token` | 本地常驻安装（长期 PAT） |
+| 5 | `~/.llama-command/config.json` | `X-Llama-Token` | CLI v0.1 老路径——首次读取自动迁移到 `~/.llama/token` |
 
 如果 Bearer 和 X-Llama-Token 同时存在，两个一起发。服务器先验 Bearer，
 失败后回退到 X-Llama-Token。任何时候都可以用 `llama auth status`
 看当前认证身份。
 
-### 零配置 —— 团队成员推荐
+### 浏览器登录 —— 推荐
+
+```bash
+llama auth login           # 打开浏览器 → Google 登录 → 授权 → 完成
+llama auth status          # → activeMethod=oauth，显示身份与 scope
+llama deal search acme-ai  # 直接用
+```
+
+OAuth 2.1 PKCE 流程，token 存 OS Keychain（macOS Keychain / Windows
+Credential Manager / Linux Secret Service），自动刷新。
+`llama auth logout` 会在服务端吊销并清空本地存储。
+
+### gcloud —— 已配好 gcloud 的机器
 
 ```bash
 gcloud auth login          # 一次性，选你的 @llamaventures.vc 账号
@@ -188,6 +196,34 @@ llama deal search acme-ai  # 直接用
 
 ---
 
+## 接入你的 AI 系统
+
+这个包是 Llama Command 的**官方集成面**。要把自研 agent、编程助手或任何
+LLM 应用接进工作台，请从这里走——**不要直接调 HTTP API**。CLI/MCP 层
+负责认证链、稳定的 `Error[…]` 错误契约、以及服务端 schema 变化时的
+前向兼容（[SemVer](#稳定性)）；裸 API 路由没有这些承诺，随时可能变。
+
+五分钟接入路径：
+
+1. **拿凭证** —— 团队账号直接 `llama auth login`；无人值守系统请管理员在
+   [`/settings/tokens`](https://command.llamaventures.vc/settings/tokens)
+   mint 一个 PAT，再用 `llama token set` 或 `$LLAMA_TOKEN` 配置。
+2. **安装** —— `npm i -g @llamaventures/cli`（Node 18+）。
+3. **接线：**
+   - **MCP 原生 agent**（Claude、Cursor、任何 stdio 客户端）→ 指向
+     `llama-mcp`：58 个类型化工具，无通用 passthrough。
+     各客户端配置见 [MCP server](#mcp-server)。
+   - **其它形态** → 子进程调用 `llama …`。输出是 agent 友好的纯文本；
+     失败带稳定的 `Error[…]` 前缀。
+4. **让 agent 自我入职** —— 会话开始时跑一次 `llama agent-onboard`
+   （或取 MCP 的 `agent_briefing` prompt），拿到**服务端下发的 Agent
+   Runtime Contract**——最新的工作流规则、署名规范、错误恢复——
+   与线上服务器永远同步，README 永远不会成为集成瓶颈。
+5. **验证** —— `llama auth status` 回环确认身份；
+   `llama deal search "<随便什么>"` 证明读权限通了。
+
+---
+
 ## CLI 速览
 
 CLI 是 canonical 接口。底下的 HTTP API 也稳定，但 CLI 帮你处理了认证、错误格式、
@@ -201,16 +237,12 @@ llama token show
 
 # Pipeline——读
 llama deal search "acme ai"
-llama deal list --owner alex --status Interested
-llama deal list --owner alex --status Outreached
-llama deal list --source-direction Outbound --status Outreached
-llama deal list --owner alex --status Diligence
+llama deal list --owner alex --status Diligence      # 与 search 同一套过滤参数
 llama deal show <dealId>
+llama deal feed <dealId>                             # 该 deal 的全部贡献，最新在前
 
 # Pipeline——写
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Interested
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Outbound --status Outreached
-llama deal create "Acme AI" --description "..." --source Gavin --source-direction Inbound --status Sourced
+llama deal create "Acme AI" --description "..." --source alex --source-direction Outbound --status Interested
 llama deal update <dealId> status Diligence
 llama deal enrich <dealId> --dry-run
 llama deal enrich <dealId> --apply --executor server_agent
@@ -260,8 +292,9 @@ llama mentions
 llama mentions resolve <mentionId>
 ```
 
-跑 `llama --help` 看完整命令清单（50+ 个命令，覆盖 deals、briefs、ownership、
-timeline、facts、wiki、mentions、skill corrections、admin event feeds）。
+跑 `llama --help` 看分组索引，`llama help all` 看完整命令参考——100+ 个命令,
+覆盖 deals、briefs、facts、ownership、timeline、wiki、memo、deal 级 HTML
+artifacts、mentions、skill corrections、evals、admin event feeds。
 所有删除默认软删除——可恢复，且通过 `deal_events` 留下审计痕迹。
 
 ### 错误码（给 agent 用）
@@ -375,8 +408,8 @@ claude mcp add llama -- llama-mcp
 - **向后兼容：** wire format（Bearer / X-Llama-Token）和 `Error[…]` 前缀
   是公开契约，major 版本内不会变。
 - **服务端 schema 漂移：** 当 API 多了一个端点，下一个 minor 版本会带
-  typed wrapper。在那之前，可以用 `llama` CLI 本身——它自带 40+ 命令
-  覆盖整个 API 表面，足够顶住 MCP 还没包到的端点。
+  typed wrapper。这个包**故意不提供**裸 API passthrough——如果你需要的
+  wrapper 还没落地，开 issue，不要直接调 HTTP API。
 
 详见 [`CHANGELOG.md`](CHANGELOG.md)。
 

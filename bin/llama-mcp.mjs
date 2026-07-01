@@ -1032,8 +1032,9 @@ server.registerTool(
   "deal_refresh_persona",
   {
     description:
-      "Regenerate one persona's analysis section for a deal. persona ∈ gavin | kyle | jack | " +
-      "david | bryan | herman | hongjiang | liuyi | kevin. Returns a runId (or null if debounced).",
+      "Regenerate one persona's analysis section for a deal. persona = a server-configured " +
+      "persona key (unknown keys are rejected; discover the roster via agent_bootstrap). " +
+      "Returns a runId (or null if debounced).",
     inputSchema: {
       dealId: z.string(),
       persona: z.string(),
