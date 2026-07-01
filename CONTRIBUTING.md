@@ -95,6 +95,6 @@ mismatch and re-cut the release.
 
 ## Security
 
-Don't file public issues for security bugs. Email
-[gavin@llamaventures.vc](mailto:gavin@llamaventures.vc). Full policy:
-[`SECURITY.md`](SECURITY.md).
+Don't file public issues for security bugs. Report privately via
+[GitHub security advisories](https://github.com/Llama-Ventures/llama-cli/security/advisories/new).
+Full policy: [`SECURITY.md`](SECURITY.md).
