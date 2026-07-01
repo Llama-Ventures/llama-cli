@@ -6,12 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.17.3] - 2026-07-01
+
 ### Changed
 - README (en + zh) condensed to the essentials — install, auth, AI-system
   integration, CLI/MCP quick reference, external pitch; removed the
   architecture diagram and marketing filler.
 - Security reporting now goes through GitHub private vulnerability reporting
   instead of a personal email (README, SECURITY.md, CONTRIBUTING.md).
+- npm tarball trimmed to runtime files (bin/, lib/, agent briefing,
+  changelog, READMEs, license) — repo docs and CI test assets are no longer
+  published. 18 → 14 files.
 
 ## [1.17.2] - 2026-07-01
 

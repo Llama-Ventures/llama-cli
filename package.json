@@ -1,6 +1,6 @@
 {
   "name": "@llamaventures/cli",
-  "version": "1.17.2",
+  "version": "1.17.3",
   "description": "CLI + MCP server for the Llama Ventures investment workbench (command.llamaventures.vc).",
   "type": "module",
   "scripts": {
@@ -13,16 +13,12 @@
     "llama-mcp": "bin/llama-mcp.mjs"
   },
   "files": [
-    "assets/",
     "bin/",
     "lib/",
-    "scripts/verify-agent-routing.mjs",
     "AGENT_BRIEFING.md",
     "CHANGELOG.md",
-    "CONTRIBUTING.md",
     "README.md",
     "README.zh-CN.md",
-    "SECURITY.md",
     "LICENSE"
   ],
   "engines": {
