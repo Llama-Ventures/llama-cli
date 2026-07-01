@@ -5,8 +5,9 @@
 **Do not file public GitHub issues for security bugs.** A public issue
 gives an attacker a head-start before we can patch.
 
-Instead, email [**gavin@llamaventures.vc**](mailto:gavin@llamaventures.vc)
-with:
+Instead, report privately via
+[GitHub security advisories](https://github.com/Llama-Ventures/llama-cli/security/advisories/new)
+("Report a vulnerability" on the repo's Security tab), including:
 
 - A short description of the issue
 - Steps to reproduce
