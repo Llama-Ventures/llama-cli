@@ -6,17 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.17.2] - 2026-07-01
+
 ### Changed
 - README (en + zh): new "Integrate your AI system" section — the recommended
   path for wiring external agents/LLM apps through the CLI/MCP layer instead
   of the raw HTTP API; corrected tool count (58) and command count (100+);
-  de-duplicated the CLI tour examples; removed the obsolete npm-link
-  migration note; the zh auth section now documents `llama auth login`
-  (OAuth) as the recommended method, matching en.
-- MCP `deal_refresh_persona` tool description no longer enumerates the
-  server-side persona roster; discover valid keys via `agent_bootstrap`.
-- Agent briefing: added the public-surfaces hygiene rule from the
-  server-owned contract.
+  de-duplicated the CLI tour examples; removed an obsolete migration note;
+  the zh auth section now documents `llama auth login` (OAuth) as the
+  recommended method, matching en.
+- MCP tool descriptions now defer server-configured option lists to runtime
+  discovery via `agent_bootstrap` instead of hardcoding them in tool text.
+- Agent briefing: added a public-surfaces hygiene rule from the server-owned
+  contract.
+- CI/publish pipeline: additional automated release-gate checks.
 
 ## [1.17.1] - 2026-06-29
 
