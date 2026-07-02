@@ -90,6 +90,18 @@ function parseFlags(args, knownFlags = null) {
   return { flags, positional };
 }
 
+const COMMENT_CONTEXTS = new Set(["feed", "ic_discussion", "workflow"]);
+const COMMENT_INTENTS = new Set(["comment", "question", "decision", "blocker"]);
+
+function normalizeCommentFlag(value, allowed, fallback, label) {
+  if (value === undefined || value === null || value === true || value === "") return fallback;
+  const normalized = String(value);
+  if (!allowed.has(normalized)) {
+    throw new Error(`Invalid ${label}: ${normalized}. Expected one of: ${Array.from(allowed).join(", ")}`);
+  }
+  return normalized;
+}
+
 function agentOnboardNoAuthMessage() {
   return `Llama Ventures team onboarding requires credentials.
 
@@ -389,6 +401,14 @@ Zero-config: if you've already run \`gcloud auth login\` with your
 auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
+Where writes appear:
+  llama deal fact add ...        -> Deal Feed + memo evidence (verifiable claim)
+  llama comment ...              -> Deal Feed; @mentions also create inbox/email cues
+  llama brief add-text ...        -> Workbench/Memo; Feed only for replies/discussion blocks
+  llama html publish ...          -> Deal Browse artifact at /deals/<id>/browse/<slug>
+  llama wiki save ...             -> Wiki search/article, not a single-deal Feed item
+  llama timeline / deal feed      -> read-only views; they do not write content
+
 Deals:
   llama deal create "Company" --source <name> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
   llama deal show <dealId>
@@ -451,9 +471,11 @@ Approvals (partner queue — self-claim approvals):
   llama approvals list
   llama approvals decide <approvalId> approved|rejected [--note "..."]
 
-Timeline / Posts:
+Timeline / Comments:
   llama timeline <dealId>                                    # full unified feed
-  llama post <dealId> "message body" [--link url] [--link-name "name"]
+  llama comment <dealId> "message body" [--context feed|ic_discussion|workflow] [--intent comment|question|decision|blocker]
+                                                             [--link url] [--link-name "name"]
+  llama post <dealId> "message body" [--link url] [--link-name "name"]   # legacy alias
 
 Brief blocks:
   llama brief blocks <dealId>                                  # list current block array
@@ -613,7 +635,7 @@ Common:
   llama deal search "<name>"        find a deal in the pipeline
   llama deal show <dealId>          full deal record
   llama deal feed <dealId>          every contribution (facts + notes), newest first
-  llama post <dealId> "..."         add a note to a deal
+  llama comment <dealId> "..."      add a comment/question to a deal
   llama agent-onboard               print the AI-agent workflow contract
   llama agent bootstrap             live Llama OS skill manifest from Command
   llama skills search "<query>"     discover which skill to read
@@ -624,7 +646,7 @@ Command groups — run \`llama help <group>\` for that group's commands:
   deal        create · show · feed · update · enrich · search · collaborators · links · delete
   brief       brief blocks: list · add · edit · history · refresh
   facts       deal facts + skill corrections (the sourced, trust-rated layer)
-  timeline    timeline · posts · mentions
+  timeline    timeline · comments · mentions
   wiki        cross-deal knowledge entries (markdown or HTML)
   eval        mark real CLI/MCP searches good/bad or add a golden-query candidate
   memo        long-form HTML investment memo
@@ -638,22 +660,28 @@ Command groups — run \`llama help <group>\` for that group's commands:
 
   llama help all     the full command reference (everything at once)
 
+Where writes appear:
+  fact add -> Feed + memo evidence
+  comment  -> Feed + inbox/email if @mentioned
+  brief    -> Workbench/Memo; Feed only for replies/discussion
+  html     -> Deal Browse artifact
+
 Auth: if you've run \`gcloud auth login\` with your @llamaventures.vc account,
 the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
 
 // Area → which top-level sections of HELP_FULL belong to it.
 const HELP_AREA_MATCH = {
-  deal: [/^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
-  brief: [/^Brief blocks/, /^Brief \/ persona/],
-  facts: [/^Deal facts/, /^Skill corrections/],
-  timeline: [/^Timeline/, /^Mentions/],
+  deal: [/^Where writes appear/, /^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
+  brief: [/^Where writes appear/, /^Brief blocks/, /^Brief \/ persona/],
+  facts: [/^Where writes appear/, /^Deal facts/, /^Skill corrections/],
+  timeline: [/^Where writes appear/, /^Timeline/, /^Mentions/],
   wiki: [/^Wiki/, /^Where does this HTML/],
   memo: [/^Memo/],
-  html: [/^Deal page HTML/],
+  html: [/^Where writes appear/, /^Deal page HTML/],
   pitch: [/^External pitch/],
   ownership: [/^Ownership/, /^Approvals/],
   admin: [/^Admin/],
-  agent: [/^Agent onboarding/],
+  agent: [/^Agent onboarding/, /^Where writes appear/],
   skills: [/^Agent onboarding/],
   auth: [/^Setup/, /^Zero-config/, /^Token discovery/, /^Env/],
 };
@@ -1845,6 +1873,34 @@ async function main() {
     const dealId = action;
     if (!dealId) throw new Error("Usage: llama timeline <dealId>");
     print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/timeline`));
+    return;
+  }
+
+  // ----- Canonical comment -----
+  if (area === "comment") {
+    const dealId = action;
+    const { flags, positional } = parseFlags(rest, ["context", "intent", "link", "link-name"]);
+    const body = positional[0];
+    if (!dealId || !body) {
+      throw new Error(
+        `Usage: llama comment <dealId> "message body" ` +
+          `[--context feed|ic_discussion|workflow] ` +
+          `[--intent comment|question|decision|blocker] [--link url] [--link-name "name"]`,
+      );
+    }
+    const attachments = flags.link
+      ? [{ url: String(flags.link), name: flags["link-name"] ? String(flags["link-name"]) : String(flags.link) }]
+      : [];
+    print(await request(
+      "POST",
+      `/api/deals/${encodeURIComponent(dealId)}/comments`,
+      {
+        body,
+        context: normalizeCommentFlag(flags.context, COMMENT_CONTEXTS, "feed", "context"),
+        intent: normalizeCommentFlag(flags.intent, COMMENT_INTENTS, "comment", "intent"),
+        attachments,
+      }
+    ));
     return;
   }
 

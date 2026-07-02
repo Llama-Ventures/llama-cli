@@ -895,19 +895,41 @@ server.registerTool(
 );
 
 server.registerTool(
+  "comment",
+  {
+    description:
+      "Add a canonical Comment to a deal. Use this for opinions, questions, " +
+      "IC discussion, reactions, and @-mentions. Facts still go to deal_fact_add. " +
+      "context defaults to feed; use ic_discussion for Async IC.",
+    inputSchema: {
+      dealId: z.string(),
+      message: z.string(),
+      context: z.enum(["feed", "ic_discussion", "workflow"]).default("feed"),
+      intent: z.enum(["comment", "question", "decision", "blocker"]).default("comment"),
+    },
+  },
+  async ({ dealId, message, context, intent }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/comments`, {
+      body: message,
+      context,
+      intent,
+    })
+);
+
+server.registerTool(
   "post",
   {
     description:
-      "Post a message to a deal's timeline. Message can include @-mentions " +
-      "(e.g. @<first-name> or @<email@llamaventures.vc>) — the system fires " +
-      "email + inbox notifications to mentioned users.",
+      "Legacy alias for adding a deal Comment. Prefer the `comment` tool for " +
+      "new callers. Message can include @-mentions (e.g. @<first-name> or " +
+      "@<email@llamaventures.vc>) — the system fires email + inbox notifications.",
     inputSchema: {
       dealId: z.string(),
       message: z.string(),
     },
   },
   async ({ dealId, message }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/posts`, { message })
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/posts`, { body: message })
 );
 
 // ============================================================

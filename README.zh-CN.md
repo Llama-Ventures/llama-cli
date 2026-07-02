@@ -118,7 +118,8 @@ llama deal show <dealId>
 llama deal feed <dealId>               # 该 deal 的全部贡献，最新在前
 llama deal create "Acme AI" --source alex --source-direction Outbound --status Interested
 llama deal update <dealId> status Diligence
-llama post <dealId> "备注内容"
+llama comment <dealId> "评论内容"
+llama post <dealId> "评论内容"          # legacy alias
 llama brief add-text <dealId> --heading "..." --body "..."
 llama wiki search "<查询词>"
 llama wiki save <slug> --title "..." --content "..."

@@ -96,7 +96,8 @@ llama deal show <dealId>
 llama deal feed <dealId>               # every contribution, newest first
 llama deal create "Acme AI" --source alex --source-direction Outbound --status Interested
 llama deal update <dealId> status Diligence
-llama post <dealId> "note body"
+llama comment <dealId> "comment body"
+llama post <dealId> "comment body"     # legacy alias
 llama brief add-text <dealId> --heading "..." --body "..."
 llama wiki search "<query>"
 llama wiki save <slug> --title "..." --content "..."
