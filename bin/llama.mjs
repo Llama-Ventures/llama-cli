@@ -291,6 +291,38 @@ async function searchDeals(q, flags) {
   return result;
 }
 
+function buildActivityQuery(kind, flags) {
+  const params = new URLSearchParams({ kind });
+  const mappings = [
+    ["since", "since"],
+    ["limit", "limit"],
+    ["cursor", "cursor"],
+    ["before-id", "before_id"],
+    ["before_id", "before_id"],
+    ["deal", "deal"],
+    ["deal-id", "deal_id"],
+    ["deal_id", "deal_id"],
+    ["entity", "entity"],
+    ["min-sig", "min_sig"],
+    ["min_sig", "min_sig"],
+    ["min-significance", "min_sig"],
+  ];
+  for (const [flag, param] of mappings) {
+    if (flags[flag] !== undefined && flags[flag] !== true) {
+      params.set(param, String(flags[flag]));
+    }
+  }
+  for (const verb of splitCsvFlag(flags.verb) ?? []) {
+    params.append("verb", verb);
+  }
+  return params;
+}
+
+async function fetchActivity(kind, flags) {
+  const params = buildActivityQuery(kind, flags);
+  return request("GET", `/api/agent/activity?${params}`);
+}
+
 function splitCsvFlag(value) {
   if (!value || value === true) return undefined;
   return String(value)
@@ -367,6 +399,8 @@ Agent onboarding (run once on first install):
   llama agent bootstrap                # fetch live Command + Llama OS skill manifest
   llama skills search "pipeline update" # discover relevant runtime skills
   llama skills show llama-pipeline      # read a skill from Command
+  llama activity new-deals --since 24h  # recent deal creations for agents
+  llama activity updated-deals --since 7d # meaningful deal updates, grouped
   llama explain <url-or-object>         # explain Command URL/object status + lifecycle
   llama eval good|bad --last            # mark the latest CLI/MCP result for eval
   llama eval add "<query>" --expect wiki:<slug>|deal:<uuid>
@@ -417,6 +451,13 @@ Deals:
                             [--theirStage Raising] [--stage Seed] [--source-direction Inbound]
                             [--limit 200] [--offset 0]
   llama deal list [--owner ...] [--status ...] [...same flags as search]
+
+Agent activity (read-only, cheap read model over append-only activity):
+  llama activity new-deals [--since 24h|7d|<ISO>] [--limit 50]
+  llama activity updated-deals [--since 24h|7d|<ISO>] [--limit 50] [--deal <uuid>]
+  llama activity events [--since 24h] [--verb fact.added,brief.revised] [--entity deal|wiki|all]
+      Use this before scanning raw timelines or event-bus payloads. It returns
+      JSON from Command's curated activity_events projection: source ids included.
 
 Collaborators (besides owner — attribution candidates, no approval):
   llama deal collab list <dealId>
@@ -614,6 +655,8 @@ Common:
   llama deal show <dealId>          full deal record
   llama deal feed <dealId>          every contribution (facts + notes), newest first
   llama post <dealId> "..."         add a note to a deal
+  llama activity new-deals --since 24h  recent deal creations
+  llama activity updated-deals --since 7d meaningful deal updates
   llama agent-onboard               print the AI-agent workflow contract
   llama agent bootstrap             live Llama OS skill manifest from Command
   llama skills search "<query>"     discover which skill to read
@@ -622,6 +665,7 @@ Common:
 
 Command groups — run \`llama help <group>\` for that group's commands:
   deal        create · show · feed · update · enrich · search · collaborators · links · delete
+  activity    new-deals · updated-deals · events for agent read models
   brief       brief blocks: list · add · edit · history · refresh
   facts       deal facts + skill corrections (the sourced, trust-rated layer)
   timeline    timeline · posts · mentions
@@ -644,6 +688,7 @@ the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
 // Area → which top-level sections of HELP_FULL belong to it.
 const HELP_AREA_MATCH = {
   deal: [/^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
+  activity: [/^Agent activity/],
   brief: [/^Brief blocks/, /^Brief \/ persona/],
   facts: [/^Deal facts/, /^Skill corrections/],
   timeline: [/^Timeline/, /^Mentions/],
@@ -1040,6 +1085,40 @@ async function main() {
     } else {
       process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
     }
+    return;
+  }
+
+  if (area === "activity") {
+    const sub = action || "events";
+    const normalized = sub.replace(/-/g, "_");
+    const kind =
+      normalized === "new" || normalized === "new_deal" || normalized === "new_deals"
+        ? "new_deals"
+        : normalized === "updated" || normalized === "updates" || normalized === "updated_deal" || normalized === "updated_deals"
+          ? "updated_deals"
+          : normalized === "event" || normalized === "events" || normalized === "feed" || normalized === "all"
+            ? "events"
+            : null;
+    if (!kind) {
+      throw new Error("Usage: llama activity new-deals|updated-deals|events [--since 24h] [--limit 50]");
+    }
+    const { flags } = parseFlags(rest, [
+      "json",
+      "since",
+      "limit",
+      "cursor",
+      "before-id",
+      "before_id",
+      "deal",
+      "deal-id",
+      "deal_id",
+      "entity",
+      "verb",
+      "min-sig",
+      "min_sig",
+      "min-significance",
+    ]);
+    print(await fetchActivity(kind, flags));
     return;
   }
 

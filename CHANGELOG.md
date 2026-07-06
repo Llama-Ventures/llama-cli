@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- `llama activity new-deals|updated-deals|events` plus MCP `activity_query`
+  for agent-friendly reads over Command's curated activity projection. Agents
+  can ask for recent deal creations or meaningful deal updates without scanning
+  raw timelines or event-bus payloads.
+
 ## [1.17.3] - 2026-07-01
 
 ### Changed

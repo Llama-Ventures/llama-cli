@@ -217,6 +217,27 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/agent/activity") {
+      writeJson(res, {
+        ok: true,
+        schema_version: "agent_activity.v1",
+        kind: url.searchParams.get("kind") || "events",
+        since: url.searchParams.get("since") || "24h",
+        read_model: "activity_events",
+        items: [
+          {
+            type: url.searchParams.get("kind") === "new_deals" ? "new_deal" : "updated_deal",
+            deal_id: "deal-activity",
+            company_name: "Activity AI",
+            summary: "Activity AI was added to the pipeline.",
+            url: "/deals/deal-activity/feed",
+          },
+        ],
+        next_cursor: null,
+      });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/wiki/search") {
       writeJson(res, [
         {
@@ -548,6 +569,14 @@ try {
   assert.equal(businessCalls()[0].query.q, "https://command.llamaventures.vc/wiki/missing-page");
 
   resetCalls();
+  const activityRun = await runCli(["activity", "new-deals", "--since", "24h", "--limit", "10"], baseUrl, homeDir);
+  assert.match(activityRun.stdout, /Activity AI/);
+  assert.deepEqual(paths(), ["GET /api/agent/activity"]);
+  assert.equal(businessCalls()[0].query.kind, "new_deals");
+  assert.equal(businessCalls()[0].query.since, "24h");
+  assert.equal(businessCalls()[0].query.limit, "10");
+
+  resetCalls();
   const wikiRun = await runCli(["wiki", "search", "llama weekly"], baseUrl, homeDir);
   assert.match(wikiRun.stdout, /llama-weekly-2026-06-16/);
   assert.deepEqual(paths(), ["GET /api/wiki/search"]);
@@ -571,7 +600,7 @@ try {
   assert.match(evalRun.stdout, /"feedback": "bad"/);
   assert.deepEqual(paths(), ["POST /api/agent/eval-feedback"]);
   assert.equal(businessCalls()[0].body?.action, "bad");
-  assert.equal(businessCalls()[0].body?.eventId, 6);
+  assert.equal(businessCalls()[0].body?.eventId, 7);
   assert.equal(businessCalls()[0].body?.expected?.wikiSlugs?.[0], "llamaos-weekly-2026-06-17");
 
   resetCalls();
@@ -808,6 +837,19 @@ try {
   const inspectPayload = JSON.parse(mcpInspect.content?.[0]?.text ?? "{}");
   assert.equal(inspectPayload.result?.target?.status, "deleted");
   assert.deepEqual(paths(), ["GET /api/agent/explain"]);
+
+  resetCalls();
+  const mcpActivity = await callMcpTool(
+    "activity_query",
+    { kind: "updated_deals", since: "7d", limit: 5 },
+    baseUrl,
+    homeDir,
+  );
+  const activityPayload = JSON.parse(mcpActivity.content?.[0]?.text ?? "{}");
+  assert.equal(activityPayload.kind, "updated_deals");
+  assert.deepEqual(paths(), ["GET /api/agent/activity"]);
+  assert.equal(businessCalls()[0].query.kind, "updated_deals");
+  assert.equal(businessCalls()[0].query.since, "7d");
 
   console.log("agent routing verification passed");
 } finally {
