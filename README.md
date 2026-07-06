@@ -7,7 +7,7 @@
 <p align="center">
   <strong>The Llama Ventures CLI &amp; MCP server.</strong><br/>
   One package, two binaries: <code>llama</code> — the CLI for humans and scripts —
-  and <code>llama-mcp</code> — a stdio MCP server with 58 typed tools for any
+  and <code>llama-mcp</code> — a stdio MCP server with 59 typed tools for any
   MCP-native agent. Both share the same auth chain, HTTP client, and error
   format, and talk to <a href="https://command.llamaventures.vc">command.llamaventures.vc</a>.
 </p>
@@ -94,6 +94,8 @@ schema forward-compatibility. Prefer it even from scripts.
 llama deal search "acme ai"            # find deals (deal list takes the same filters)
 llama deal show <dealId>
 llama deal feed <dealId>               # every contribution, newest first
+llama activity new-deals --since 24h   # recent deal creations
+llama activity updated-deals --since 7d # meaningful updates grouped by deal
 llama deal create "Acme AI" --source alex --source-direction Outbound --status Interested
 llama deal update <dealId> status Diligence
 llama post <dealId> "note body"
@@ -125,7 +127,7 @@ Authenticated calls send bounded, content-redacted telemetry to Command;
 
 ## MCP server
 
-`llama-mcp` is a stdio Model Context Protocol server exposing 58 typed tools
+`llama-mcp` is a stdio Model Context Protocol server exposing 59 typed tools
 that mirror the most-used CLI surface. Every tool is named and scoped — there
 is deliberately no generic API passthrough. Auth is identical to the CLI's
 chain. For the exact live list, pipe `tools/list` through it:

@@ -349,6 +349,41 @@ server.registerTool(
   }
 );
 
+server.registerTool(
+  "activity_query",
+  {
+    description:
+      "Read Command's curated agent activity projection. Use this before " +
+      "scanning raw timelines or event-bus payloads. Examples: new deals in " +
+      "the past 24h, deals with meaningful updates in the past 7d, or recent " +
+      "fact/memo/brief events. Returns source ids so callers can drill down.",
+    inputSchema: {
+      kind: z
+        .enum(["events", "new_deals", "updated_deals"])
+        .default("events")
+        .describe("events = raw curated rows; new_deals = deal.created; updated_deals = grouped meaningful deal updates"),
+      since: z.string().optional().describe("24h, 7d, 30d, or ISO timestamp; default 24h"),
+      limit: z.number().optional().describe("default 50, cap 100"),
+      dealId: z.string().optional().describe("optional single deal UUID"),
+      entity: z.enum(["deal", "wiki", "all"]).optional().describe("default deal"),
+      verb: z.string().optional().describe("comma-separated activity verbs, e.g. fact.added,brief.revised"),
+      cursor: z.number().optional().describe("pagination cursor from next_cursor"),
+      minSignificance: z.number().optional().describe("1..3; default 2, new_deals default 3"),
+    },
+  },
+  async ({ kind, since, limit, dealId, entity, verb, cursor, minSignificance } = {}) => {
+    const params = new URLSearchParams({ kind: kind || "events" });
+    if (since) params.set("since", since);
+    if (limit) params.set("limit", String(limit));
+    if (dealId) params.set("deal_id", dealId);
+    if (entity) params.set("entity", entity);
+    if (verb) params.set("verb", verb);
+    if (cursor) params.set("cursor", String(cursor));
+    if (minSignificance) params.set("min_sig", String(minSignificance));
+    return callApi("GET", `/api/agent/activity?${params}`);
+  }
+);
+
 // ============================================================
 // Deals — read
 // ============================================================

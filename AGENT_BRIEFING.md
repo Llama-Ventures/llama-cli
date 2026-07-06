@@ -29,6 +29,7 @@ This npm package is public, but Llama OS skills are private. Do not assume the s
 - Use `llama agent-onboard` or MCP `agent_briefing` for the server-owned Agent Runtime Contract. The npm-bundled text is fallback only.
 - Use `llama skills search "<task>"` or MCP `skills_search` before choosing a Llama workflow.
 - Use `llama skills show <slug>` or MCP `skills_read` only for the relevant skill.
+- Use `llama activity new-deals|updated-deals` or MCP `activity_query` before scanning raw deal timelines for recent portfolio movement.
 - Use `llama explain <command-url-or-object>` or MCP `object_inspect` for 404s, deleted wiki pages, notifier links, deal URLs, and unknown Command objects before telling the user "the system is broken."
 
 The boundary matters: public CLI/MCP discovers skills, but authenticated Command decides which skill content the token may read.
@@ -309,6 +310,7 @@ Tools available:
 - `auth_status` — verify creds + identity (call first if anything 401s)
 - `agent_bootstrap` — fetch the live Command + Llama OS runtime manifest
 - `skills_search` / `skills_read` — discover and read authenticated runtime skills
+- `activity_query` — query new deals and meaningful updates without scanning raw timelines
 - `object_inspect` — explain Command URLs, 404s, deleted objects, and lifecycle trail
 - `deal_search` / `deal_show` / `deal_create` / `deal_update`
 - `brief_blocks` / `brief_add_text` / `brief_add_link` / `brief_add_callout`
