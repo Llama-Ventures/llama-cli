@@ -297,7 +297,7 @@ Run `llama --help` for the full surface (~40 commands).
 
 ## MCP-native agents
 
-If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (56 typed tools, identical auth chain).
+If you support [MCP](https://modelcontextprotocol.io), **prefer the MCP server over parsing CLI output.** The same package ships `llama-mcp` (59 typed tools, identical auth chain).
 
 Add to your MCP client config (Claude Desktop / Claude Code / Cursor / OpenClaw / Codex / etc.):
 

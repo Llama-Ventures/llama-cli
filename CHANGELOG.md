@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-06
+
 ### Added
 - `llama activity new-deals|updated-deals|events` plus MCP `activity_query`
   for agent-friendly reads over Command's curated activity projection. Agents
@@ -498,7 +500,10 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.3...v1.18.0
+[1.17.3]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.2...v1.17.3
+[1.17.2]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.1...v1.17.2
 [1.17.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.15.1...v1.16.0
