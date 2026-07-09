@@ -118,7 +118,8 @@ llama deal show <dealId>
 llama deal feed <dealId>               # 该 deal 的全部贡献，最新在前
 llama activity new-deals --since 24h   # 最近新建的 deal
 llama activity updated-deals --since 7d # 按 deal 聚合的实质更新
-llama deal create "Acme AI" --source alex --source-direction Outbound --status Interested
+llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
+llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "备注内容"
 llama brief add-text <dealId> --heading "..." --body "..."
@@ -131,6 +132,10 @@ llama agent-onboard                    # 服务端下发的 agent 工作契约
 Status 语义——`Interested`：接触前先记录关注 · `Outreached`：已联系、
 尚无回应 · `Sourced`：已有真实关系信号。`sourceDirection` 是独立维度：
 `Inbound` 流入，`Outbound` 我们主动。
+
+Facts 的正文用 `claim`。`source` 是人可读来源标签，`sourceUrl` 是 canonical
+证据 URL；两者都会从 API 回显。`dealOwner` 请用 `/api/field-options`
+里的精确 `dealOwner` 值、用户邮箱，或数字 user id。
 
 `llama --help` 看分组索引，`llama help all` 看全部 100+ 命令。
 所有删除默认软删除、有审计记录。

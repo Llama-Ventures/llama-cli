@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+- Clarified the Command facts write contract across CLI, MCP, and agent docs:
+  `claim` is canonical, `value` remains a compatibility alias, `sourceUrl`
+  round-trips as provenance, and categories are free text. `deal create` now
+  forwards `--deal-owner` using name, email, or user id.
+
 ## [1.18.0] - 2026-07-06
 
 ### Added

@@ -424,7 +424,7 @@ auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
 Deals:
-  llama deal create "Company" --source <name> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
+  llama deal create "Company" --source <name> --deal-owner <name|email|userId> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
   llama deal show <dealId>
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
@@ -534,8 +534,8 @@ Deal soft-delete / restore / trash list:
   llama deal trash                                             # list deleted deals
 
 Deal facts (AI-extracted or human-asserted, with verification):
-  llama deal fact list <dealId>                                # ⚠ session-only on server today
-  llama deal fact add <dealId> --category <cat> --claim "<text>" [--source <url>] [--confidence high|medium|low] [--attested]
+  llama deal fact list <dealId>
+  llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
 
 Skill corrections (persona-owner pushback — read by persona-watcher):
@@ -1440,10 +1440,11 @@ async function main() {
   if (area === "deal" && action === "create") {
     const { flags, positional } = parseFlags(rest);
     const companyName = positional.join(" ").trim();
-    if (!companyName) throw new Error("Usage: llama deal create \"Company\" [--source Name]");
+    if (!companyName) throw new Error("Usage: llama deal create \"Company\" [--source Name] [--deal-owner name|email|userId]");
     const body = {
       companyName,
       source: flags.source,
+      dealOwner: flags.dealOwner || flags["deal-owner"],
       sourceDirection: flags.sourceDirection || flags["source-direction"],
       description: flags.description,
       website: flags.website,
@@ -1735,10 +1736,6 @@ async function main() {
   }
 
   // ----- Deal facts (AI-extracted or human-asserted, with verification) -----
-  // NOTE: server routes currently use session-only auth() — token-only
-  // callers will get 401 until /api/deals/:id/facts and
-  // /api/deals/:id/facts/:factId switch to authenticate(). CLI surface
-  // is forward-compatible.
   if (area === "deal" && action === "fact") {
     const sub = rest[0];
     const dealId = rest[1];
@@ -1754,10 +1751,12 @@ async function main() {
     }
 
     if (sub === "add") {
-      if (!flags.category || !flags.claim) {
+      const claim = flags.claim ?? flags.value;
+      const sourceUrl = flags["source-url"] ?? flags.sourceUrl;
+      if (!flags.category || !claim) {
         throw new Error(
           `Usage: llama deal fact add <dealId> --category <cat> --claim "<text>" ` +
-          `[--source <url>] [--confidence high|medium|low] [--attested]`
+          `[--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]`
         );
       }
       // --attested: the caller takes responsibility that this is accurate
@@ -1765,8 +1764,9 @@ async function main() {
       // vouched; without it, it stays unverified. Declare honestly.
       print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/facts`, {
         category: String(flags.category),
-        claim: String(flags.claim),
+        claim: String(claim),
         source: flags.source ? String(flags.source) : "",
+        ...(sourceUrl ? { sourceUrl: String(sourceUrl) } : {}),
         confidence: flags.confidence ? String(flags.confidence) : "medium",
         attested: flags.attested === true,
       }));
