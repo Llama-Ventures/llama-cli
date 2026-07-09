@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-07-09
+
 ### Changed
 - Clarified the Command facts write contract across CLI, MCP, and agent docs:
   `claim` is canonical, `value` remains a compatibility alias, `sourceUrl`
@@ -506,7 +508,8 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.1...HEAD
+[1.18.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.3...v1.18.0
 [1.17.3]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.2...v1.17.3
 [1.17.2]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.1...v1.17.2
