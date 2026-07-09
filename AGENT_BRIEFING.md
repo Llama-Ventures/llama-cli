@@ -45,6 +45,7 @@ Any time the user mentions a company name or founder name:
    - Use `--status Outreached` when we only contacted/logged the company and have no response or effective relationship yet.
    - Use `--status Sourced` only once there is a response, intro, meeting, or another real relationship signal.
    - Also set `--source-direction Inbound` if the deal came into the firm; set `--source-direction Outbound` if Llama found/listed/reached out first.
+   - If assigning an owner at create time, use `--deal-owner` with an exact `/api/field-options` value, email, or user id. Do not guess from a first name.
 4. If user gives you new facts (status / valuation / founder note) → `llama deal update` immediately, tell the user **one line** afterward.
 
 Don't:
@@ -62,7 +63,7 @@ A teammate says "I just met them and heard…" or pastes a chunk of notes. Your 
 
 1. **Find the deal** — `llama deal search "<name>"` (Pipeline First). New name → offer to create it.
 2. **Split what they gave you into two kinds** — this is the whole data model:
-   - **Verifiable claims → facts.** `llama deal fact add <dealId> --category <cat> --claim "…" --source "<where it came from>"`. A claim someone *relayed* ("their ARR is $3M", "raised from a16z") is a fact at **unverified** trust — it's hearsay until checked. Pass `--attested` ONLY if you actually verified it against a source yourself.
+   - **Verifiable claims → facts.** `llama deal fact add <dealId> --category <cat> --claim "…" --source "<where it came from>" --source-url <url>`. A claim someone *relayed* ("their ARR is $3M", "raised from a16z") is a fact at **unverified** trust — it's hearsay until checked. Pass `--attested` ONLY if you actually verified it against a source yourself. In raw API terms, the fact text field is `claim` (`value` is only a compatibility alias), `source` is the human-readable provenance label, and `sourceUrl` is the canonical URL.
    - **Their judgment / impression → a note.** `llama post <dealId> "…"`. "Founder seemed evasive", "I'd lean pass", "worth a second meeting" — opinion, not fact. Attributed, never "verified".
    - A pasted blob → pull the verifiable claims out as facts, capture their take as a note.
 3. **Read it back before you claim it's saved.** A tool call returning `{ok:true}` is NOT proof the content is where the user will look for it. After filing, run `llama deal feed <dealId>` and confirm your fact/note actually appears, THEN tell the user in plain language what you recorded and where. Never say "记好了 / saved" from the return value alone — the #1 failure is an agent writing to the wrong surface (e.g. the brief, which is the Memo and does NOT appear in the feed) and reporting success anyway. If it's not in the feed, you routed it wrong — fix it.
@@ -129,7 +130,7 @@ These three look similar but land in different surfaces. Don't infer from the co
 
 | You want to… | Command | Lands in |
 |---|---|---|
-| Record a **sourced, verifiable fact** | `llama deal fact add <dealId> --category <cat> --claim "…" --source <url>` | Facts → deal **Feed** (FACT card) + citable in the **Memo** |
+| Record a **sourced, verifiable fact** | `llama deal fact add <dealId> --category <cat> --claim "…" --source "deck p3" --source-url <url>` | Facts → deal **Feed** (FACT card) + citable in the **Memo** |
 | Leave a **comment / opinion / question / reaction** for the team | `llama post <dealId> "…"` (`@name` to notify) | Posts → deal **Feed** (POST card); `@mention` fires email + UI badge |
 | Write **narrative that belongs in the IC memo** | `llama brief add-text <dealId> --heading "…" --body "…"` | Brief blocks → **Memo tab only — NOT in the Feed** |
 
@@ -209,8 +210,8 @@ llama deal list [--owner ...] [--status ...]
 
 # Pipeline — write
 llama deal create "Company" --description "..." --source-direction Outbound --status Interested
-llama deal create "Company" --description "..." --source-direction Outbound --status Outreached
-llama deal create "Company" --description "..." --source-direction Inbound --status Sourced
+llama deal create "Company" --description "..." --source-direction Outbound --status Outreached --deal-owner "owner@llamaventures.vc"
+llama deal create "Company" --description "..." --source-direction Inbound --status Sourced --deal-owner "Exact Name"
 llama deal update <dealId> <field> <value>
 #   writable: status theirStage stage notes dealOwner source sourceDirection description website
 #             location founders proposedAmount roundSize valuation sector subsector

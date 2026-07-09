@@ -471,7 +471,11 @@ server.registerTool(
         .describe(
           "Our Stage workflow position. Use Interested when we want to record/track before contact; use Outreached when we contacted/logged them and have no response/effective relationship; use Sourced only once there is a response, intro, meeting, or other real relationship signal."
         ),
-      source: z.string().optional().describe("free-form sourced-by; recommend nominating a user"),
+      source: z.string().optional().describe("free-form sourced-by; exact team-member names also attach source_user_id"),
+      dealOwner: z
+        .string()
+        .optional()
+        .describe("owner override. Use an exact /api/field-options dealOwner value, a user email, or numeric user id."),
       sourceDirection: z
         .string()
         .optional()
@@ -510,7 +514,7 @@ server.registerTool(
   {
     description:
       "List a deal's recorded facts (the research substrate). Each fact carries a " +
-      "category, a claim, a source, a confidence, and a trust rung (unverified → " +
+      "category, a claim, a source/sourceUrl, a confidence, and a trust rung (unverified → " +
       "agent-verified → human-vouched → endorsed) plus who/what recorded it.",
     inputSchema: {
       dealId: z.string(),
@@ -530,13 +534,15 @@ server.registerTool(
       "something unconfirmed (stored 'unverified', which is the honest default). You CANNOT " +
       "mark a fact as human-confirmed — only a person can raise it to 'human-vouched'. " +
       "`confidence` is how certain the claim is; `attested` is whether YOU take responsibility " +
-      "for having checked it. category ∈ founders | financials | product | market | team | " +
-      "company_basics | risk | fundraise | milestone | meta.",
+      "for having checked it. `source` is a human-readable provenance label; `sourceUrl` is a " +
+      "canonical URL that round-trips as sourceUrl/source_url. Category is free text; common " +
+      "values include founders | financials | product | market | team | company_basics | risk | fundraise | milestone | meta.",
     inputSchema: {
       dealId: z.string(),
       category: z.string(),
       claim: z.string(),
       source: z.string().optional().describe("where you found this (URL, 'deck p3', 'LinkedIn')"),
+      sourceUrl: z.string().optional().describe("canonical URL for the evidence, if separate from source"),
       confidence: z.enum(["high", "medium", "low"]).optional(),
       attested: z
         .boolean()
@@ -544,11 +550,12 @@ server.registerTool(
         .describe("true → stored 'agent-verified'; false/omitted → 'unverified'. Answer honestly."),
     },
   },
-  async ({ dealId, category, claim, source, confidence, attested }) =>
+  async ({ dealId, category, claim, source, sourceUrl, confidence, attested }) =>
     callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/facts`, {
       category,
       claim,
       source: source ?? "",
+      ...(sourceUrl ? { sourceUrl } : {}),
       confidence: confidence ?? "medium",
       attested: attested === true,
     })

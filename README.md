@@ -96,7 +96,8 @@ llama deal show <dealId>
 llama deal feed <dealId>               # every contribution, newest first
 llama activity new-deals --since 24h   # recent deal creations
 llama activity updated-deals --since 7d # meaningful updates grouped by deal
-llama deal create "Acme AI" --source alex --source-direction Outbound --status Interested
+llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
+llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "note body"
 llama brief add-text <dealId> --heading "..." --body "..."
@@ -110,6 +111,11 @@ Status vocabulary — `Interested`: tracked before any contact ·
 `Outreached`: contacted, no response yet · `Sourced`: real relationship
 signal exists. `sourceDirection` is separate: `Inbound` came to the firm,
 `Outbound` we reached out first.
+
+Facts use `claim` for the fact text. `source` is a readable provenance label
+and `sourceUrl` is the canonical evidence URL; both round-trip from the API.
+For deal owners, use an exact `/api/field-options` `dealOwner` value, a user
+email, or a numeric user id.
 
 Run `llama --help` for the group index, `llama help all` for the full
 reference (100+ commands). Deletes are soft and audit-logged everywhere.
