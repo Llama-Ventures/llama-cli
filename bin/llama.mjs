@@ -425,6 +425,7 @@ Manually-set \`llc_\` tokens are used as a fallback.
 
 Deals:
   llama deal create "Company" --source <name> --deal-owner <name|email|userId> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
+  llama deal founders set <dealId> --json '[{"name":"Ada","email":"ada@example.com","linkedin_url":"https://linkedin.com/in/ada"}]'
   llama deal show <dealId>
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
@@ -1481,6 +1482,26 @@ async function main() {
     const value = valueParts.join(" ");
     if (!dealId || !field) throw new Error("Usage: llama deal update <dealId> <field> <value>");
     print(await request("POST", "/api/deals/update", { dealId, field, value }));
+    return;
+  }
+
+  if (area === "deal" && action === "founders") {
+    const sub = rest[0];
+    const dealId = rest[1];
+    const { flags } = parseFlags(rest.slice(2), ["json"]);
+    if (sub !== "set" || !dealId || typeof flags.json !== "string") {
+      throw new Error(
+        "Usage: llama deal founders set <dealId> --json '[{\"name\":\"Ada\",\"email\":\"ada@example.com\"}]'"
+      );
+    }
+    let founders;
+    try {
+      founders = JSON.parse(flags.json);
+    } catch {
+      throw new Error("--json must be a valid JSON array");
+    }
+    if (!Array.isArray(founders)) throw new Error("--json must be a JSON array");
+    print(await request("PUT", `/api/deals/${encodeURIComponent(dealId)}/founders`, { founders }));
     return;
   }
 
