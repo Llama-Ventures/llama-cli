@@ -12,10 +12,13 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+const coreApiContract = JSON.parse(
+  readFileSync(path.join(repoRoot, "contracts/core-api.json"), "utf8"),
+);
 assert.equal(
   packageJson.scripts?.["verify:release"],
-  "npm test && node scripts/verify-tarball-clean.mjs && npm pack --dry-run",
-  "CLI release gate must run agent routing tests, the publish-surface hygiene scan, and npm pack dry-run",
+  "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
+  "CLI release gate must run tests, verify the packed artifact identity, and scan the publish surface",
 );
 assert.equal(
   existsSync(path.join(repoRoot, "docs/agent-skills.bundle.json")),
@@ -97,6 +100,9 @@ const server = createServer(async (req, res) => {
       headers: {
         client: req.headers["x-llama-client"] ?? null,
         clientVersion: req.headers["x-llama-client-version"] ?? null,
+        clientSourceSha: req.headers["x-llama-client-source-sha"] ?? null,
+        apiContractVersion: req.headers["x-llama-api-contract-version"] ?? null,
+        apiContractDigest: req.headers["x-llama-api-contract-digest"] ?? null,
         agentClient: req.headers["x-llama-agent-client"] ?? null,
         session: req.headers["x-llama-agent-session"] ?? null,
         command: req.headers["x-llama-command"] ?? null,
@@ -541,6 +547,9 @@ try {
   assert.equal(telemetryCalls()[0].body?.client, "cli");
   assert.ok(telemetryCalls()[0].body?.sessionId, "telemetry includes an agent session id");
   assert.equal(businessCalls()[0].headers.command, "agent.briefing");
+  assert.equal(businessCalls()[0].headers.clientSourceSha, "local/unknown");
+  assert.equal(businessCalls()[0].headers.apiContractVersion, coreApiContract.apiVersion);
+  assert.equal(businessCalls()[0].headers.apiContractDigest, coreApiContract.sha256);
 
   resetCalls();
   const bootstrapRun = await runCli(["agent", "bootstrap", "--limit", "3"], baseUrl, homeDir);

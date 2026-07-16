@@ -8,3 +8,4 @@ node_modules/
 *.log
 .npm/
 *.tgz
+lib/build-manifest.json

@@ -6,6 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-07-16
+
+### Added
+- Pin each CLI artifact to the exact versioned Llama Core OpenAPI contract,
+  source commit, and complete source-derived operation inventory.
+- Verify the contract identity and required Core operations during tests,
+  packaging, clean tarball installation, and release-gate validation.
+
+### Changed
+- Treat Core HTTP as the CLI's only backend boundary and expose contract/build
+  provenance through `llama version --json` for independent rollback audits.
+
 ## [1.18.1] - 2026-07-09
 
 ### Changed

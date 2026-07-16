@@ -42,6 +42,7 @@
 ```bash
 npm i -g @llamaventures/cli    # Node 18+; also puts `llama-mcp` on your PATH
 llama --version
+llama version --json           # package, source commit, and pinned Core API contract
 llama auth status              # round-trips against /api/me
 ```
 

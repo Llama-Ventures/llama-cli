@@ -37,6 +37,13 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: npm ci
 
+      - name: Full release gate (tests, API contract, artifact identity)
+        env:
+          LLAMA_REQUIRE_CLEAN_SOURCE: "1"
+          REDACTION_DENYLIST_REQUIRED: "1"
+          REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
+        run: npm run verify:release
+
       - name: Identifier guard — block known leak shapes from publish
         run: |
           # Block publish if any known-sensitive identifier shape slipped into
@@ -45,7 +52,7 @@ jobs:
           # that should never appear in a public artifact. Extend as new
           # patterns surface.
           PATTERN='\bvirtual-[a-z][a-z-]+\b|\b[a-z]+_analysis\b'
-          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ *.md 2>/dev/null || true)
+          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ contracts/ *.md 2>/dev/null || true)
           if [ -n "$MATCHES" ]; then
             echo "FAIL: publish blocked — sensitive identifier shape detected:"
             echo "$MATCHES"
@@ -55,6 +62,7 @@ jobs:
 
       - name: Hygiene guard — denylist scan of the publish surface
         env:
+          REDACTION_DENYLIST_REQUIRED: "1"
           REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
         run: node scripts/verify-tarball-clean.mjs
 

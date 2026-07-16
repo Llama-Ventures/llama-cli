@@ -1,12 +1,16 @@
 {
   "name": "@llamaventures/cli",
-  "version": "1.18.1",
+  "version": "1.19.0",
   "description": "CLI + MCP server for the Llama Ventures investment workbench (command.llamaventures.vc).",
   "type": "module",
   "scripts": {
-    "test": "npm run test:agent-routing",
+    "test": "npm run test:agent-routing && npm run test:contract",
     "test:agent-routing": "node scripts/verify-agent-routing.mjs",
-    "verify:release": "npm test && node scripts/verify-tarball-clean.mjs && npm pack --dry-run"
+    "test:contract": "node --test scripts/build-manifest.test.mjs scripts/core-api-call-sites.test.mjs scripts/verify-core-api-contract.test.mjs && node scripts/verify-core-api-contract.mjs",
+    "verify:artifact": "node scripts/verify-release-artifact.mjs",
+    "verify:release": "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
+    "prepack": "node scripts/prepare-build-manifest.mjs",
+    "postpack": "node scripts/cleanup-build-manifest.mjs"
   },
   "bin": {
     "llama": "bin/llama.mjs",
@@ -14,6 +18,7 @@
   },
   "files": [
     "bin/",
+    "contracts/",
     "lib/",
     "AGENT_BRIEFING.md",
     "CHANGELOG.md",

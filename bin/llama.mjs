@@ -35,6 +35,7 @@ import {
 import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
 import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
+import { getBuildInfo } from "../lib/build-info.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -1006,6 +1007,10 @@ async function runPitchRepl() {
 async function main() {
   const [area, action, ...rest] = process.argv.slice(2);
   if (area === "--version" || area === "-v" || area === "version") {
+    if (action === "--json" || action === "json") {
+      print(getBuildInfo());
+      return;
+    }
     // `llama version --check` — explicitly check npm for a newer release and
     // print the upgrade line (or "up to date"). Lets an agent surface the
     // nudge on demand, separate from the throttled, TTY-gated auto-nudge.
@@ -1721,6 +1726,8 @@ async function main() {
       const linkId = rest[2];
       if (!linkId) throw new Error(`Usage: llama deal link ${sub} <dealId> <linkId>`);
       const path = `/api/deals/${encodeURIComponent(dealId)}/links/${encodeURIComponent(linkId)}`;
+      // @core-api-operation DELETE /api/deals/{dealId}/links/{linkId}
+      // @core-api-operation POST /api/deals/{dealId}/links/{linkId}/restore
       print(await request(
         sub === "delete" ? "DELETE" : "POST",
         sub === "delete" ? path : `${path}/restore`
@@ -1988,6 +1995,7 @@ async function main() {
     if (!slug) throw new Error("Usage: llama wiki read <slug> [--lang en|zh]");
     const lang = flags.lang === "zh" ? "zh" : "en";
     const path = `/api/wiki/${encodeURIComponent(slug)}?lang=${lang}`;
+    // @core-api-operation GET /api/wiki/{slug}
     print(await request("GET", path));
     return;
   }
@@ -2319,6 +2327,9 @@ Routing — is this the right command?
       if (flags["errors-only"]) params.set("errors_only", "1");
     }
     const qs = params.toString() ? `?${params.toString()}` : "";
+    // @core-api-operation GET /api/admin/auth-events
+    // @core-api-operation GET /api/admin/deal-events
+    // @core-api-operation GET /api/admin/agent-events
     print(await request("GET", `/api/admin/${sub}${qs}`));
     return;
   }
