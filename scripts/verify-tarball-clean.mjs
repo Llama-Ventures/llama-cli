@@ -12,7 +12,7 @@
 // the term itself, so public CI logs stay clean. No denylist available (e.g.
 // fork PRs, fresh clones) => warn and pass; the publish workflow always has
 // the secret, so the gate is hard where it matters.
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,23 +33,47 @@ function loadDenylist() {
 
 const denylist = loadDenylist();
 if (!denylist || denylist.length === 0) {
+  if (process.env.REDACTION_DENYLIST_REQUIRED === "1") {
+    console.error(
+      "verify-tarball-clean: FAIL — REDACTION_DENYLIST is required for this release gate",
+    );
+    process.exit(1);
+  }
   console.warn("verify-tarball-clean: no denylist available (REDACTION_DENYLIST env or ~/.llama/redaction-denylist.txt) — skipping scan");
   process.exit(0);
 }
-
-const packJson = JSON.parse(execSync("npm pack --dry-run --json --silent", { encoding: "utf8" }));
-const files = packJson[0].files.map((f) => f.path);
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Word-boundary match so short terms can't false-positive inside longer words.
 const patterns = denylist.map((t) => new RegExp(`\\b${escapeRe(t)}\\b`, "i"));
 
 const hits = [];
-for (const file of files) {
-  const content = fs.readFileSync(file, "utf8");
-  patterns.forEach((re, i) => {
-    if (re.test(content)) hits.push(`  ${file}  (denylist entry #${i})`);
+const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "llama-cli-hygiene-"));
+let files = [];
+try {
+  execFileSync("npm", ["pack", "--silent", "--pack-destination", tempDirectory], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  const tarballs = fs.readdirSync(tempDirectory).filter((name) => name.endsWith(".tgz"));
+  if (tarballs.length !== 1) throw new Error(`Expected one npm tarball, found ${tarballs.length}`);
+  const tarball = path.join(tempDirectory, tarballs[0]);
+  files = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((file) => file && !file.endsWith("/"));
+
+  for (const file of files) {
+    const content = execFileSync("tar", ["-xOf", tarball, file], { encoding: "utf8" });
+    patterns.forEach((re, i) => {
+      if (re.test(content)) hits.push(`  ${file.replace(/^package\//, "")}  (denylist entry #${i})`);
+    });
+  }
+} catch (error) {
+  console.error(`verify-tarball-clean: FAIL — could not inspect packed artifact: ${error.message}`);
+  process.exit(1);
+} finally {
+  fs.rmSync(tempDirectory, { recursive: true, force: true });
 }
 
 if (hits.length > 0) {
