@@ -7,7 +7,7 @@
 <p align="center">
   <strong>The Llama Ventures CLI &amp; MCP server.</strong><br/>
   One package, two binaries: <code>llama</code> — the CLI for humans and scripts —
-  and <code>llama-mcp</code> — a stdio MCP server with 59 typed tools for any
+  and <code>llama-mcp</code> — a stdio MCP server with 55 typed tools for any
   MCP-native agent. Both share the same auth chain, HTTP client, and error
   format, and talk to <a href="https://command.llamaventures.vc">command.llamaventures.vc</a>.
 </p>
@@ -134,7 +134,7 @@ Authenticated calls send bounded, content-redacted telemetry to Command;
 
 ## MCP server
 
-`llama-mcp` is a stdio Model Context Protocol server exposing 59 typed tools
+`llama-mcp` is a stdio Model Context Protocol server exposing 55 typed tools
 that mirror the most-used CLI surface. Every tool is named and scoped — there
 is deliberately no generic API passthrough. Auth is identical to the CLI's
 chain. For the exact live list, pipe `tools/list` through it:

@@ -514,7 +514,7 @@ Brief blocks:
 
   Common flags on every add-*:
     --source-section <key>   Target a structured section (team, highlights, recommendation,
-                             <persona>_analysis, ...). Without this, blocks land in "_other"
+                             landscape_map, competitors). Without this, blocks land in "_other"
                              at the bottom of the TOC. AI writers want this.
     --reply-to <blockId>     Make the block a reply to <blockId>. Snapshots parent's heading
                              + 200-char excerpt into meta so the back-link survives parent
@@ -523,10 +523,9 @@ Brief blocks:
                              2026-05-03). Use bottom for batched writes that need to
                              preserve insertion order.
 
-Brief / persona refresh + agent-run revert:
+Brief refresh + agent-run revert:
   llama deal refresh-brief <dealId> [--force]                  # re-eval stale sections
                                                                 # --force = every unlocked watcher-managed section
-  llama deal refresh-persona <dealId> <persona-key>            # server validates persona key
   llama deal revert-run <dealId> <runId> --section <key>       # legacy 4-section model only
                                                                 # section: company|team|highlights|recommendation
 
@@ -539,13 +538,6 @@ Deal facts (AI-extracted or human-asserted, with verification):
   llama deal fact list <dealId>
   llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
-
-Skill corrections (persona-owner pushback — read by persona-watcher):
-  llama skill-correction list <skill-slug> [--include-deleted]
-  llama skill-correction add <skill-slug> "<correction text>" [--deal <uuid>] [--block <blockId>]
-  llama skill-correction delete <id>
-  Server enforces persona owner OR system admin on POST/DELETE; GET is open.
-  External personas (owner_email=null) are admin-only for write.
 
 Mentions / Inbox:
   llama mentions                                       # default: my unresolved cues
@@ -1839,24 +1831,6 @@ async function main() {
     return;
   }
 
-  // ----- Persona refresh: re-run a single persona-watcher -----
-  // Persona keys are validated server-side. Returns runId or null
-  // (debounced / deal inactive). Used by /admin and the per-block
-  // "重新生成" flow.
-  if (area === "deal" && action === "refresh-persona") {
-    const dealId = rest[0];
-    const persona = rest[1];
-    if (!dealId || !persona) {
-      throw new Error(`Usage: llama deal refresh-persona <dealId> <persona-key>`);
-    }
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/refresh-persona`,
-      { persona }
-    ));
-    return;
-  }
-
   // ----- Agent-run revert (legacy 4-section brief model) -----
   // Reverts a single section to the `before` value snapshotted by the
   // watcher run. Does NOT re-fire the watcher (intentional: human action).
@@ -2135,7 +2109,7 @@ Routing — is this the right command?
     const meta = { updated_at: new Date().toISOString(), updated_by: "cli", by_agent: false };
 
     // --source-section <key>: target a structured section (e.g. team /
-    // highlights / <persona>_analysis). Without this, blocks land in the
+    // highlights / competitors). Without this, blocks land in the
     // "_other" group at the bottom of the TOC. AI writers want this
     // virtually always — without it they cannot contribute to existing
     // structured sections.
@@ -2377,63 +2351,6 @@ Routing — is this the right command?
       return;
     }
     throw new Error(`Unknown mentions subcommand "${sub}". Use: list / show / resolve / unread.`);
-  }
-
-  // ----- Skill corrections (persona-owner pushback workflow) -----
-  // Persona owners (or system admins) record long-term rules each
-  // persona-DD skill must obey. Read by the persona-watcher and prepended
-  // to the system prompt at run time. Soft-delete is non-cascading —
-  // deleting a row does NOT auto-fire watcher; the next natural run
-  // (manual / stale_re_eval) just stops including the deleted rule.
-  //
-  // Permissions enforced server-side: only the persona owner (per
-  // PERSONA_SKILLS in src/lib/persona-skills.ts) or a system admin can
-  // POST or DELETE. Anyone can GET. External personas (owner_email=null)
-  // are admin-only for write.
-  if (area === "skill-correction") {
-    const sub = action;
-
-    if (sub === "list") {
-      const skillSlug = rest[0];
-      if (!skillSlug) {
-        throw new Error("Usage: llama skill-correction list <skill-slug> [--include-deleted]");
-      }
-      const { flags } = parseFlags(rest.slice(1));
-      const params = new URLSearchParams({ skill: skillSlug });
-      if (flags["include-deleted"]) params.set("include_deleted", "1");
-      print(await request("GET", `/api/skill-corrections?${params.toString()}`));
-      return;
-    }
-
-    if (sub === "add") {
-      const { flags, positional } = parseFlags(rest);
-      const skillSlug = positional[0];
-      const correctionText = positional.slice(1).join(" ").trim();
-      if (!skillSlug || !correctionText) {
-        throw new Error(
-          `Usage: llama skill-correction add <skill-slug> "<correction text>" ` +
-          `[--deal <uuid>] [--block <blockId>]`
-        );
-      }
-      print(await request("POST", "/api/skill-corrections", {
-        skill_slug: skillSlug,
-        correction_text: correctionText,
-        triggered_in_deal_uuid: flags.deal ? String(flags.deal) : null,
-        triggered_in_block_id: flags.block ? String(flags.block) : null,
-      }));
-      return;
-    }
-
-    if (sub === "delete") {
-      const id = rest[0];
-      if (!id) throw new Error("Usage: llama skill-correction delete <id>");
-      print(await request("DELETE", `/api/skill-corrections/${encodeURIComponent(id)}`));
-      return;
-    }
-
-    throw new Error(
-      `Unknown skill-correction subcommand "${sub || ""}". Use: list / add / delete.`
-    );
   }
 
   // ----- Memo (long-form HTML investment memo) -----

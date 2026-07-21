@@ -4,8 +4,9 @@
   "description": "CLI + MCP server for the Llama Ventures investment workbench (command.llamaventures.vc).",
   "type": "module",
   "scripts": {
-    "test": "npm run test:agent-routing && npm run test:contract",
+    "test": "npm run test:agent-routing && npm run test:retired-personas && npm run test:contract",
     "test:agent-routing": "node scripts/verify-agent-routing.mjs",
+    "test:retired-personas": "node scripts/verify-retired-personas.mjs",
     "test:contract": "node --test scripts/build-manifest.test.mjs scripts/core-api-call-sites.test.mjs scripts/verify-core-api-contract.test.mjs && node scripts/verify-core-api-contract.mjs",
     "verify:artifact": "node scripts/verify-release-artifact.mjs",
     "verify:release": "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",

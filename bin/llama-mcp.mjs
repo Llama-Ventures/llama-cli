@@ -993,63 +993,7 @@ server.registerTool(
 );
 
 // ============================================================
-// Skill corrections (persona-owner pushback workflow)
-// ============================================================
-
-server.registerTool(
-  "skill_correction_list",
-  {
-    description:
-      "List the recorded corrections (long-term rules) for a persona/skill. These shape how " +
-      "that persona's analysis is generated.",
-    inputSchema: {
-      skillSlug: z.string(),
-      includeDeleted: z.boolean().optional(),
-    },
-  },
-  async ({ skillSlug, includeDeleted }) => {
-    const params = new URLSearchParams({ skill: skillSlug });
-    if (includeDeleted) params.set("include_deleted", "1");
-    return callApi("GET", `/api/skill-corrections?${params}`);
-  }
-);
-
-server.registerTool(
-  "skill_correction_add",
-  {
-    description:
-      "Record a long-term correction rule for a persona/skill (e.g. 'always check burn multiple " +
-      "before commenting on efficiency'). ALWAYS reconfirm the distilled rule with the user before " +
-      "calling — this changes how the persona behaves going forward. Optionally tie it to the deal/" +
-      "block where it came up.",
-    inputSchema: {
-      skillSlug: z.string(),
-      correctionText: z.string(),
-      dealUuid: z.string().optional(),
-      blockId: z.string().optional(),
-    },
-  },
-  async ({ skillSlug, correctionText, dealUuid, blockId }) =>
-    callApi("POST", "/api/skill-corrections", {
-      skill_slug: skillSlug,
-      correction_text: correctionText,
-      triggered_in_deal_uuid: dealUuid ?? null,
-      triggered_in_block_id: blockId ?? null,
-    })
-);
-
-server.registerTool(
-  "skill_correction_delete",
-  {
-    description: "Soft-delete a recorded skill correction by id.",
-    inputSchema: { id: z.union([z.string(), z.number()]) },
-  },
-  async ({ id }) =>
-    callApi("DELETE", `/api/skill-corrections/${encodeURIComponent(String(id))}`)
-);
-
-// ============================================================
-// Brief / persona refresh (signal-driven re-evaluation)
+// Brief refresh (signal-driven re-evaluation)
 // ============================================================
 
 server.registerTool(
@@ -1068,22 +1012,6 @@ server.registerTool(
       "POST",
       `/api/deals/${encodeURIComponent(dealId)}/refresh-brief${force ? "?force=1" : ""}`
     )
-);
-
-server.registerTool(
-  "deal_refresh_persona",
-  {
-    description:
-      "Regenerate one persona's analysis section for a deal. persona = a server-configured " +
-      "persona key (unknown keys are rejected; discover the roster via agent_bootstrap). " +
-      "Returns a runId (or null if debounced).",
-    inputSchema: {
-      dealId: z.string(),
-      persona: z.string(),
-    },
-  },
-  async ({ dealId, persona }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/refresh-persona`, { persona })
 );
 
 server.registerTool(
