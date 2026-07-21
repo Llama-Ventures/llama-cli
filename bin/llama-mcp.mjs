@@ -613,7 +613,7 @@ server.registerTool(
       "accountable person, null only for principal-less system writes) and `agent` " +
       "(the assistant/system label when an AI did the writing, null when a human " +
       "typed it) so you can tell human-typed from assistant-drafted. The AI's " +
-      "regenerable brief/persona synthesis is NOT here (that's the Memo) — only " +
+      "regenerable brief synthesis is NOT here (that's the Memo) — only " +
       "facts + discussion notes. Each item: kind (fact|note), ts, who, agent, " +
       "origin, text, and for facts: source + trust rung + category.",
     inputSchema: {

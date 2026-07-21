@@ -683,7 +683,7 @@ the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
 const HELP_AREA_MATCH = {
   deal: [/^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
   activity: [/^Agent activity/],
-  brief: [/^Brief blocks/, /^Brief \/ persona/],
+  brief: [/^Brief blocks/],
   facts: [/^Deal facts/, /^Skill corrections/],
   timeline: [/^Timeline/, /^Mentions/],
   wiki: [/^Wiki/, /^Where does this HTML/],
