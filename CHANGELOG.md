@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Removed
+- Remove the retired generated-persona refresh and skill-correction commands
+  from the CLI, MCP tool registry, and required Core operation inventory.
+  Llama Command keeps authenticated historical reads and 410 compatibility
+  tombstones, but new clients can no longer invoke the retired workflow.
+
 ## [1.19.0] - 2026-07-16
 
 ### Added

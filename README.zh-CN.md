@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Llama Ventures 的 CLI 与 MCP server。</strong><br/>
   一个包、两个可执行文件：<code>llama</code>——给人和脚本用的 CLI；
-  <code>llama-mcp</code>——带 59 个类型化工具的 stdio MCP server，任何
+  <code>llama-mcp</code>——带 55 个类型化工具的 stdio MCP server，任何
   MCP 原生 agent 都能接。两者共享同一认证链、同一 HTTP 客户端、同一错误格式，
   连接 <a href="https://command.llamaventures.vc">command.llamaventures.vc</a>。
 </p>
@@ -153,7 +153,7 @@ MCP server 在 `isError: true` 内容里返回相同前缀。认证请求会向 
 
 ## MCP server
 
-`llama-mcp` 是 stdio MCP server，59 个类型化工具镜像 CLI 最常用的命令面。
+`llama-mcp` 是 stdio MCP server，55 个类型化工具镜像 CLI 最常用的命令面。
 每个工具具名、有边界——**故意不提供**通用 API passthrough。认证链与 CLI
 完全一致。精确工具清单以 `tools/list` 为准：
 
