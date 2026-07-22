@@ -58,6 +58,7 @@
     { "method": "POST", "path": "/api/deals/{dealId}/documents/{slug}/html/restore/{version}" },
     { "method": "POST", "path": "/api/deals/{dealId}/enrich" },
     { "method": "POST", "path": "/api/deals/{dealId}/facts" },
+    { "method": "POST", "path": "/api/deals/{dealId}/ingest" },
     { "method": "POST", "path": "/api/deals/{dealId}/links" },
     { "method": "POST", "path": "/api/deals/{dealId}/links/{linkId}/restore" },
     { "method": "POST", "path": "/api/deals/{dealId}/memo" },

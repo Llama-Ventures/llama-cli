@@ -98,6 +98,7 @@ llama deal feed <dealId>               # every contribution, newest first
 llama activity new-deals --since 24h   # recent deal creations
 llama activity updated-deals --since 7d # meaningful updates grouped by deal
 llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
+llama deal ingest <dealId> --file packet.json  # atomic multi-fact + optional Feed note; retry-safe
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "note body"
@@ -112,6 +113,13 @@ Status vocabulary — `Interested`: tracked before any contact ·
 `Outreached`: contacted, no response yet · `Sourced`: real relationship
 signal exists. `sourceDirection` is separate: `Inbound` came to the firm,
 `Outbound` we reached out first.
+
+For a deck, meeting note, email, or research packet, prefer `deal ingest` over a
+loop of `deal fact add` calls. The JSON object accepts `source`, up to 50
+`facts`, an optional `note`, and an optional `idempotencyKey`. The server commits
+the packet atomically, maps common category aliases into the canonical taxonomy,
+and skips exact source-aware duplicates. `deal fact add` remains the simple path
+for one fact.
 
 Facts use `claim` for the fact text. `source` is a readable provenance label
 and `sourceUrl` is the canonical evidence URL; both round-trip from the API.

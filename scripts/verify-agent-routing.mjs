@@ -374,6 +374,18 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && /^\/api\/deals\/[^/]+\/ingest$/.test(url.pathname)) {
+      writeJson(res, {
+        ok: true,
+        contract: "deal_ingest_v1",
+        dealId: decodeURIComponent(url.pathname.split("/")[3]),
+        idempotencyKey: body?.idempotencyKey ?? "auto:mock",
+        createdFacts: body?.facts ?? [],
+        note: body?.note ? { id: "note-mock", body: body.note } : null,
+      });
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: `Unexpected route ${req.method} ${url.pathname}` }));
   } catch (err) {
@@ -592,6 +604,25 @@ try {
   assert.equal(telemetryCalls()[0].body?.command, "wiki.search");
   assert.equal(telemetryCalls()[0].body?.query, "llama weekly");
 
+  const ingestPacketPath = path.join(homeDir, "deal-ingest.json");
+  await writeFile(ingestPacketPath, JSON.stringify({
+    source: { kind: "meeting_note", title: "Office visit" },
+    facts: [{ category: "team", claim: "Founder previously built a developer tool." }],
+    note: "Strong product instinct.",
+  }));
+
+  resetCalls();
+  const ingestRun = await runCli(
+    ["deal", "ingest", "deal-cli", "--file", ingestPacketPath, "--idempotency-key", "visit-2026-07-22"],
+    baseUrl,
+    homeDir,
+  );
+  assert.match(ingestRun.stdout, /deal_ingest_v1/);
+  assert.deepEqual(paths(), ["POST /api/deals/deal-cli/ingest"]);
+  assert.equal(businessCalls()[0].body?.idempotencyKey, "visit-2026-07-22");
+  assert.equal(businessCalls()[0].body?.facts?.[0]?.category, "team");
+  assert.equal(businessCalls()[0].headers.command, "deal.ingest");
+
   resetCalls();
   const evalRun = await runCli(
     [
@@ -609,7 +640,7 @@ try {
   assert.match(evalRun.stdout, /"feedback": "bad"/);
   assert.deepEqual(paths(), ["POST /api/agent/eval-feedback"]);
   assert.equal(businessCalls()[0].body?.action, "bad");
-  assert.equal(businessCalls()[0].body?.eventId, 7);
+  assert.equal(businessCalls()[0].body?.eventId, 8);
   assert.equal(businessCalls()[0].body?.expected?.wikiSlugs?.[0], "llamaos-weekly-2026-06-17");
 
   resetCalls();
@@ -744,6 +775,25 @@ try {
   assert.equal(payload.ok, true);
   assert.equal(payload.threadId, "thread-1");
   assert.equal(payload.text, "agent done");
+
+  resetCalls();
+  const mcpIngest = await callMcpTool(
+    "deal_ingest",
+    {
+      dealId: "deal-mcp",
+      idempotencyKey: "mcp-visit-2026-07-22",
+      source: { kind: "meeting_note", title: "Office visit" },
+      facts: [{ category: "product", claim: "The product has a self-serve workflow." }],
+      note: "Worth a second meeting.",
+    },
+    baseUrl,
+    homeDir,
+  );
+  const mcpIngestPayload = JSON.parse(mcpIngest.content?.[0]?.text ?? "{}");
+  assert.equal(mcpIngestPayload.contract, "deal_ingest_v1");
+  assert.deepEqual(paths(), ["POST /api/deals/deal-mcp/ingest"]);
+  assert.equal(businessCalls()[0].body?.idempotencyKey, "mcp-visit-2026-07-22");
+  assert.equal(businessCalls()[0].headers.command, "deal.ingest");
 
   resetCalls();
   const inlineGuard = await callMcpTool(

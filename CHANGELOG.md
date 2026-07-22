@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- Add `llama deal ingest <dealId> --file <packet.json>` and the matching
+  `deal_ingest` MCP tool for atomic, retry-safe source packets containing up to
+  50 facts and an optional Feed note.
+
+### Changed
+- Prefer packet ingest for multi-fact agent writes; Core now canonicalizes fact
+  categories and skips exact source-aware duplicates before committing.
+
 ### Removed
 - Remove the retired generated-persona refresh and skill-correction commands
   from the CLI, MCP tool registry, and required Core operation inventory.
