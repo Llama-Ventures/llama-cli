@@ -120,6 +120,7 @@ llama deal feed <dealId>               # 该 deal 的全部贡献，最新在前
 llama activity new-deals --since 24h   # 最近新建的 deal
 llama activity updated-deals --since 7d # 按 deal 聚合的实质更新
 llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
+llama deal ingest <dealId> --file packet.json  # 多条 facts + 可选 Feed note，一次提交且可安全重试
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "备注内容"
@@ -133,6 +134,11 @@ llama agent-onboard                    # 服务端下发的 agent 工作契约
 Status 语义——`Interested`：接触前先记录关注 · `Outreached`：已联系、
 尚无回应 · `Sourced`：已有真实关系信号。`sourceDirection` 是独立维度：
 `Inbound` 流入，`Outbound` 我们主动。
+
+处理 deck、会议笔记、邮件或研究材料时，优先使用 `deal ingest`，不要循环调用
+`deal fact add`。JSON 对象支持 `source`、最多 50 条 `facts`、可选 `note` 和可选
+`idempotencyKey`。服务端会原子提交整个材料包、把常见 category 别名归一到固定分类，
+并跳过来源一致的精确重复。只有真正的单条事实才用 `deal fact add`。
 
 Facts 的正文用 `claim`。`source` 是人可读来源标签，`sourceUrl` 是 canonical
 证据 URL；两者都会从 API 回显。`dealOwner` 请用 `/api/field-options`

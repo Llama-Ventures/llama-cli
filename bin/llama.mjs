@@ -2,6 +2,7 @@
 
 import { createRequire } from "module";
 import { randomUUID } from "crypto";
+import { readFile } from "fs/promises";
 import readline from "readline";
 import {
   DEFAULT_BASE_URL,
@@ -535,6 +536,9 @@ Deal soft-delete / restore / trash list:
   llama deal trash                                             # list deleted deals
 
 Deal facts (AI-extracted or human-asserted, with verification):
+  llama deal ingest <dealId> --file <packet.json> [--idempotency-key <key>]  # atomic facts + optional Feed note
+    packet: {"source":{"kind":"meeting_note","title":"Office visit"},"facts":[{"category":"team","claim":"..."}],"note":"..."}
+    categories: company_basics | team | product | market | financials | fundraise | risk | milestone | meta
   llama deal fact list <dealId>
   llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
@@ -1752,6 +1756,36 @@ async function main() {
 
   if (area === "deal" && action === "trash") {
     print(await request("GET", "/api/deals/deleted"));
+    return;
+  }
+
+  // ----- Canonical source-packet ingest (atomic facts + optional Feed note) -----
+  if (area === "deal" && action === "ingest") {
+    const dealId = rest[0];
+    const { flags } = parseFlags(rest.slice(1), ["file", "idempotency-key"]);
+    if (!dealId || !flags.file || flags.file === true) {
+      throw new Error(
+        "Usage: llama deal ingest <dealId> --file <packet.json> [--idempotency-key <key>]\n" +
+        'Packet: {"source":{"kind":"meeting_note","title":"Office visit"},' +
+        '"facts":[{"category":"team","claim":"..."}],"note":"..."}'
+      );
+    }
+
+    let packet;
+    try {
+      packet = JSON.parse(await readFile(String(flags.file), "utf8"));
+    } catch (error) {
+      throw new Error(`Cannot read ingest packet ${flags.file}: ${error?.message ?? String(error)}`);
+    }
+    if (!packet || Array.isArray(packet) || typeof packet !== "object") {
+      throw new Error("Ingest packet must be a JSON object");
+    }
+    if (flags["idempotency-key"] !== undefined && flags["idempotency-key"] !== true) {
+      packet.idempotencyKey = String(flags["idempotency-key"]);
+    }
+
+    // @core-api-operation POST /api/deals/{dealId}/ingest
+    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/ingest`, packet));
     return;
   }
 

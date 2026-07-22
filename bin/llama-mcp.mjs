@@ -510,6 +510,50 @@ server.registerTool(
 // ============================================================
 
 server.registerTool(
+  "deal_ingest",
+  {
+    description:
+      "Preferred write tool when one source yields multiple facts, or facts plus a Feed note. " +
+      "Commits the packet atomically, canonicalizes fact categories, skips exact source-aware " +
+      "duplicates, and is safe to retry with the same idempotencyKey. Use deal_fact_add only " +
+      "for a genuinely single fact. Canonical categories: company_basics, team, product, market, " +
+      "financials, fundraise, risk, milestone, meta.",
+    inputSchema: {
+      dealId: z.string(),
+      idempotencyKey: z
+        .string()
+        .optional()
+        .describe("Stable key for retries. If omitted, the server derives one from packet content."),
+      source: z
+        .object({
+          kind: z.enum(["deck", "web", "meeting_note", "email", "human", "agent_inference"]).optional(),
+          title: z.string().optional(),
+          url: z.string().optional(),
+          contentHash: z.string().optional(),
+        })
+        .optional(),
+      facts: z
+        .array(z.object({
+          category: z.string(),
+          claim: z.string(),
+          source: z.string().optional(),
+          sourceUrl: z.string().optional(),
+          sourceKind: z.enum(["deck", "web", "meeting_note", "email", "human", "agent_inference"]).optional(),
+          confidence: z.enum(["high", "medium", "low"]).optional(),
+          attested: z.boolean().optional(),
+        }))
+        .max(50)
+        .optional(),
+      note: z.string().optional().describe("Opinion, impression, or context to add to the deal Feed."),
+    },
+  },
+  async ({ dealId, ...packet }) => {
+    // @core-api-operation POST /api/deals/{dealId}/ingest
+    return callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/ingest`, packet);
+  }
+);
+
+server.registerTool(
   "deal_fact_list",
   {
     description:
