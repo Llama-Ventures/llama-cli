@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-07-22
+
 ### Added
 - Add `llama deal ingest <dealId> --file <packet.json>` and the matching
   `deal_ingest` MCP tool for atomic, retry-safe source packets containing up to
