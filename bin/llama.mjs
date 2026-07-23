@@ -364,6 +364,8 @@ Agent onboarding (run once on first install):
   llama activity new-deals --since 24h  # recent deal creations for agents
   llama activity updated-deals --since 7d # meaningful deal updates, grouped
   llama explain <url-or-object>         # explain Command URL/object status + lifecycle
+  llama pref list [--status proposed]   # standing agent preferences (injected every turn)
+  llama pref add reply-style "Lead with the conclusion." [--team]
 
 External pitch — talk to Llama Ventures' intake agent (no token required):
   llama pitch start --name "Jane Doe" --email "jane@acme.ai"
@@ -625,6 +627,7 @@ Command groups — run \`llama help <group>\` for that group's commands:
   facts       deal facts + skill corrections (the sourced, trust-rated layer)
   timeline    timeline · posts · mentions
   wiki        cross-deal knowledge entries (markdown or HTML)
+  pref        standing agent preferences: list · add · retire · approve
   memo        long-form HTML investment memo
   html        deal-specific HTML artifacts (/deals/<id>/browse/<slug>)
   pitch       external founder intake (no token needed)
@@ -1114,6 +1117,49 @@ async function main() {
       return;
     }
     throw new Error(`Unknown skills subcommand "${sub}". Use: list / search / show.`);
+  }
+
+  // `llama pref ...` — standing agent preferences (learning-domain v1).
+  // Own user scope activates immediately; team scope needs a system admin.
+  if (area === "pref" || area === "prefs" || area === "preferences") {
+    const sub = action;
+    if (!sub || sub === "list") {
+      const { flags } = parseFlags(rest, ["json", "status"]);
+      const params = new URLSearchParams();
+      if (flags.status && flags.status !== true) params.set("status", String(flags.status));
+      const result = await request("GET", `/api/agent/preferences${params.toString() ? `?${params}` : ""}`);
+      print(result);
+      return;
+    }
+    if (sub === "add") {
+      const { flags, positional } = parseFlags(rest, ["team", "evidence", "json"]);
+      const key = positional[0];
+      const content = positional.slice(1).join(" ").trim();
+      if (!key || !content) {
+        throw new Error('Usage: llama pref add <key> "<content, max 280 chars>" [--team] [--evidence "..."]');
+      }
+      const result = await request("POST", "/api/agent/preferences", {
+        scope: flags.team ? "team" : "user",
+        key,
+        content,
+        evidence: flags.evidence && flags.evidence !== true ? String(flags.evidence) : undefined,
+      });
+      print(result);
+      return;
+    }
+    if (sub === "retire" || sub === "approve") {
+      const { positional } = parseFlags(rest, ["json"]);
+      const id = Number(positional[0]);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw new Error(`Usage: llama pref ${sub} <id>`);
+      }
+      const result = await request("PATCH", `/api/agent/preferences/${id}`, {
+        status: sub === "approve" ? "active" : "retired",
+      });
+      print(result);
+      return;
+    }
+    throw new Error(`Unknown pref subcommand "${sub}". Use: list / add / retire / approve.`);
   }
 
   if (area === "explain" || (area === "agent" && action === "explain")) {
