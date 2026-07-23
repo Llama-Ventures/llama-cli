@@ -3,38 +3,6 @@
   "coreApiContract": "contracts/core-api.json",
   "requiredOperations": [
     {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/blocks/{blockId}"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/collaborators/{userId}"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/documents/{slug}"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/documents/{slug}/html"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/links/{linkId}"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/memo"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/wiki/{slug}"
-    },
-    {
       "method": "GET",
       "path": "/api/admin/agent-events"
     },
@@ -55,12 +23,28 @@
       "path": "/api/agent/briefing"
     },
     {
+      "method": "POST",
+      "path": "/api/agent/client-events"
+    },
+    {
       "method": "GET",
       "path": "/api/agent/explain"
     },
     {
       "method": "GET",
       "path": "/api/agent/manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/preferences"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent/preferences"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/agent/preferences/{id}"
     },
     {
       "method": "GET",
@@ -75,120 +59,52 @@
       "path": "/api/deals"
     },
     {
-      "method": "GET",
-      "path": "/api/deals/{dealId}"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/blocks"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/blocks/{blockId}"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/blocks/{blockId}/history"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/collaborators"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/command-center"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/documents"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/documents/{slug}/html"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/documents/{slug}/html/history"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/facts"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/feed"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/links"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/memo"
-    },
-    {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/timeline"
+      "method": "POST",
+      "path": "/api/deals/create"
     },
     {
       "method": "GET",
       "path": "/api/deals/deleted"
     },
     {
-      "method": "GET",
-      "path": "/api/me"
+      "method": "POST",
+      "path": "/api/deals/update"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}"
     },
     {
       "method": "GET",
-      "path": "/api/me/nominations"
+      "path": "/api/deals/{dealId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/agent-runs/{runId}/revert"
     },
     {
       "method": "GET",
-      "path": "/api/mentions"
+      "path": "/api/deals/{dealId}/blocks"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/blocks"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/blocks/{blockId}"
     },
     {
       "method": "GET",
-      "path": "/api/mentions/unread-count"
-    },
-    {
-      "method": "GET",
-      "path": "/api/oauth/authorize"
-    },
-    {
-      "method": "GET",
-      "path": "/api/partner/approvals"
-    },
-    {
-      "method": "GET",
-      "path": "/api/users"
-    },
-    {
-      "method": "GET",
-      "path": "/api/wiki/{slug}"
-    },
-    {
-      "method": "GET",
-      "path": "/api/wiki/search"
+      "path": "/api/deals/{dealId}/blocks/{blockId}"
     },
     {
       "method": "PATCH",
       "path": "/api/deals/{dealId}/blocks/{blockId}"
     },
     {
-      "method": "PATCH",
-      "path": "/api/deals/{dealId}/documents/{slug}"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/deals/{dealId}/facts/{factId}"
-    },
-    {
-      "method": "POST",
-      "path": "/api/agent/client-events"
-    },
-    {
-      "method": "POST",
-      "path": "/api/deals/{dealId}/agent-runs/{runId}/revert"
+      "method": "GET",
+      "path": "/api/deals/{dealId}/blocks/{blockId}/history"
     },
     {
       "method": "POST",
@@ -199,16 +115,56 @@
       "path": "/api/deals/{dealId}/blocks/{blockId}/restore"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/collaborators"
+    },
+    {
       "method": "POST",
       "path": "/api/deals/{dealId}/collaborators"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/collaborators/{userId}"
     },
     {
       "method": "POST",
       "path": "/api/deals/{dealId}/collaborators/{userId}/restore"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/command-center"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents"
+    },
+    {
       "method": "POST",
       "path": "/api/deals/{dealId}/documents"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/documents/{slug}"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deals/{dealId}/documents/{slug}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents/{slug}/html/history"
     },
     {
       "method": "POST",
@@ -219,23 +175,59 @@
       "path": "/api/deals/{dealId}/enrich"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/facts"
+    },
+    {
       "method": "POST",
       "path": "/api/deals/{dealId}/facts"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deals/{dealId}/facts/{factId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/feed"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/founders"
     },
     {
       "method": "POST",
       "path": "/api/deals/{dealId}/ingest"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/links"
+    },
+    {
       "method": "POST",
       "path": "/api/deals/{dealId}/links"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/links/{linkId}"
     },
     {
       "method": "POST",
       "path": "/api/deals/{dealId}/links/{linkId}/restore"
     },
     {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
       "method": "POST",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
+      "method": "PUT",
       "path": "/api/deals/{dealId}/memo"
     },
     {
@@ -263,12 +255,8 @@
       "path": "/api/deals/{dealId}/threads/{threadId}"
     },
     {
-      "method": "POST",
-      "path": "/api/deals/create"
-    },
-    {
-      "method": "POST",
-      "path": "/api/deals/update"
+      "method": "GET",
+      "path": "/api/deals/{dealId}/timeline"
     },
     {
       "method": "POST",
@@ -283,12 +271,32 @@
       "path": "/api/external/upload"
     },
     {
+      "method": "GET",
+      "path": "/api/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/nominations"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mentions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mentions/unread-count"
+    },
+    {
       "method": "POST",
       "path": "/api/mentions/{id}/resolve"
     },
     {
       "method": "POST",
       "path": "/api/nominations/{approvalId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/oauth/authorize"
     },
     {
       "method": "POST",
@@ -299,32 +307,36 @@
       "path": "/api/oauth/token"
     },
     {
-      "method": "POST",
+      "method": "GET",
       "path": "/api/partner/approvals"
     },
     {
       "method": "POST",
-      "path": "/api/wiki/{slug}/restore"
+      "path": "/api/partner/approvals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users"
     },
     {
       "method": "POST",
       "path": "/api/wiki/save"
     },
     {
-      "method": "PUT",
-      "path": "/api/deals/{dealId}/blocks"
+      "method": "GET",
+      "path": "/api/wiki/search"
     },
     {
-      "method": "PUT",
-      "path": "/api/deals/{dealId}/documents/{slug}/html"
+      "method": "DELETE",
+      "path": "/api/wiki/{slug}"
     },
     {
-      "method": "PUT",
-      "path": "/api/deals/{dealId}/founders"
+      "method": "GET",
+      "path": "/api/wiki/{slug}"
     },
     {
-      "method": "PUT",
-      "path": "/api/deals/{dealId}/memo"
+      "method": "POST",
+      "path": "/api/wiki/{slug}/restore"
     }
   ]
 }

@@ -262,6 +262,60 @@ server.registerTool(
 );
 
 server.registerTool(
+  "pref_list",
+  {
+    description:
+      "List standing agent preferences (team scope + the caller's user scope). " +
+      "These are injected into every server-side agent turn. Use status=proposed " +
+      "to review pending proposals awaiting approval.",
+    inputSchema: {
+      status: z.enum(["active", "proposed", "retired", "all"]).optional()
+        .describe("filter; defaults to active"),
+    },
+  },
+  async ({ status }) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    return callApi("GET", `/api/agent/preferences${params.toString() ? `?${params}` : ""}`);
+  }
+);
+
+server.registerTool(
+  "pref_add",
+  {
+    description:
+      "Save a standing preference so every Llama agent follows it from the next " +
+      "turn on. Use when the user states a durable way they want agents to work " +
+      "(style, workflow, defaults). Content is hard-capped at 280 chars — if it " +
+      "does not fit, it is a procedure and belongs in a skill. Team scope needs " +
+      "system-admin approval; own user scope activates immediately.",
+    inputSchema: {
+      key: z.string().describe("short slug, e.g. reply-style.conclusion-first"),
+      content: z.string().describe("the preference, max 280 chars"),
+      scope: z.enum(["user", "team"]).optional().describe("default user (the caller)"),
+      evidence: z.string().optional().describe("what prompted this (run, correction)"),
+    },
+  },
+  async ({ key, content, scope, evidence }) =>
+    callApi("POST", "/api/agent/preferences", { key, content, scope, evidence })
+);
+
+server.registerTool(
+  "pref_set_status",
+  {
+    description:
+      "Approve (activate) or retire a standing preference by id. Own user scope " +
+      "is self-service; team scope requires a system admin.",
+    inputSchema: {
+      id: z.number().describe("preference id from pref_list"),
+      status: z.enum(["active", "retired"]).describe("new status"),
+    },
+  },
+  async ({ id, status }) =>
+    callApi("PATCH", `/api/agent/preferences/${encodeURIComponent(String(id))}`, { status })
+);
+
+server.registerTool(
   "skills_read",
   {
     description:
