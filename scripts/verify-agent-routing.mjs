@@ -120,18 +120,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/agent/eval-feedback") {
-      writeJson(res, {
-        ok: true,
-        candidate: {
-          id: 42,
-          source_event_id: body?.eventId ?? null,
-          feedback: body?.action ?? null,
-        },
-      });
-      return;
-    }
-
     if (req.method === "GET" && url.pathname === "/api/agent/manifest") {
       writeJson(res, {
         ok: true,
@@ -622,26 +610,6 @@ try {
   assert.equal(businessCalls()[0].body?.idempotencyKey, "visit-2026-07-22");
   assert.equal(businessCalls()[0].body?.facts?.[0]?.category, "team");
   assert.equal(businessCalls()[0].headers.command, "deal.ingest");
-
-  resetCalls();
-  const evalRun = await runCli(
-    [
-      "eval",
-      "bad",
-      "--last",
-      "--reason",
-      "missed dev weekly",
-      "--expect",
-      "wiki:llamaos-weekly-2026-06-17",
-    ],
-    baseUrl,
-    homeDir,
-  );
-  assert.match(evalRun.stdout, /"feedback": "bad"/);
-  assert.deepEqual(paths(), ["POST /api/agent/eval-feedback"]);
-  assert.equal(businessCalls()[0].body?.action, "bad");
-  assert.equal(businessCalls()[0].body?.eventId, 8);
-  assert.equal(businessCalls()[0].body?.expected?.wikiSlugs?.[0], "llamaos-weekly-2026-06-17");
 
   resetCalls();
   const enrichRun = await runCli(

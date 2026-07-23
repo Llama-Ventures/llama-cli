@@ -2,87 +2,329 @@
   "format": "llama.cli-core-api-operations.v1",
   "coreApiContract": "contracts/core-api.json",
   "requiredOperations": [
-    { "method": "DELETE", "path": "/api/deals/{dealId}" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/blocks/{blockId}" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/collaborators/{userId}" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/documents/{slug}" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/documents/{slug}/html" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/links/{linkId}" },
-    { "method": "DELETE", "path": "/api/deals/{dealId}/memo" },
-    { "method": "DELETE", "path": "/api/wiki/{slug}" },
-    { "method": "GET", "path": "/api/admin/agent-events" },
-    { "method": "GET", "path": "/api/admin/auth-events" },
-    { "method": "GET", "path": "/api/admin/deal-events" },
-    { "method": "GET", "path": "/api/agent/activity" },
-    { "method": "GET", "path": "/api/agent/briefing" },
-    { "method": "GET", "path": "/api/agent/explain" },
-    { "method": "GET", "path": "/api/agent/manifest" },
-    { "method": "GET", "path": "/api/agent/skills" },
-    { "method": "GET", "path": "/api/agent/skills/{slug}" },
-    { "method": "GET", "path": "/api/deals" },
-    { "method": "GET", "path": "/api/deals/{dealId}" },
-    { "method": "GET", "path": "/api/deals/{dealId}/blocks" },
-    { "method": "GET", "path": "/api/deals/{dealId}/blocks/{blockId}" },
-    { "method": "GET", "path": "/api/deals/{dealId}/blocks/{blockId}/history" },
-    { "method": "GET", "path": "/api/deals/{dealId}/collaborators" },
-    { "method": "GET", "path": "/api/deals/{dealId}/command-center" },
-    { "method": "GET", "path": "/api/deals/{dealId}/documents" },
-    { "method": "GET", "path": "/api/deals/{dealId}/documents/{slug}/html" },
-    { "method": "GET", "path": "/api/deals/{dealId}/documents/{slug}/html/history" },
-    { "method": "GET", "path": "/api/deals/{dealId}/facts" },
-    { "method": "GET", "path": "/api/deals/{dealId}/feed" },
-    { "method": "GET", "path": "/api/deals/{dealId}/links" },
-    { "method": "GET", "path": "/api/deals/{dealId}/memo" },
-    { "method": "GET", "path": "/api/deals/{dealId}/timeline" },
-    { "method": "GET", "path": "/api/deals/deleted" },
-    { "method": "GET", "path": "/api/me" },
-    { "method": "GET", "path": "/api/me/nominations" },
-    { "method": "GET", "path": "/api/mentions" },
-    { "method": "GET", "path": "/api/mentions/unread-count" },
-    { "method": "GET", "path": "/api/oauth/authorize" },
-    { "method": "GET", "path": "/api/partner/approvals" },
-    { "method": "GET", "path": "/api/users" },
-    { "method": "GET", "path": "/api/wiki/{slug}" },
-    { "method": "GET", "path": "/api/wiki/search" },
-    { "method": "PATCH", "path": "/api/deals/{dealId}/blocks/{blockId}" },
-    { "method": "PATCH", "path": "/api/deals/{dealId}/documents/{slug}" },
-    { "method": "PATCH", "path": "/api/deals/{dealId}/facts/{factId}" },
-    { "method": "POST", "path": "/api/agent/client-events" },
-    { "method": "POST", "path": "/api/agent/eval-feedback" },
-    { "method": "POST", "path": "/api/deals/{dealId}/agent-runs/{runId}/revert" },
-    { "method": "POST", "path": "/api/deals/{dealId}/blocks/{blockId}/history" },
-    { "method": "POST", "path": "/api/deals/{dealId}/blocks/{blockId}/restore" },
-    { "method": "POST", "path": "/api/deals/{dealId}/collaborators" },
-    { "method": "POST", "path": "/api/deals/{dealId}/collaborators/{userId}/restore" },
-    { "method": "POST", "path": "/api/deals/{dealId}/documents" },
-    { "method": "POST", "path": "/api/deals/{dealId}/documents/{slug}/html/restore/{version}" },
-    { "method": "POST", "path": "/api/deals/{dealId}/enrich" },
-    { "method": "POST", "path": "/api/deals/{dealId}/facts" },
-    { "method": "POST", "path": "/api/deals/{dealId}/ingest" },
-    { "method": "POST", "path": "/api/deals/{dealId}/links" },
-    { "method": "POST", "path": "/api/deals/{dealId}/links/{linkId}/restore" },
-    { "method": "POST", "path": "/api/deals/{dealId}/memo" },
-    { "method": "POST", "path": "/api/deals/{dealId}/posts" },
-    { "method": "POST", "path": "/api/deals/{dealId}/propose-owner" },
-    { "method": "POST", "path": "/api/deals/{dealId}/refresh-brief" },
-    { "method": "POST", "path": "/api/deals/{dealId}/restore" },
-    { "method": "POST", "path": "/api/deals/{dealId}/threads" },
-    { "method": "POST", "path": "/api/deals/{dealId}/threads/{threadId}" },
-    { "method": "POST", "path": "/api/deals/create" },
-    { "method": "POST", "path": "/api/deals/update" },
-    { "method": "POST", "path": "/api/external/chat" },
-    { "method": "POST", "path": "/api/external/start-session" },
-    { "method": "POST", "path": "/api/external/upload" },
-    { "method": "POST", "path": "/api/mentions/{id}/resolve" },
-    { "method": "POST", "path": "/api/nominations/{approvalId}" },
-    { "method": "POST", "path": "/api/oauth/revoke" },
-    { "method": "POST", "path": "/api/oauth/token" },
-    { "method": "POST", "path": "/api/partner/approvals" },
-    { "method": "POST", "path": "/api/wiki/{slug}/restore" },
-    { "method": "POST", "path": "/api/wiki/save" },
-    { "method": "PUT", "path": "/api/deals/{dealId}/blocks" },
-    { "method": "PUT", "path": "/api/deals/{dealId}/documents/{slug}/html" },
-    { "method": "PUT", "path": "/api/deals/{dealId}/founders" },
-    { "method": "PUT", "path": "/api/deals/{dealId}/memo" }
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/blocks/{blockId}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/collaborators/{userId}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/documents/{slug}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/links/{linkId}"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/wiki/{slug}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/agent-events"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/auth-events"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/deal-events"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/activity"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/briefing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/explain"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/skills"
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/skills/{slug}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/blocks"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/blocks/{blockId}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/blocks/{blockId}/history"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/collaborators"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/command-center"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/documents/{slug}/html/history"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/facts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/feed"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/links"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/timeline"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deals/deleted"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me"
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/nominations"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mentions"
+    },
+    {
+      "method": "GET",
+      "path": "/api/mentions/unread-count"
+    },
+    {
+      "method": "GET",
+      "path": "/api/oauth/authorize"
+    },
+    {
+      "method": "GET",
+      "path": "/api/partner/approvals"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users"
+    },
+    {
+      "method": "GET",
+      "path": "/api/wiki/{slug}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/wiki/search"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deals/{dealId}/blocks/{blockId}"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deals/{dealId}/documents/{slug}"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deals/{dealId}/facts/{factId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent/client-events"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/agent-runs/{runId}/revert"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/blocks/{blockId}/history"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/blocks/{blockId}/restore"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/collaborators"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/collaborators/{userId}/restore"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/documents"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/documents/{slug}/html/restore/{version}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/enrich"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/facts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/ingest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/links"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/links/{linkId}/restore"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/memo"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/posts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/propose-owner"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/refresh-brief"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/restore"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/threads"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/threads/{threadId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/create"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/update"
+    },
+    {
+      "method": "POST",
+      "path": "/api/external/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/api/external/start-session"
+    },
+    {
+      "method": "POST",
+      "path": "/api/external/upload"
+    },
+    {
+      "method": "POST",
+      "path": "/api/mentions/{id}/resolve"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nominations/{approvalId}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/oauth/revoke"
+    },
+    {
+      "method": "POST",
+      "path": "/api/oauth/token"
+    },
+    {
+      "method": "POST",
+      "path": "/api/partner/approvals"
+    },
+    {
+      "method": "POST",
+      "path": "/api/wiki/{slug}/restore"
+    },
+    {
+      "method": "POST",
+      "path": "/api/wiki/save"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/blocks"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/documents/{slug}/html"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/founders"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/deals/{dealId}/memo"
+    }
   ]
 }

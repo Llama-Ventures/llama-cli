@@ -137,8 +137,7 @@ reference (100+ commands). Deletes are soft and audit-logged everywhere.
 | `Error[UNAUTHORIZED]` | Server rejected the credentials | Token revoked / expired / wrong account |
 
 The MCP server returns the same prefixes inside `isError: true` content.
-Authenticated calls send bounded, content-redacted telemetry to Command;
-`llama eval good|bad --last` turns real searches into eval feedback.
+Authenticated calls send bounded, content-redacted telemetry to Command.
 
 ## MCP server
 
