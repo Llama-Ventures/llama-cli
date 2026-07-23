@@ -12,16 +12,23 @@ this project adheres to [Semantic Versioning](https://semver.org).
 - Add `llama deal ingest <dealId> --file <packet.json>` and the matching
   `deal_ingest` MCP tool for atomic, retry-safe source packets containing up to
   50 facts and an optional Feed note.
+- Add `llama pref list|add|retire|approve` and the `pref_list` / `pref_add` /
+  `pref_set_status` MCP tools for standing agent preferences (Core API 3.1.0).
+  Own user scope activates immediately; team scope requires system-admin
+  approval. Content is hard-capped at 280 chars.
 
 ### Changed
 - Prefer packet ingest for multi-fact agent writes; Core now canonicalizes fact
   categories and skips exact source-aware duplicates before committing.
+- Pin the Core API consumer contract to 3.1.0.
 
 ### Removed
 - Remove the retired generated-persona refresh and skill-correction commands
   from the CLI, MCP tool registry, and required Core operation inventory.
   Llama Command keeps authenticated historical reads and 410 compatibility
   tombstones, but new clients can no longer invoke the retired workflow.
+- Remove `llama eval` and the `record_eval_feedback` MCP tool; the server-side
+  Golden Query Eval candidate pipeline was retired with Core API 3.0.0.
 
 ## [1.19.0] - 2026-07-16
 
