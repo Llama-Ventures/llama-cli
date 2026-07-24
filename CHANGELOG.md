@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- Add explicit `--cue` (CLI) and `cueAuthorized` (MCP) authorization for
+  teammate cues in posts and brief writes. Cue-free writes remain unchanged;
+  agents must obtain permission for the resolved recipients before setting it.
+
+### Changed
+- Agent onboarding now treats teammate cues as approval-required outbound
+  actions rather than ordinary low-risk timeline posts. Structured
+  `MENTION_APPROVAL_REQUIRED` errors retain recipient and channel context.
+
 ## [1.20.0] - 2026-07-22
 
 ### Added

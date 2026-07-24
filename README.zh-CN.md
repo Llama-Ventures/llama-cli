@@ -124,6 +124,7 @@ llama deal ingest <dealId> --file packet.json  # 多条 facts + 可选 Feed note
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "备注内容"
+llama post <dealId> "@name 请回复" --cue  # 仅在用户明确授权后使用
 llama brief add-text <dealId> --heading "..." --body "..."
 llama wiki search "<查询词>"
 llama wiki save <slug> --title "..." --content "..."

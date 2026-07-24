@@ -457,16 +457,17 @@ Approvals (partner queue — self-claim approvals):
 
 Timeline / Posts:
   llama timeline <dealId>                                    # full unified feed
-  llama post <dealId> "message body" [--link url] [--link-name "name"]
+  llama post <dealId> "message body" [--link url] [--link-name "name"] [--cue]
+                                                               # --cue only after explicit user approval
 
 Brief blocks:
   llama brief blocks <dealId>                                  # list current block array
   llama brief block <dealId> <blockId>                         # fetch one block's body (manifest in 'llama deal show')
-  llama brief add-text <dealId> --heading "..." --body "..."
-  llama brief add-link <dealId> --url "..." --label "..." [--description "..."]
-  llama brief add-embed <dealId> --url "..." [--label "..."]
-  llama brief add-callout <dealId> --tone insight|info|warning|success --heading "..." --body "..."
-  llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--tone ...]
+  llama brief add-text <dealId> --heading "..." --body "..." [--cue]
+  llama brief add-link <dealId> --url "..." --label "..." [--description "..."] [--cue]
+  llama brief add-embed <dealId> --url "..." [--label "..."] [--cue]
+  llama brief add-callout <dealId> --tone insight|info|warning|success --heading "..." --body "..." [--cue]
+  llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--tone ...] [--cue]
                           [--source-section <key>] [--lock|--unlock] [--hide|--unhide]
   llama brief delete <dealId> <blockId>
   llama brief history <dealId> <blockId> [--limit 50]            # prior versions of this block (newest first)
@@ -1934,7 +1935,7 @@ async function main() {
     const { flags, positional } = parseFlags(rest);
     const body = positional[0];
     if (!dealId || !body) {
-      throw new Error(`Usage: llama post <dealId> "message body" [--link url] [--link-name "name"]`);
+      throw new Error(`Usage: llama post <dealId> "message body" [--link url] [--link-name "name"] [--cue]`);
     }
     const attachments = flags.link
       ? [{ url: String(flags.link), name: flags["link-name"] ? String(flags["link-name"]) : String(flags.link) }]
@@ -1942,7 +1943,7 @@ async function main() {
     print(await request(
       "POST",
       `/api/deals/${encodeURIComponent(dealId)}/posts`,
-      { body, attachments }
+      { body, attachments, cue_authorized: flags.cue === true }
     ));
     return;
   }
@@ -2168,7 +2169,10 @@ Routing — is this the right command?
     if (!cur) cur = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`);
     const existing = cur.blocks ?? [];
     const next = position === "top" ? [block, ...existing] : [...existing, block];
-    print(await request("PUT", `/api/deals/${encodeURIComponent(dealId)}/blocks`, { blocks: next }));
+    print(await request("PUT", `/api/deals/${encodeURIComponent(dealId)}/blocks`, {
+      blocks: next,
+      cue_authorized: flags.cue === true,
+    }));
     console.log(`Created block ${id}`);
     return;
   }
@@ -2178,7 +2182,7 @@ Routing — is this the right command?
     const dealId = rest[0];
     const blockId = rest[1];
     if (!dealId || !blockId) {
-      throw new Error("Usage: llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--description ...] [--tone ...] [--source-section ...] [--lock|--unlock] [--hide|--unhide]");
+      throw new Error("Usage: llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--description ...] [--tone ...] [--source-section ...] [--lock|--unlock] [--hide|--unhide] [--cue]");
     }
     const patch = {};
     for (const k of ["heading", "body", "url", "label", "description", "tone"]) {
@@ -2198,8 +2202,11 @@ Routing — is this the right command?
       metaPatch.sourceSection = String(flags["source-section"]);
     }
     if (Object.keys(metaPatch).length > 0) patch.meta = metaPatch;
+    if (flags.cue === true) patch.cue_authorized = true;
 
-    if (Object.keys(patch).length === 0) throw new Error("at least one field flag required");
+    if (Object.keys(patch).length === 0 || (Object.keys(patch).length === 1 && patch.cue_authorized === true)) {
+      throw new Error("at least one field flag required");
+    }
     print(await request("PATCH", `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`, patch));
     return;
   }

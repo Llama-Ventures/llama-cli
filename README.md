@@ -102,6 +102,7 @@ llama deal ingest <dealId> --file packet.json  # atomic multi-fact + optional Fe
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
 llama deal update <dealId> status Diligence
 llama post <dealId> "note body"
+llama post <dealId> "@name please respond" --cue  # only after explicit approval
 llama brief add-text <dealId> --heading "..." --body "..."
 llama wiki search "<query>"
 llama wiki save <slug> --title "..." --content "..."

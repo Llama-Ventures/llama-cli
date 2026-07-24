@@ -161,7 +161,7 @@ async function runDealAgentTool({ dealId, message, title = "MCP agent run" }) {
 // full-array PUTs (no POST), so we GET current blocks, prepend the new
 // one (matches UI default since 2026-05-03), and PUT the merged array.
 // Server stamps identity meta on PUT; we don't send any.
-async function addBriefBlock(dealId, block) {
+async function addBriefBlock(dealId, block, cueAuthorized = false) {
   try {
     const id = globalThis.crypto.randomUUID();
     const cur = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`);
@@ -169,7 +169,7 @@ async function addBriefBlock(dealId, block) {
     const result = await request(
       "PUT",
       `/api/deals/${encodeURIComponent(dealId)}/blocks`,
-      { blocks: [{ id, ...block }, ...existing] }
+      { blocks: [{ id, ...block }, ...existing], cue_authorized: cueAuthorized === true }
     );
     const text = JSON.stringify(
       { ok: result?.ok ?? true, id, count: result?.count ?? existing.length + 1 },
@@ -681,10 +681,13 @@ server.registerTool(
       dealId: z.string(),
       heading: z.string().optional().describe("optional block heading"),
       body: z.string().describe("markdown body"),
+      cueAuthorized: z.boolean().optional().describe(
+        "true only after the user explicitly approved every resolved cue recipient",
+      ),
     },
   },
-  async ({ dealId, heading, body }) =>
-    addBriefBlock(dealId, { type: "text", heading: heading ?? "", body })
+  async ({ dealId, heading, body, cueAuthorized }) =>
+    addBriefBlock(dealId, { type: "text", heading: heading ?? "", body }, cueAuthorized)
 );
 
 server.registerTool(
@@ -696,10 +699,13 @@ server.registerTool(
       dealId: z.string(),
       url: z.string(),
       label: z.string().optional().describe("optional human-readable label"),
+      cueAuthorized: z.boolean().optional().describe(
+        "true only after the user explicitly approved every resolved cue recipient",
+      ),
     },
   },
-  async ({ dealId, url, label }) =>
-    addBriefBlock(dealId, { type: "link", url, label: label ?? "" })
+  async ({ dealId, url, label, cueAuthorized }) =>
+    addBriefBlock(dealId, { type: "link", url, label: label ?? "" }, cueAuthorized)
 );
 
 server.registerTool(
@@ -712,10 +718,13 @@ server.registerTool(
       tone: z.string().describe("insight | warning | info | success"),
       heading: z.string().optional(),
       body: z.string(),
+      cueAuthorized: z.boolean().optional().describe(
+        "true only after the user explicitly approved every resolved cue recipient",
+      ),
     },
   },
-  async ({ dealId, tone, heading, body }) =>
-    addBriefBlock(dealId, { type: "callout", tone, heading: heading ?? "", body })
+  async ({ dealId, tone, heading, body, cueAuthorized }) =>
+    addBriefBlock(dealId, { type: "callout", tone, heading: heading ?? "", body }, cueAuthorized)
 );
 
 server.registerTool(
@@ -738,9 +747,12 @@ server.registerTool(
       locked: z.boolean().optional(),
       hidden: z.boolean().optional(),
       sourceSection: z.string().optional(),
+      cueAuthorized: z.boolean().optional().describe(
+        "true only after the user explicitly approved every resolved cue recipient",
+      ),
     },
   },
-  async ({ dealId, blockId, heading, body, url, label, description, tone, locked, hidden, sourceSection }) => {
+  async ({ dealId, blockId, heading, body, url, label, description, tone, locked, hidden, sourceSection, cueAuthorized }) => {
     const patch = {};
     for (const [k, v] of Object.entries({ heading, body, url, label, description, tone })) {
       if (v !== undefined) patch[k] = v;
@@ -750,6 +762,7 @@ server.registerTool(
     if (hidden !== undefined) meta.hidden = hidden;
     if (sourceSection !== undefined) meta.sourceSection = sourceSection;
     if (Object.keys(meta).length > 0) patch.meta = meta;
+    if (cueAuthorized === true) patch.cue_authorized = true;
     return callApi(
       "PATCH",
       `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`,
@@ -988,16 +1001,22 @@ server.registerTool(
   "post",
   {
     description:
-      "Post a message to a deal's timeline. Message can include @-mentions " +
-      "(e.g. @<first-name> or @<email@llamaventures.vc>) — the system fires " +
-      "email + inbox notifications to mentioned users.",
+      "Post a message to a deal's timeline. Cue-free posts are autonomous. " +
+      "Explicit or implicit teammate cues create inbox/email notifications and require " +
+      "cueAuthorized=true only after explicit user permission.",
     inputSchema: {
       dealId: z.string(),
       message: z.string(),
+      cueAuthorized: z.boolean().optional().describe(
+        "true only after the user explicitly approved cueing every resolved recipient",
+      ),
     },
   },
-  async ({ dealId, message }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/posts`, { message })
+  async ({ dealId, message, cueAuthorized }) =>
+    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/posts`, {
+      message,
+      cue_authorized: cueAuthorized === true,
+    })
 );
 
 // ============================================================
