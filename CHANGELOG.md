@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-07-24
+
 ### Added
 - Add explicit `--cue` (CLI) and `cueAuthorized` (MCP) authorization for
   teammate cues in posts and brief writes. Cue-free writes remain unchanged;
@@ -554,7 +556,8 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.1...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.20.0...v1.21.0
 [1.18.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.3...v1.18.0
 [1.17.3]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.2...v1.17.3
