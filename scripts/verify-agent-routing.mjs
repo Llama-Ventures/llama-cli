@@ -374,6 +374,36 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const postMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/posts$/);
+    if (req.method === "POST" && postMatch) {
+      const dealId = decodeURIComponent(postMatch[1]);
+      if (dealId === "deal-cue-refused" && body?.cue_authorized !== true) {
+        res.writeHead(409, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: "This assistant-authored write would cue teammates.",
+          code: "MENTION_APPROVAL_REQUIRED",
+          cue: {
+            recipients: [{ user_id: 11, name: "Example Teammate", intent: "cc" }],
+            channels: ["inbox", "email"],
+            authorization_field: "cue_authorized",
+          },
+        }));
+        return;
+      }
+      writeJson(res, { ok: true, id: "post-block-1" });
+      return;
+    }
+
+    const blocksMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/blocks$/);
+    if (blocksMatch && req.method === "GET") {
+      writeJson(res, { blocks: [] });
+      return;
+    }
+    if (blocksMatch && req.method === "PUT") {
+      writeJson(res, { ok: true, count: body?.blocks?.length ?? 0 });
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: `Unexpected route ${req.method} ${url.pathname}` }));
   } catch (err) {
@@ -442,7 +472,7 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function runCli(args, baseUrl, homeDir) {
+async function runCliResult(args, baseUrl, homeDir) {
   const child = spawn(process.execPath, ["bin/llama.mjs", ...args], {
     cwd: repoRoot,
     env: childEnv(baseUrl, homeDir),
@@ -457,6 +487,11 @@ async function runCli(args, baseUrl, homeDir) {
     stderr += chunk;
   });
   const code = await new Promise((resolve) => child.on("close", resolve));
+  return { code, stdout, stderr };
+}
+
+async function runCli(args, baseUrl, homeDir) {
+  const { code, stdout, stderr } = await runCliResult(args, baseUrl, homeDir);
   assert.equal(code, 0, `CLI failed (${code})\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   return { stdout, stderr };
 }
@@ -659,6 +694,57 @@ try {
     messageIncludes: ["custom server task"],
   });
 
+  resetCalls();
+  await runCli(
+    ["post", "deal-cue", "@name please respond"],
+    baseUrl,
+    homeDir,
+  );
+  assert.deepEqual(paths(), ["POST /api/deals/deal-cue/posts"]);
+  assert.equal(businessCalls()[0].body?.cue_authorized, false);
+
+  resetCalls();
+  await runCli(
+    ["post", "deal-cue", "@name please respond", "--cue"],
+    baseUrl,
+    homeDir,
+  );
+  assert.deepEqual(paths(), ["POST /api/deals/deal-cue/posts"]);
+  assert.equal(businessCalls()[0].body?.cue_authorized, true);
+
+  resetCalls();
+  const refusedCue = await runCliResult(
+    ["post", "deal-cue-refused", "@name please respond"],
+    baseUrl,
+    homeDir,
+  );
+  assert.notEqual(refusedCue.code, 0);
+  assert.match(refusedCue.stderr, /Error\[MENTION_APPROVAL_REQUIRED\]/);
+  assert.match(refusedCue.stderr, /Example Teammate \(cc\)/);
+  assert.match(refusedCue.stderr, /inbox \+ email/);
+  assert.match(refusedCue.stderr, /retry the exact write with --cue/i);
+
+  resetCalls();
+  await runCli(
+    [
+      "brief",
+      "add-text",
+      "deal-brief",
+      "--heading",
+      "Follow-up",
+      "--body",
+      "@name please respond",
+      "--cue",
+    ],
+    baseUrl,
+    homeDir,
+  );
+  assert.deepEqual(paths(), [
+    "GET /api/deals/deal-brief/blocks",
+    "PUT /api/deals/deal-brief/blocks",
+  ]);
+  assert.equal(businessCalls()[1].body?.cue_authorized, true);
+
   const largeHtmlPath = path.join(homeDir, "full-memo.html");
   const largeHtml =
     "<!doctype html><html><head><title>Full Memo</title></head><body>" +
@@ -762,6 +848,22 @@ try {
   assert.deepEqual(paths(), ["POST /api/deals/deal-mcp/ingest"]);
   assert.equal(businessCalls()[0].body?.idempotencyKey, "mcp-visit-2026-07-22");
   assert.equal(businessCalls()[0].headers.command, "deal.ingest");
+
+  resetCalls();
+  const mcpPost = await callMcpTool(
+    "post",
+    {
+      dealId: "deal-mcp-cue",
+      message: "@name please respond",
+      cueAuthorized: true,
+    },
+    baseUrl,
+    homeDir,
+  );
+  const mcpPostPayload = JSON.parse(mcpPost.content?.[0]?.text ?? "{}");
+  assert.equal(mcpPostPayload.ok, true);
+  assert.deepEqual(paths(), ["POST /api/deals/deal-mcp-cue/posts"]);
+  assert.equal(businessCalls()[0].body?.cue_authorized, true);
 
   resetCalls();
   const inlineGuard = await callMcpTool(
