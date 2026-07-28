@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-07-28
+
+### Added
+- Consume Llama Command's server-owned CLI/MCP compatibility headers on every
+  shared API request. Recommended upgrades are surfaced on stderr at most once
+  per day, including for non-TTY coding agents, while structured stdout remains
+  unchanged.
+- Surface hard `CLI_VERSION_UNSUPPORTED` responses with a stable error code,
+  exact upgrade command, and retry instruction.
+
 ## [1.21.0] - 2026-07-24
 
 ### Added
@@ -556,7 +566,8 @@ assistant-drafted (🤖) and enforces the AI trust ceiling.
 
 ---
 
-[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/Llama-Ventures/llama-cli/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.20.0...v1.21.0
 [1.18.1]: https://github.com/Llama-Ventures/llama-cli/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/Llama-Ventures/llama-cli/compare/v1.17.3...v1.18.0
