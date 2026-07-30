@@ -625,7 +625,7 @@ Command groups — run \`llama help <group>\` for that group's commands:
   deal        create · show · feed · update · enrich · search · collaborators · links · delete
   activity    new-deals · updated-deals · events for agent read models
   brief       brief blocks: list · add · edit · history · refresh
-  facts       deal facts + skill corrections (the sourced, trust-rated layer)
+  facts       deal facts — the sourced, trust-rated layer
   timeline    timeline · posts · mentions
   wiki        cross-deal knowledge entries (markdown or HTML)
   pref        standing agent preferences: list · add · retire · approve
@@ -645,10 +645,20 @@ the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
 
 // Area → which top-level sections of HELP_FULL belong to it.
 const HELP_AREA_MATCH = {
-  deal: [/^Deals/, /^Collaborators/, /^Soft-delete/, /^Deal links/, /^Deal soft-delete/],
+  deal: [
+    /^Deals/,
+    /^Collaborators/,
+    /^Soft-delete/,
+    /^Deal links/,
+    /^Deal soft-delete/,
+    // `llama deal refresh-brief` / `revert-run` live under this heading. Without
+    // it here the section matched no area and was reachable only via `help all`,
+    // which read as "the command does not exist".
+    /^Brief refresh/,
+  ],
   activity: [/^Agent activity/],
-  brief: [/^Brief blocks/],
-  facts: [/^Deal facts/, /^Skill corrections/],
+  brief: [/^Brief blocks/, /^Brief refresh/],
+  facts: [/^Deal facts/],
   timeline: [/^Timeline/, /^Mentions/],
   wiki: [/^Wiki/, /^Where does this HTML/],
   memo: [/^Memo/],
