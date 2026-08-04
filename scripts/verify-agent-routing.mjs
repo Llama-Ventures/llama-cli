@@ -242,6 +242,24 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/me") {
+      writeJson(res, { id: 13, name: "Kevin Yu", role: "associate" });
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      /^\/api\/deals\/[^/]+\/propose-owner$/.test(url.pathname)
+    ) {
+      writeJson(res, {
+        ok: true,
+        semantics: "accountability_label_v1",
+        proposedUserId: body?.userId,
+        workflowRevision: 4,
+      });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/deals") {
       writeJson(res, {
         deals: [
@@ -619,6 +637,40 @@ try {
   assert.equal(businessCalls()[0].query.kind, "new_deals");
   assert.equal(businessCalls()[0].query.since, "24h");
   assert.equal(businessCalls()[0].query.limit, "10");
+
+  resetCalls();
+  const missingClaimReason = await runCliResult(["claim", "deal-owner"], baseUrl, homeDir);
+  assert.notEqual(missingClaimReason.code, 0);
+  assert.match(missingClaimReason.stderr, /--reason/);
+  assert.deepEqual(paths(), []);
+
+  resetCalls();
+  const claimRun = await runCli(
+    ["claim", "deal-owner", "--reason", "Kevin is driving DD and the memo."],
+    baseUrl,
+    homeDir,
+  );
+  assert.match(claimRun.stdout, /"semantics": "accountability_label_v1"/);
+  assert.deepEqual(paths(), [
+    "GET /api/me",
+    "POST /api/deals/deal-owner/propose-owner",
+  ]);
+  assert.deepEqual(businessCalls()[1].body, {
+    userId: 13,
+    reason: "Kevin is driving DD and the memo.",
+  });
+
+  resetCalls();
+  await runCli(
+    ["nominate", "deal-owner", "--user", "13", "--reason", "Legacy responsibility cleanup."],
+    baseUrl,
+    homeDir,
+  );
+  assert.deepEqual(paths(), ["POST /api/deals/deal-owner/propose-owner"]);
+  assert.deepEqual(businessCalls()[0].body, {
+    userId: 13,
+    reason: "Legacy responsibility cleanup.",
+  });
 
   resetCalls();
   const wikiRun = await runCli(["wiki", "search", "llama weekly"], baseUrl, homeDir);

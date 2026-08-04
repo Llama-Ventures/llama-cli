@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-08-04
+
+### Fixed
+- `llama claim` and `llama nominate` now require `--reason` and send it to
+  Llama Command's audited Owner-label endpoint. The CLI no longer emits a
+  request that Core must reject before recording the responsibility change.
+
 ## [1.22.1] - 2026-08-04
 
 ### Changed

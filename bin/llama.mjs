@@ -446,12 +446,12 @@ Deal links (separate from brief link blocks — these live in deal_links):
   llama deal link restore <dealId> <linkId>
 
 Ownership:
-  llama claim <dealId>                                       # propose self as owner
-  llama nominate <dealId> --user <userId>                    # partner nominates someone else
-  llama nominations list                                     # pending nominations for me
-  llama nominations decide <approvalId> accepted|declined    # accept/decline a nomination
+  llama claim <dealId> --reason "..."                        # set yourself as Owner
+  llama nominate <dealId> --user <userId> --reason "..."     # set another teammate as Owner
+  Owner is an audited responsibility label, not a permission boundary. Any
+  internal teammate can change it after Partner Support; reason is mandatory.
 
-Approvals (partner queue — self-claim approvals):
+Approvals (Partner queue — contribution decisions):
   llama approvals list
   llama approvals decide <approvalId> approved|rejected [--note "..."]
 
@@ -1890,12 +1890,16 @@ async function main() {
   // ----- Ownership: self-claim -----
   if (area === "claim") {
     const dealId = action; // second positional
-    if (!dealId) throw new Error("Usage: llama claim <dealId>");
+    const { flags } = parseFlags(rest, ["reason"]);
+    const reason = typeof flags.reason === "string" ? flags.reason.trim() : "";
+    if (!dealId || !reason) {
+      throw new Error('Usage: llama claim <dealId> --reason "<why this person should own it>"');
+    }
     const me = await request("GET", "/api/me");
     print(await request(
       "POST",
       `/api/deals/${encodeURIComponent(dealId)}/propose-owner`,
-      { userId: me.id }
+      { userId: me.id, reason }
     ));
     return;
   }
@@ -1903,15 +1907,16 @@ async function main() {
   // ----- Ownership: partner nominates someone else -----
   if (area === "nominate") {
     const dealId = action;
-    const { flags } = parseFlags(rest);
+    const { flags } = parseFlags(rest, ["user", "reason"]);
     const userId = Number(flags.user);
-    if (!dealId || !Number.isFinite(userId)) {
-      throw new Error("Usage: llama nominate <dealId> --user <userId>");
+    const reason = typeof flags.reason === "string" ? flags.reason.trim() : "";
+    if (!dealId || !Number.isFinite(userId) || !reason) {
+      throw new Error('Usage: llama nominate <dealId> --user <userId> --reason "<why>"');
     }
     print(await request(
       "POST",
       `/api/deals/${encodeURIComponent(dealId)}/propose-owner`,
-      { userId }
+      { userId, reason }
     ));
     return;
   }
