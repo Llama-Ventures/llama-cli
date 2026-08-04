@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-08-04
+
+### Changed
+- Refresh the transitive `ip-address` dependency from 10.2.0 to 10.4.0 and
+  retain the same CLI and MCP behavior across the supported Node 18/20/22
+  matrix.
+
 ## [1.22.0] - 2026-07-28
 
 ### Added
