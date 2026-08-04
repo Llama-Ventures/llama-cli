@@ -457,8 +457,7 @@ server.registerTool(
   {
     description:
       "Create a new pipeline deal. Source defaults to the caller's user record. " +
-      "Owner assignment goes through the partner-approval queue (status: pending) " +
-      "until a partner approves it via /partner/approvals.",
+      "Owner is an audited responsibility label, not an operating-permission boundary.",
     inputSchema: {
       companyName: z.string(),
       description: z.string().optional().describe("one-liner: what they do"),
