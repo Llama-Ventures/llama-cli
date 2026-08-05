@@ -6,6 +6,29 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-08-05
+
+### Added
+- `llama deal fact uncontest <dealId> <factId> --reason "..."` lifts a contest
+  that turned out to be wrong. Contesting a fact removes it from what the Deal
+  Agent treats as current, and until now nothing could put it back — so a true
+  claim contested on weak evidence stayed suppressed in every regenerated brief
+  and memo. The lifted contest is kept in the fact's history server-side, not
+  erased. Requires Llama Command >= 3.21.0.
+
+### Changed
+- `--help` and `AGENT_BRIEFING.md` now state that **trust and contest are
+  separate axes**: `fact verify --status confirmed` does NOT lift a contest, and
+  a contested fact stays excluded from synthesis whatever its trust rung. The
+  server now returns a warning when a verify leaves a contest standing.
+- `deal update` help says what `notes` is for — the one-line Summary headline at
+  the top of the deal page (~280 chars), not a place for meeting notes. It was
+  previously listed among 20 field names with no semantics, so the honest
+  reading was "notes" and long text landed in a headline slot.
+
+### Note
+This release also carries the unpublished 1.22.2 fix below.
+
 ## [1.22.2] - 2026-08-04
 
 ### Fixed
