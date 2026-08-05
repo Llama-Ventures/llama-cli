@@ -395,9 +395,9 @@ Deals:
       description, website, location, founders, founderInfo, proposedAmount,
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
-      `notes` is the ONE-LINE judgment shown as the Summary headline at the top of
+      'notes' is the ONE-LINE judgment shown as the Summary headline at the top of
       the deal page (~280 chars). Meeting notes and narrative go in a comment
-      (`llama post`); verifiable claims go in facts (`llama deal fact add`).
+      (llama post); verifiable claims go in facts (llama deal fact add).
       e.g.  llama deal update <dealId> website https://acme.ai
             llama deal update <dealId> status Interested
             llama deal update <dealId> sector "Developer Tools"
@@ -507,7 +507,7 @@ Deal facts (AI-extracted or human-asserted, with verification):
   llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
   llama deal fact uncontest <dealId> <factId> --reason "<why the contest was wrong>"
-    contest and trust are separate axes: `verify --status confirmed` does NOT lift a contest,
+    contest and trust are separate axes: 'verify --status confirmed' does NOT lift a contest,
     and a contested fact stays excluded from what the Deal Agent treats as current.
 
 Mentions / Inbox:
