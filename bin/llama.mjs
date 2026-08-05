@@ -395,6 +395,9 @@ Deals:
       description, website, location, founders, founderInfo, proposedAmount,
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
+      'notes' is the ONE-LINE judgment shown as the Summary headline at the top of
+      the deal page (~280 chars). Meeting notes and narrative go in a comment
+      (llama post); verifiable claims go in facts (llama deal fact add).
       e.g.  llama deal update <dealId> website https://acme.ai
             llama deal update <dealId> status Interested
             llama deal update <dealId> sector "Developer Tools"
@@ -503,6 +506,9 @@ Deal facts (AI-extracted or human-asserted, with verification):
   llama deal fact list <dealId>
   llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
   llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
+  llama deal fact uncontest <dealId> <factId> --reason "<why the contest was wrong>"
+    contest and trust are separate axes: 'verify --status confirmed' does NOT lift a contest,
+    and a contested fact stays excluded from what the Deal Agent treats as current.
 
 Mentions / Inbox:
   llama mentions                                       # default: my unresolved cues
@@ -1826,7 +1832,29 @@ async function main() {
       return;
     }
 
-    throw new Error(`Unknown fact sub-command "${sub}". Use list, add, or verify.`);
+    // Lift a contest that turned out to be wrong. Contesting a claim removes
+    // it from everything the Deal Agent treats as current; before this existed
+    // there was no way back, so a TRUE claim contested on weak evidence stayed
+    // suppressed in every regenerated brief and memo. `verify --status
+    // confirmed` does NOT do this — trust and contest are separate axes.
+    if (sub === "uncontest") {
+      const factId = rest[2];
+      const reason = flags.reason !== undefined && flags.reason !== true ? String(flags.reason).trim() : "";
+      if (!factId || !reason) {
+        throw new Error(
+          `Usage: llama deal fact uncontest <dealId> <factId> --reason "<why the contest was wrong>"`
+        );
+      }
+      // @core-api-operation POST /api/deals/{dealId}/facts/{factId}/uncontest
+      print(await request(
+        "POST",
+        `/api/deals/${encodeURIComponent(dealId)}/facts/${encodeURIComponent(factId)}/uncontest`,
+        { reason }
+      ));
+      return;
+    }
+
+    throw new Error(`Unknown fact sub-command "${sub}". Use list, add, verify, or uncontest.`);
   }
 
   // ----- Brief refresh: trigger stale-section re-eval watcher run -----
