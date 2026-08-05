@@ -74,6 +74,27 @@ function jsonResult(value, isError = false) {
   return textResult(JSON.stringify(value, null, 2), isError);
 }
 
+async function callWorkflow(dealId, type, fields) {
+  try {
+    const path = `/api/deals/${encodeURIComponent(dealId)}/workflow`;
+    // @core-api-operation GET /api/deals/{dealId}/workflow
+    const current = await request("GET", path);
+    const expectedRevision = current?.workflow?.revision;
+    if (!Number.isInteger(expectedRevision)) {
+      return textResult("Error: Investment Workflow V2 is not initialized for this deal.", true);
+    }
+    // @core-api-operation POST /api/deals/{dealId}/workflow
+    return callApi("POST", path, {
+      type,
+      requestId: `mcp:${type}:${randomUUID()}`,
+      expectedRevision,
+      ...fields,
+    });
+  } catch (err) {
+    return textResult(`Error: ${err?.message ?? String(err)}`, true);
+  }
+}
+
 function splitSources(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (!value || value === true) return undefined;
@@ -494,7 +515,7 @@ server.registerTool(
   "deal_update",
   {
     description:
-      "Update a single whitelisted field on a deal. Writable fields: status, theirStage, " +
+      "Update a single non-workflow field on a deal. Writable fields: theirStage, " +
       "notes, stage, dealOwner, source, sourceDirection, description, website, location, founders, " +
       "proposedAmount, roundSize, valuation, sector, subsector, foundedYear, leadInvestor, " +
       "investors. Logs a field_change event in deal_events.",
@@ -504,8 +525,93 @@ server.registerTool(
       value: z.union([z.string(), z.number(), z.null()]).describe("new value"),
     },
   },
-  async ({ dealId, field, value }) =>
-    callApi("POST", "/api/deals/update", { dealId, field, value })
+  async ({ dealId, field, value }) => {
+    if (field === "status") {
+      return textResult("Error: Direct status writes are retired. Use the workflow_* tools.", true);
+    }
+    return callApi("POST", "/api/deals/update", { dealId, field, value });
+  }
+);
+
+server.registerTool(
+  "workflow_show",
+  {
+    description: "Read the canonical Investment Workflow V2 state, revision, current transition, and blockers for a deal.",
+    inputSchema: { dealId: z.string() },
+  },
+  async ({ dealId }) => callApi("GET", `/api/deals/${encodeURIComponent(dealId)}/workflow`),
+);
+
+server.registerTool(
+  "workflow_initialize",
+  {
+    description: "Persist the canonical Investment Workflow V2 bootstrap state for an unmigrated deal without changing its semantic stage. Intended for audited migration and recovery.",
+    inputSchema: { dealId: z.string(), reason: z.string().min(1) },
+  },
+  async ({ dealId, reason }) => callWorkflow(dealId, "initialize", { reason }),
+);
+
+server.registerTool(
+  "workflow_request_partner_support",
+  {
+    description: "Submit a formal Partner Support request. Core refuses it until every current stage requirement is satisfied or waived.",
+    inputSchema: { dealId: z.string(), partnerId: z.string(), reason: z.string().min(1) },
+  },
+  async ({ dealId, partnerId, reason }) => callWorkflow(dealId, "request_partner_support", { partnerId, reason }),
+);
+
+server.registerTool(
+  "workflow_decide_partner_support",
+  {
+    description: "Record the named Partner's own Support, Need more, or Pass decision. Core verifies caller identity; never use on another person's behalf.",
+    inputSchema: { dealId: z.string(), decision: z.enum(["support", "need_more", "pass"]), reason: z.string().min(1) },
+  },
+  async ({ dealId, decision, reason }) => callWorkflow(dealId, "partner_support_decision", { decision, reason }),
+);
+
+server.registerTool(
+  "workflow_proceed",
+  {
+    description: "Apply the current formal workflow transition. Core re-evaluates every guard atomically.",
+    inputSchema: { dealId: z.string(), transitionKey: z.string(), reason: z.string().min(1) },
+  },
+  async ({ dealId, transitionKey, reason }) => callWorkflow(dealId, "proceed", { transitionKey, reason }),
+);
+
+server.registerTool(
+  "workflow_resolve_guard",
+  {
+    description: "Record an audited workflow guard resolution. Waivers require a concrete reason and remain visible in history.",
+    inputSchema: { dealId: z.string(), guardKey: z.string(), status: z.enum(["satisfied", "unsatisfied", "waived"]), reason: z.string().min(1) },
+  },
+  async ({ dealId, guardKey, status, reason }) => callWorkflow(dealId, "resolve_guard", { guardKey, status, reason }),
+);
+
+server.registerTool(
+  "workflow_control",
+  {
+    description: "Hold, resume, pass, restore, or return a deal through the canonical workflow control path.",
+    inputSchema: { dealId: z.string(), action: z.enum(["hold", "resume", "pass", "restore", "return"]), reason: z.string().min(1), holdDisposition: z.enum(["stalled", "future"]).optional() },
+  },
+  async ({ dealId, action, reason, holdDisposition }) => callWorkflow(dealId, "control", { action, reason, ...(holdDisposition ? { holdDisposition } : {}) }),
+);
+
+server.registerTool(
+  "workflow_vote",
+  {
+    description: "Cast the signed-in Partner's own Formal IC vote through Investment Workflow V2.",
+    inputSchema: { dealId: z.string(), vote: z.enum(["yes", "no"]), reason: z.string().min(1) },
+  },
+  async ({ dealId, vote, reason }) => callWorkflow(dealId, "cast_vote", { vote, reason }),
+);
+
+server.registerTool(
+  "workflow_update_execution_status",
+  {
+    description: "Update the canonical post-IC execution status. Available only after the formal IC decision.",
+    inputSchema: { dealId: z.string(), executionStatus: z.enum(["Term Sheet", "Verbal Commit", "Invested"]), reason: z.string().min(1) },
+  },
+  async ({ dealId, executionStatus, reason }) => callWorkflow(dealId, "update_execution_status", { executionStatus, reason }),
 );
 
 // ============================================================

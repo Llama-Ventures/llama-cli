@@ -79,6 +79,14 @@
       "path": "/api/deals/{dealId}"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/workflow"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/workflow"
+    },
+    {
       "method": "POST",
       "path": "/api/deals/{dealId}/agent-runs/{runId}/revert"
     },
