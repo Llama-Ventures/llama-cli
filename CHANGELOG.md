@@ -6,6 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-08-05
+
+### Added
+- Add the canonical `llama workflow` command family and typed MCP tools for
+  reading and changing Investment Workflow V2 through one versioned API.
+- Add audited workflow initialization for legacy migration and formal post-IC
+  execution status updates for Term Sheet, Verbal Commit, and Invested.
+
+### Changed
+- Reject direct Deal status writes and retired `stage_gates` / `stage4_gate`
+  mutations so CLI and MCP cannot bypass the server state machine.
+
 ## [1.23.0] - 2026-08-05
 
 ### Added

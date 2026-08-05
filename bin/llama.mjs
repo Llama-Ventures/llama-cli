@@ -391,7 +391,7 @@ Deals:
   llama deal show <dealId>
   llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
   llama deal update <dealId> <field> <value>
-      Writable fields: status, theirStage, stage, notes, dealOwner, source, sourceDirection,
+      Writable fields: theirStage, stage, notes, source, sourceDirection,
       description, website, location, founders, founderInfo, proposedAmount,
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
@@ -399,7 +399,6 @@ Deals:
       the deal page (~280 chars). Meeting notes and narrative go in a comment
       (llama post); verifiable claims go in facts (llama deal fact add).
       e.g.  llama deal update <dealId> website https://acme.ai
-            llama deal update <dealId> status Interested
             llama deal update <dealId> sector "Developer Tools"
             llama deal update <dealId> foundedYear 2024
             llama deal update <dealId> leadInvestor "Acme Capital"
@@ -417,6 +416,19 @@ Deals:
                             [--theirStage Raising] [--stage Seed] [--source-direction Inbound]
                             [--limit 200] [--offset 0]
   llama deal list [--owner ...] [--status ...] [...same flags as search]
+
+Investment Workflow V2 (the only stage-write surface):
+  llama workflow show <dealId>
+  llama workflow initialize <dealId> --reason "..."   # audited legacy migration/bootstrap
+  llama workflow request-support <dealId> --partner <userId> --reason "..."
+  llama workflow decide-support <dealId> support|need_more|pass --reason "..."
+  llama workflow proceed <dealId> --transition <key> --reason "..."
+  llama workflow waive <dealId> --guard <key> --reason "..."
+  llama workflow control <dealId> hold|resume|pass|restore|return --reason "..." [--disposition stalled|future]
+  llama workflow organize-ic <dealId> --note "..."
+  llama workflow vote <dealId> yes|no --reason "..."
+  llama workflow reassign-owner <dealId> --owner <userId> --reason "..."
+  llama workflow execution-status <dealId> term-sheet|verbal-commit|invested --reason "..."
 
 Agent activity (read-only, cheap read model over append-only activity):
   llama activity new-deals [--since 24h|7d|<ISO>] [--limit 50]
@@ -1446,6 +1458,65 @@ async function main() {
     return;
   }
 
+  if (area === "workflow") {
+    const dealId = rest[0];
+    if (!dealId) throw new Error("Usage: llama workflow show|initialize|request-support|decide-support|proceed|waive|control|organize-ic|vote|reassign-owner|execution-status <dealId> [...flags]");
+    if (action === "show") {
+      print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/workflow`));
+      return;
+    }
+    const { flags, positional } = parseFlags(rest.slice(1));
+    const current = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/workflow`);
+    const expectedRevision = current?.workflow?.revision;
+    if (!Number.isInteger(expectedRevision)) {
+      throw new Error("This deal has no initialized Investment Workflow V2 state. Open its workflow panel once, then retry.");
+    }
+    const base = {
+      requestId: `cli:${action}:${randomUUID()}`,
+      expectedRevision,
+    };
+    let command;
+    if (action === "initialize") {
+      if (!flags.reason) throw new Error('Usage: llama workflow initialize <dealId> --reason "..."');
+      command = { ...base, type: "initialize", reason: String(flags.reason) };
+    } else if (action === "request-support") {
+      if (!flags.partner || !flags.reason) throw new Error('Usage: llama workflow request-support <dealId> --partner <userId> --reason "..."');
+      command = { ...base, type: "request_partner_support", partnerId: String(flags.partner), reason: String(flags.reason) };
+    } else if (action === "decide-support") {
+      const decision = positional[0];
+      if (!["support", "need_more", "pass"].includes(decision) || !flags.reason) throw new Error('Usage: llama workflow decide-support <dealId> support|need_more|pass --reason "..."');
+      command = { ...base, type: "partner_support_decision", decision, reason: String(flags.reason) };
+    } else if (action === "proceed") {
+      if (!flags.transition || !flags.reason) throw new Error('Usage: llama workflow proceed <dealId> --transition <key> --reason "..."');
+      command = { ...base, type: "proceed", transitionKey: String(flags.transition), reason: String(flags.reason) };
+    } else if (action === "waive") {
+      if (!flags.guard || !flags.reason) throw new Error('Usage: llama workflow waive <dealId> --guard <key> --reason "..."');
+      command = { ...base, type: "resolve_guard", guardKey: String(flags.guard), status: "waived", reason: String(flags.reason) };
+    } else if (action === "control") {
+      const control = positional[0];
+      if (!["hold", "resume", "pass", "restore", "return"].includes(control) || !flags.reason) throw new Error('Usage: llama workflow control <dealId> hold|resume|pass|restore|return --reason "..." [--disposition stalled|future]');
+      command = { ...base, type: "control", action: control, reason: String(flags.reason), ...(flags.disposition ? { holdDisposition: String(flags.disposition) } : {}) };
+    } else if (action === "organize-ic") {
+      if (!flags.note) throw new Error('Usage: llama workflow organize-ic <dealId> --note "..."');
+      command = { ...base, type: "organize_ic", note: String(flags.note) };
+    } else if (action === "vote") {
+      const vote = positional[0];
+      if (!["yes", "no"].includes(vote) || !flags.reason) throw new Error('Usage: llama workflow vote <dealId> yes|no --reason "..."');
+      command = { ...base, type: "cast_vote", vote, reason: String(flags.reason) };
+    } else if (action === "reassign-owner") {
+      if (!flags.owner || !flags.reason) throw new Error('Usage: llama workflow reassign-owner <dealId> --owner <userId> --reason "..."');
+      command = { ...base, type: "reassign_owner", ownerId: String(flags.owner), ownerName: "resolved by server", reason: String(flags.reason) };
+    } else if (action === "execution-status") {
+      const status = { "term-sheet": "Term Sheet", "verbal-commit": "Verbal Commit", invested: "Invested" }[positional[0]];
+      if (!status || !flags.reason) throw new Error('Usage: llama workflow execution-status <dealId> term-sheet|verbal-commit|invested --reason "..."');
+      command = { ...base, type: "update_execution_status", executionStatus: status, reason: String(flags.reason) };
+    } else {
+      throw new Error(`Unknown workflow command "${action || ""}".`);
+    }
+    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/workflow`, command));
+    return;
+  }
+
   if (area === "deal" && action === "show") {
     const dealId = rest[0];
     if (!dealId) throw new Error("Usage: llama deal show <dealId>");
@@ -1464,6 +1535,9 @@ async function main() {
     const [dealId, field, ...valueParts] = rest;
     const value = valueParts.join(" ");
     if (!dealId || !field) throw new Error("Usage: llama deal update <dealId> <field> <value>");
+    if (field === "status") {
+      throw new Error("Direct status writes are retired. Use `llama workflow show <dealId>` and a formal `llama workflow ...` command.");
+    }
     print(await request("POST", "/api/deals/update", { dealId, field, value }));
     return;
   }
@@ -1497,6 +1571,9 @@ async function main() {
     const sub = rest[0];
     const dealId = rest[1];
     const key = rest[2];
+    if (["stage_gates", "stage4_gate"].includes(key)) {
+      throw new Error(`Legacy ${key} is retired. Use \`llama workflow ...\` commands.`);
+    }
     if (sub === "set") {
       const raw = rest.slice(3).join(" ");
       if (!dealId || !key || !raw) {

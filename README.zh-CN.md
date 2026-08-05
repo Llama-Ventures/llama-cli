@@ -122,7 +122,10 @@ llama activity updated-deals --since 7d # 按 deal 聚合的实质更新
 llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
 llama deal ingest <dealId> --file packet.json  # 多条 facts + 可选 Feed note，一次提交且可安全重试
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
-llama deal update <dealId> status Diligence
+llama workflow show <dealId>
+llama workflow initialize <dealId> --reason "迁移旧状态，不改变当前阶段"
+llama workflow proceed <dealId> --transition begin_preliminary --reason "开始初步研究"
+llama workflow execution-status <dealId> invested --reason "已确认打款"
 llama post <dealId> "备注内容"
 llama post <dealId> "@name 请回复" --cue  # 仅在用户明确授权后使用
 llama brief add-text <dealId> --heading "..." --body "..."

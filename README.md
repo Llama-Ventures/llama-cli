@@ -100,7 +100,10 @@ llama activity updated-deals --since 7d # meaningful updates grouped by deal
 llama deal create "Acme AI" --source alex --deal-owner owner@llamaventures.vc --source-direction Outbound --status Interested
 llama deal ingest <dealId> --file packet.json  # atomic multi-fact + optional Feed note; retry-safe
 llama deal fact add <dealId> --category funding --claim "Raised a seed round" --source "deck p3" --source-url https://...
-llama deal update <dealId> status Diligence
+llama workflow show <dealId>
+llama workflow initialize <dealId> --reason "Migrate legacy workflow state without changing stage"
+llama workflow proceed <dealId> --transition begin_preliminary --reason "Ready to begin research"
+llama workflow execution-status <dealId> invested --reason "Wire confirmed"
 llama post <dealId> "note body"
 llama post <dealId> "@name please respond" --cue  # only after explicit approval
 llama brief add-text <dealId> --heading "..." --body "..."
@@ -114,6 +117,10 @@ Status vocabulary — `Interested`: tracked before any contact ·
 `Outreached`: contacted, no response yet · `Sourced`: real relationship
 signal exists. `sourceDirection` is separate: `Inbound` came to the firm,
 `Outbound` we reached out first.
+
+Deal stage is controlled only by Investment Workflow V2. Direct
+`deal update ... status ...` and legacy `stage_gates` writes are rejected;
+use `llama workflow show` followed by the matching formal workflow command.
 
 For a deck, meeting note, email, or research packet, prefer `deal ingest` over a
 loop of `deal fact add` calls. The JSON object accepts `source`, up to 50
