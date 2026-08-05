@@ -395,6 +395,9 @@ Deals:
       description, website, location, founders, founderInfo, proposedAmount,
       roundSize, valuation, deckLink, folderUrl, sector, subsector,
       foundedYear, leadInvestor, investors, agentActive.
+      `notes` is the ONE-LINE judgment shown as the Summary headline at the top of
+      the deal page (~280 chars). Meeting notes and narrative go in a comment
+      (`llama post`); verifiable claims go in facts (`llama deal fact add`).
       e.g.  llama deal update <dealId> website https://acme.ai
             llama deal update <dealId> status Interested
             llama deal update <dealId> sector "Developer Tools"
