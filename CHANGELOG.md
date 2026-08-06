@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-08-05
+
+### Added
+- Add preview-first, revision-fenced `llama admin workflow remediate` for the
+  two allowlisted Workflow V2 false-green intake checks in Llama Command 3.26.0.
+
 ## [1.24.0] - 2026-08-05
 
 ### Added
