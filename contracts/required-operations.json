@@ -16,6 +16,10 @@
     },
     {
       "method": "GET",
+      "path": "/api/admin/workflow-audit"
+    },
+    {
+      "method": "GET",
       "path": "/api/agent/activity"
     },
     {

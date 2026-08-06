@@ -135,6 +135,13 @@ llama mentions
 llama agent-onboard                    # 服务端下发的 agent 工作契约
 ```
 
+系统管理员可以只读审计一个 Workflow V2 deal，或审计全部已持久化的 V2 快照：
+
+```bash
+llama admin workflow audit --deal <dealId>
+llama admin workflow audit --all
+```
+
 Status 语义——`Interested`：接触前先记录关注 · `Outreached`：已联系、
 尚无回应 · `Sourced`：已有真实关系信号。`sourceDirection` 是独立维度：
 `Inbound` 流入，`Outbound` 我们主动。
