@@ -36,6 +36,7 @@ import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken 
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
 import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
 import { getBuildInfo } from "../lib/build-info.mjs";
+import { workflowAuditPath } from "../lib/workflow-audit.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -603,6 +604,7 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
   update_deal_browse_html tool and the MCP html_upload_file tool.
 
 Admin (system admin only — server returns 403 for non-admin tokens):
+  llama admin workflow audit --deal <uuid> | --all
   llama admin auth-events  [--kind X] [--actor email] [--subject email] [--since 24h|7d|30d|<ISO>] [--limit 100]
   llama admin deal-events  [--kind X] [--actor email] [--deal <uuid>] [--since 24h] [--limit 100]
   llama admin agent-events [--kind tool_call|loop_stalled|max_turns_reached] [--agent-kind deal|secretary|main|inbox]
@@ -2403,11 +2405,20 @@ Routing — is this the right command?
   //   - agent-events : every AI tool call / loop_stalled / max_turns (AI ops)
   if (area === "admin") {
     const sub = action;
-    const valid = ["auth-events", "deal-events", "agent-events"];
+    const valid = ["workflow", "auth-events", "deal-events", "agent-events"];
     if (!valid.includes(sub)) {
       throw new Error(
         `Unknown admin sub-command "${sub || ""}". Use: ${valid.join(", ")}`
       );
+    }
+    if (sub === "workflow") {
+      if (rest[0] !== "audit") {
+        throw new Error("Usage: llama admin workflow audit --deal <uuid> | --all");
+      }
+      const { flags } = parseFlags(rest.slice(1), ["deal", "all"]);
+      // @core-api-operation GET /api/admin/workflow-audit
+      print(await request("GET", workflowAuditPath(flags)));
+      return;
     }
     const { flags } = parseFlags(rest);
     const params = new URLSearchParams();

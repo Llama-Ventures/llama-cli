@@ -6,6 +6,10 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- Add `llama admin workflow audit --deal <uuid> | --all` for the read-only
+  Workflow V2 production integrity auditor in Llama Command 3.24.0.
+
 ## [1.23.1] - 2026-08-05
 
 ### Added

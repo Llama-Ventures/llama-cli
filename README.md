@@ -113,6 +113,14 @@ llama mentions
 llama agent-onboard                    # server-owned agent workflow contract
 ```
 
+System admins can run the read-only production integrity auditor against one
+Workflow V2 deal or every persisted V2 snapshot:
+
+```bash
+llama admin workflow audit --deal <dealId>
+llama admin workflow audit --all
+```
+
 Status vocabulary — `Interested`: tracked before any contact ·
 `Outreached`: contacted, no response yet · `Sourced`: real relationship
 signal exists. `sourceDirection` is separate: `Inbound` came to the firm,
