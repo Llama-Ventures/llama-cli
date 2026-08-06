@@ -121,6 +121,18 @@ llama admin workflow audit --deal <dealId>
 llama admin workflow audit --all
 ```
 
+For the two supported false-green intake checks, remediation is preview-first
+and one deal at a time. Apply requires the exact revision returned by preview:
+
+```bash
+llama admin workflow remediate --deal <dealId> --guard intake.reason_why
+llama admin workflow remediate --deal <dealId> --guard intake.reason_why \
+  --apply --expected-revision <revision> --reason "Confirmed missing canonical evidence"
+```
+
+The server can only invalidate a system-generated green. It cannot advance a
+deal, satisfy a check, change status/ownership, or override a human resolution.
+
 Status vocabulary — `Interested`: tracked before any contact ·
 `Outreached`: contacted, no response yet · `Sourced`: real relationship
 signal exists. `sourceDirection` is separate: `Inbound` came to the firm,

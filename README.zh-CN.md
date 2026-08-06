@@ -142,6 +142,18 @@ llama admin workflow audit --deal <dealId>
 llama admin workflow audit --all
 ```
 
+对当前支持的两个 intake 假绿检查，修复必须先 preview，并且一次只处理一个 deal。
+Apply 必须携带 preview 返回的精确 revision：
+
+```bash
+llama admin workflow remediate --deal <dealId> --guard intake.reason_why
+llama admin workflow remediate --deal <dealId> --guard intake.reason_why \
+  --apply --expected-revision <revision> --reason "已确认 canonical 证据缺失"
+```
+
+服务端只能把系统生成的绿灯改回未满足；不能推进 deal、把检查改成已满足、修改
+status/owner，也不能覆盖人工 resolution。
+
 Status 语义——`Interested`：接触前先记录关注 · `Outreached`：已联系、
 尚无回应 · `Sourced`：已有真实关系信号。`sourceDirection` 是独立维度：
 `Inbound` 流入，`Outbound` 我们主动。

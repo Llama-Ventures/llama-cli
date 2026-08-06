@@ -19,6 +19,10 @@
       "path": "/api/admin/workflow-audit"
     },
     {
+      "method": "POST",
+      "path": "/api/admin/workflow-remediation"
+    },
+    {
       "method": "GET",
       "path": "/api/agent/activity"
     },

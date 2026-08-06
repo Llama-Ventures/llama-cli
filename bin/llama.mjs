@@ -37,6 +37,10 @@ import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oau
 import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
 import { getBuildInfo } from "../lib/build-info.mjs";
 import { workflowAuditPath } from "../lib/workflow-audit.mjs";
+import {
+  WORKFLOW_REMEDIATION_PATH,
+  workflowRemediationBody,
+} from "../lib/workflow-remediation.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -605,6 +609,8 @@ Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
 
 Admin (system admin only — server returns 403 for non-admin tokens):
   llama admin workflow audit --deal <uuid> | --all
+  llama admin workflow remediate --deal <uuid> --guard intake.reason_why[,intake.founder_identity]
+                                [--apply --expected-revision <n> --reason "..."]
   llama admin auth-events  [--kind X] [--actor email] [--subject email] [--since 24h|7d|30d|<ISO>] [--limit 100]
   llama admin deal-events  [--kind X] [--actor email] [--deal <uuid>] [--since 24h] [--limit 100]
   llama admin agent-events [--kind tool_call|loop_stalled|max_turns_reached] [--agent-kind deal|secretary|main|inbox]
@@ -2412,12 +2418,28 @@ Routing — is this the right command?
       );
     }
     if (sub === "workflow") {
-      if (rest[0] !== "audit") {
-        throw new Error("Usage: llama admin workflow audit --deal <uuid> | --all");
+      if (!["audit", "remediate"].includes(rest[0])) {
+        throw new Error("Usage: llama admin workflow audit|remediate ...");
       }
-      const { flags } = parseFlags(rest.slice(1), ["deal", "all"]);
-      // @core-api-operation GET /api/admin/workflow-audit
-      print(await request("GET", workflowAuditPath(flags)));
+      if (rest[0] === "audit") {
+        const { flags } = parseFlags(rest.slice(1), ["deal", "all"]);
+        // @core-api-operation GET /api/admin/workflow-audit
+        print(await request("GET", workflowAuditPath(flags)));
+        return;
+      }
+      const { flags } = parseFlags(rest.slice(1), [
+        "deal",
+        "guard",
+        "apply",
+        "expected-revision",
+        "reason",
+      ]);
+      const body = workflowRemediationBody(
+        flags,
+        flags.apply === true ? `cli-workflow-remediation-${randomUUID()}` : undefined,
+      );
+      // @core-api-operation POST /api/admin/workflow-remediation
+      print(await request("POST", WORKFLOW_REMEDIATION_PATH, body));
       return;
     }
     const { flags } = parseFlags(rest);
