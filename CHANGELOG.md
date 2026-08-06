@@ -6,6 +6,11 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Removed
+- Retire every CLI/MCP Memo mutation path. `llama memo` and MCP now expose the
+  current Memo read-only; generation runs only from Llama Command's durable
+  Memo Agent. Deal enrichment no longer accepts `--memo` / `generateMemo`.
+
 ## [1.25.0] - 2026-08-05
 
 ### Added
