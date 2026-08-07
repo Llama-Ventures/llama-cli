@@ -116,9 +116,6 @@ function buildEnrichmentAgentMessage(args = {}) {
     "monid",
   ];
   const budget = args.budgetCents ?? "50";
-  const memo = args.generateMemo
-    ? "Generate memo only after enrichment because the caller explicitly requested it."
-    : "Do not generate memo.";
   return [
     "Run server-side deal enrichment for this deal.",
     `Use sources: ${sources.join(", ")}.`,
@@ -127,7 +124,7 @@ function buildEnrichmentAgentMessage(args = {}) {
     "Write canonical evidence links, sourced deal facts, stable deal fields, and typed factual values where supported.",
     "For typed factual values, call read_typed_factual_layer first and use upsert_typed_fact for queryable fields.",
     "Search snippets alone are not high-confidence evidence; fetch direct sources where possible.",
-    memo,
+    "Do not generate Memo; the durable Memo Agent in Llama Command owns that separate workflow.",
     "End with what was written, what was skipped, and open questions.",
   ].join(" ");
 }
@@ -1212,9 +1209,8 @@ server.registerTool(
       "status, and planned writes without changing facts/links/memo. With " +
       "apply=true and executor=server_agent, this starts the server-side Deal " +
       "Agent unless harnessOnly=true. Set apply=true only when the user " +
-      "explicitly wants the enrichment run recorded/applied. " +
-      "generateMemo never defaults on; pass true only when the user explicitly asks " +
-      "for Memo generation after enrichment.",
+      "explicitly wants the enrichment run recorded/applied. Memo generation is " +
+      "not part of enrichment and is available only in Llama Command's Memo Agent.",
     inputSchema: {
       dealId: z.string().describe("deal uuid"),
       dryRun: z.boolean().optional().describe("default true unless apply=true"),
@@ -1234,10 +1230,6 @@ server.registerTool(
         .max(500)
         .optional()
         .describe("Monid spend cap for this run, in cents; default is 50 when Monid is requested"),
-      generateMemo: z
-        .boolean()
-        .optional()
-        .describe("explicitly request memo regeneration after enrichment; default false"),
       harnessOnly: z
         .boolean()
         .optional()
@@ -1248,13 +1240,13 @@ server.registerTool(
         .describe("optional override instruction for the server-side Deal Agent"),
     },
   },
-  async ({ dealId, dryRun, apply, executor, sources, budgetCents, generateMemo, harnessOnly, message }) => {
+  async ({ dealId, dryRun, apply, executor, sources, budgetCents, harnessOnly, message }) => {
     const effectiveExecutor = executor ?? "server_agent";
     if (apply === true && effectiveExecutor === "server_agent" && harnessOnly !== true) {
       return runDealAgentTool({
         dealId,
         title: "MCP enrichment",
-        message: buildEnrichmentAgentMessage({ sources, budgetCents, generateMemo, message }),
+        message: buildEnrichmentAgentMessage({ sources, budgetCents, message }),
       });
     }
     return callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/enrich`, {
@@ -1263,7 +1255,6 @@ server.registerTool(
       executor: effectiveExecutor,
       sources,
       budgetCents,
-      generateMemo,
     });
   }
 );
@@ -1432,7 +1423,7 @@ server.registerTool(
 );
 
 // ============================================================
-// Memo — long-form HTML investment memo (the Memo tab in the UI)
+// Memo — read-only. Generation runs only from the durable Memo Agent in the UI.
 // ============================================================
 
 server.registerTool(
@@ -1440,9 +1431,7 @@ server.registerTool(
   {
     description:
       "Fetch the current memo for a deal. Returns the envelope: memo " +
-      "(html, version, source, updated_by, updated_at), mode " +
-      "('composed' = server-generated, 'override' = hand-written), and " +
-      "inflight (if a server-side regeneration is in progress). html " +
+      "(html, version, source, updated_by, updated_at) and mode. html " +
       "can be 50-100KB — be deliberate about including it in your reply.",
     inputSchema: {
       dealId: z.string().describe("deal uuid"),
@@ -1450,81 +1439,6 @@ server.registerTool(
   },
   async ({ dealId }) =>
     callApi("GET", `/api/deals/${encodeURIComponent(dealId)}/memo`)
-);
-
-server.registerTool(
-  "memo_regenerate",
-  {
-    description:
-      "Trigger server-side regeneration of the deal memo. Synchronous: " +
-      "returns the final result (version, model, duration_ms, degraded) " +
-      "once the composer finishes. Typical duration 2-3 minutes. Use " +
-      "tier='opus' for high-stakes deals (higher cost, deeper analysis). " +
-      "Pass `instructions` to steer THIS regeneration (e.g. 'focus on team " +
-      "risk', 'frame as a follow-on') — applied across all panels, never " +
-      "overrides the facts or the verdict.",
-    inputSchema: {
-      dealId: z.string().describe("deal uuid"),
-      tier: z
-        .enum(["sonnet", "opus"])
-        .optional()
-        .describe("LLM tier (default: sonnet)"),
-      instructions: z
-        .string()
-        .optional()
-        .describe(
-          "Free-text steering for this regeneration only, e.g. 'focus on team risk'. Applied to all panels; never overrides verified facts or the verdict anchor."
-        ),
-    },
-  },
-  async ({ dealId, tier, instructions }) =>
-    callApi("POST", `/api/deals/${encodeURIComponent(dealId)}/memo`, {
-      action: "regenerate",
-      stream: false,
-      model: tier ?? "sonnet",
-      instructions: instructions || undefined,
-    })
-);
-
-server.registerTool(
-  "memo_save",
-  {
-    description:
-      "Save hand-written HTML as a manual override for a deal's memo. " +
-      "Manual overrides take precedence over auto-composed memos on " +
-      "read. Pass the full HTML document including <!DOCTYPE html>, " +
-      "<style>, and <body> — it's rendered as-is in a sandboxed iframe.",
-    inputSchema: {
-      dealId: z.string().describe("deal uuid"),
-      html: z
-        .string()
-        .describe("full HTML document"),
-    },
-  },
-  async ({ dealId, html }) =>
-    callApi("PUT", `/api/deals/${encodeURIComponent(dealId)}/memo`, { html })
-);
-
-server.registerTool(
-  "memo_reset",
-  {
-    description:
-      "Reset memo state. Default drops only the manual override row " +
-      "(next read falls back to the auto-composed version, if any). " +
-      "Pass scope='all' to drop every version for the deal — destructive, " +
-      "use sparingly.",
-    inputSchema: {
-      dealId: z.string().describe("deal uuid"),
-      scope: z
-        .enum(["override_only", "all"])
-        .optional()
-        .describe("default: override_only"),
-    },
-  },
-  async ({ dealId, scope }) =>
-    callApi("DELETE", `/api/deals/${encodeURIComponent(dealId)}/memo`, {
-      scope: scope ?? "override_only",
-    })
 );
 
 // ============================================================

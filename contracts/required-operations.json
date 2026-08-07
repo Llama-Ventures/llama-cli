@@ -235,19 +235,7 @@
       "path": "/api/deals/{dealId}/links/{linkId}/restore"
     },
     {
-      "method": "DELETE",
-      "path": "/api/deals/{dealId}/memo"
-    },
-    {
       "method": "GET",
-      "path": "/api/deals/{dealId}/memo"
-    },
-    {
-      "method": "POST",
-      "path": "/api/deals/{dealId}/memo"
-    },
-    {
-      "method": "PUT",
       "path": "/api/deals/{dealId}/memo"
     },
     {
