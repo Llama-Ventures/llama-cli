@@ -6,6 +6,11 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- `llama wiki save <slug> --file <path>.{pdf,docx,xlsx}` uploads the document
+  itself as the wiki entry, so readers open it at `/wiki/<slug>` instead of an
+  article describing it. Requires Llama Command 3.33.0.
+
 ### Removed
 - Retire every CLI/MCP Memo mutation path. `llama memo` and MCP now expose the
   current Memo read-only; generation runs only from Llama Command's durable

@@ -87,14 +87,6 @@
       "path": "/api/deals/{dealId}"
     },
     {
-      "method": "GET",
-      "path": "/api/deals/{dealId}/workflow"
-    },
-    {
-      "method": "POST",
-      "path": "/api/deals/{dealId}/workflow"
-    },
-    {
       "method": "POST",
       "path": "/api/deals/{dealId}/agent-runs/{runId}/revert"
     },
@@ -267,6 +259,14 @@
       "path": "/api/deals/{dealId}/timeline"
     },
     {
+      "method": "GET",
+      "path": "/api/deals/{dealId}/workflow"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deals/{dealId}/workflow"
+    },
+    {
       "method": "POST",
       "path": "/api/external/chat"
     },
@@ -341,6 +341,10 @@
     {
       "method": "GET",
       "path": "/api/wiki/{slug}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/wiki/{slug}/file"
     },
     {
       "method": "POST",

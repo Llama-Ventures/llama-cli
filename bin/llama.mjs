@@ -536,6 +536,8 @@ Where does this HTML / thesis / artifact go?
                                       (renders at /deals/<id>/browse/<slug>; see "Deal page HTML" below)
   Cross-deal / institutional? ..... llama wiki save <slug> --title "..." --file <path>.html --sources "..."
                                       (renders at /wiki/<slug>; see "Wiki" below)
+  A document, not a page? ......... llama wiki save <slug> --title "..." --file <path>.{pdf,docx,xlsx} --sources "..."
+                                      (the file itself becomes the entry; see "Wiki" below)
   Founder-facing public share? .... Netlify (with netlify-access-guard skill), only when user explicitly
                                       says "share publicly". Llama Command outranks Netlify for everything
                                       internal — don't reach for Netlify by default.
@@ -549,6 +551,11 @@ Wiki:
     llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
       (.html / .htm extension auto-implies content_type=html)
       Native comments + working in-page (#) links are added automatically — just upload self-contained HTML.
+  Document entry — the file itself is the entry, readable at /wiki/<slug>:
+    llama wiki save <slug> --title "..." --file path.{pdf,docx,xlsx} --sources "..." [--doc-kind ...]
+      PDF opens in the browser's viewer (pages, search, zoom); DOCX and XLSX are converted for reading,
+      a spreadsheet keeping one tab per sheet. The original stays downloadable from the page either way.
+      Upload the document you have — don't transcribe it into markdown first.
   ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
     thesis, framework, methodology. For deal-specific HTML use "llama html publish <deal>" instead.
   Delete / restore (soft — reversible):
@@ -2113,8 +2120,12 @@ async function main() {
   llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
 or
   llama wiki save <slug> --title "..." --file path/to/article.{md,html} --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
+or, to put a document itself on the wiki:
+  llama wiki save <slug> --title "..." --file path/to/deck.{pdf,docx,xlsx} --sources "..." [--doc-kind ...]
 
 Pass either --content (inline) or --file (read from disk). With --file, content_type auto-detects from extension (.html/.htm → html, else markdown). Use --content-type to override.
+
+A .pdf / .docx / .xlsx uploads as the entry itself: readers open the document at /wiki/<slug> — a PDF in the browser's viewer, a spreadsheet with one tab per sheet — and the original stays downloadable. --content-type does not apply there.
 
 Routing — is this the right command?
   ✓ Cross-deal / institutional knowledge (sector landscape, market map, thesis, framework, methodology)
@@ -2129,6 +2140,58 @@ Routing — is this the right command?
     if (inlineContent && filePath) {
       throw new Error("Pass either --content OR --file, not both.");
     }
+    const splitCsvFlag = (v) => String(v).split(/[;|]/).map((s) => s.trim()).filter(Boolean);
+
+    // A document goes up as bytes, not as text. The server converts DOCX and
+    // XLSX for the reader and keeps the original for download; a PDF opens in
+    // the browser's own viewer. Everything else here stays the JSON path.
+    const docExt = filePath
+      ? String(filePath).toLowerCase().match(/\.(pdf|docx|xlsx)$/)?.[1]
+      : null;
+    if (docExt) {
+      if (flags["content-type"]) {
+        throw new Error(
+          `--content-type does not apply to a .${docExt}: the server decides how to render it from the file itself.`,
+        );
+      }
+      const { readFileSync } = await import("fs");
+      const { basename } = await import("path");
+      const buf = readFileSync(String(filePath));
+      const MAX = 50 * 1024 * 1024;
+      if (buf.length > MAX) {
+        throw new Error(
+          `${basename(String(filePath))} is ${buf.length} bytes; the wiki caps files at ${MAX} (50MB). Link to the Drive copy instead.`,
+        );
+      }
+      const mime = {
+        pdf: "application/pdf",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }[docExt];
+      const form = new FormData();
+      form.append("file", new Blob([buf], { type: mime }), basename(String(filePath)));
+      form.append("lang", flags.lang === "zh" ? "zh" : "en");
+      form.append("title", String(title));
+      form.append("sources", splitCsvFlag(sourcesRaw).join(";"));
+      if (flags.type) form.append("type", String(flags.type));
+      if (flags["doc-kind"]) form.append("doc_kind", String(flags["doc-kind"]));
+
+      const headers = await getAuthHeaders();
+      // @core-api-operation POST /api/wiki/{slug}/file
+      const res = await fetch(
+        `${getBaseUrl()}/api/wiki/${encodeURIComponent(slug)}/file`,
+        { method: "POST", headers, body: form },
+      );
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          `HTTP ${res.status}: ${out?.error || JSON.stringify(out).slice(0, 300)}`,
+        );
+      }
+      print(out);
+      return;
+    }
+
     // Read body — either inline or from file.
     let body;
     let inferredType = "markdown";
