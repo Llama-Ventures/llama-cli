@@ -1044,6 +1044,95 @@ server.registerTool(
 );
 
 server.registerTool(
+  "wiki_save_file",
+  {
+    description:
+      "Publish a PDF / DOCX / XLSX from a LOCAL FILE PATH as the wiki entry " +
+      "itself. Readers open the document at /wiki/<slug>: a PDF in the " +
+      "browser's own viewer with page navigation, a DOCX or XLSX converted " +
+      "for reading (a spreadsheet keeps one tab per sheet), and the original " +
+      "always downloadable. Use this whenever someone hands you a document " +
+      "and wants it ON the wiki — do NOT transcribe it into markdown for " +
+      "wiki_save, and do NOT write an article describing a file nobody can " +
+      "open. Reads filePath on the machine running this MCP server, so the " +
+      "bytes never pass through tool-call context. Deal-specific documents " +
+      "belong on the deal page instead (html_upload_file).",
+    inputSchema: {
+      slug: z.string().describe("kebab-case slug"),
+      title: z.string(),
+      filePath: z
+        .string()
+        .describe("absolute or relative local path to a .pdf / .docx / .xlsx"),
+      sources: z
+        .array(z.string())
+        .min(1)
+        .describe(
+          "citation list — URLs, doc names, or meeting references. At least one required."
+        ),
+      type: z.string().optional().describe("optional category tag, e.g. 'company'"),
+      doc_kind: z
+        .string()
+        .optional()
+        .describe("optional — how the wiki home browses and search filters"),
+      lang: z.enum(["en", "zh"]).optional().describe("default: en"),
+    },
+  },
+  async ({ slug, title, filePath, sources, type, doc_kind, lang }) => {
+    const { readFileSync } = await import("node:fs");
+    const { basename } = await import("node:path");
+    const ext = String(filePath).toLowerCase().match(/\.(pdf|docx|xlsx)$/)?.[1];
+    if (!ext) {
+      return textResult(
+        `Error: wiki_save_file takes a .pdf, .docx, or .xlsx. For markdown or a ` +
+          `standalone HTML page, use wiki_save.`,
+        true,
+      );
+    }
+    let buf;
+    try {
+      buf = readFileSync(String(filePath));
+    } catch (err) {
+      return textResult(`Error reading ${filePath}: ${err?.message ?? String(err)}`, true);
+    }
+    const MAX = 50 * 1024 * 1024;
+    if (buf.length > MAX) {
+      return textResult(
+        `Error: ${basename(String(filePath))} is ${(buf.length / 1024 / 1024).toFixed(1)} MB; ` +
+          `the wiki caps files at 50 MB. Link to the Drive copy instead.`,
+        true,
+      );
+    }
+    const mime = {
+      pdf: "application/pdf",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }[ext];
+    const form = new FormData();
+    form.append("file", new Blob([buf], { type: mime }), basename(String(filePath)));
+    form.append("title", String(title));
+    form.append("sources", sources.join(";"));
+    form.append("lang", lang === "zh" ? "zh" : "en");
+    if (type) form.append("type", String(type));
+    if (doc_kind) form.append("doc_kind", String(doc_kind));
+
+    const headers = await getAuthHeaders();
+    // @core-api-operation POST /api/wiki/{slug}/file
+    const res = await fetch(
+      `${getBaseUrl()}/api/wiki/${encodeURIComponent(slug)}/file`,
+      { method: "POST", headers, body: form }, // let fetch set the multipart boundary
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return textResult(
+        `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
+        true,
+      );
+    }
+    return textResult(JSON.stringify(body, null, 2));
+  },
+);
+
+server.registerTool(
   "wiki_delete",
   {
     description:

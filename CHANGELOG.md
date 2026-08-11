@@ -10,6 +10,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 - `llama wiki save <slug> --file <path>.{pdf,docx,xlsx}` uploads the document
   itself as the wiki entry, so readers open it at `/wiki/<slug>` instead of an
   article describing it. Requires Llama Command 3.33.0.
+- `wiki_save_file` MCP tool — the same publish from a local file path, for
+  MCP-native agents, mirroring `html_upload_file`.
 
 ### Removed
 - Retire every CLI/MCP Memo mutation path. `llama memo` and MCP now expose the
