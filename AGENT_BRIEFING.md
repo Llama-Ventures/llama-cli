@@ -150,6 +150,7 @@ The table below details the exact CLI for each destination.
 | HTML artifact, external — founder-facing share link | Netlify | Only when the user explicitly says "share link", "give it to the founder", "publish publicly". Use the `netlify-access-guard` workflow (server-side password + edge 401 verification). |
 | Insights, decisions, framework improvements | Wiki (markdown) | `llama wiki save <slug> --content "..."` (with attribution — see below) |
 | **HTML wiki entry — standalone HTML page hosted at `/wiki/<slug>`** (sector landscape, market map, dashboard, hand-styled thesis page) | **Wiki (HTML)** | `llama wiki save <slug> --title "..." --file <path.html> --sources "..."`. Auto-detects content_type=html from extension. Public page is full-viewport sandboxed iframe takeover (no wiki chrome). Sources/status/title still required; appears in `wiki search` + backlinks. Use when the user says "deploy this HTML to wiki", "wiki 词条", "make this page a wiki entry". HTML must be self-contained (inline CSS/JS, image data URIs or external URLs) — asset bundles aren't supported on wiki yet. **Native comments + working in-page (#) anchor links are injected automatically** — readers discuss inline and the table of contents scrolls; you don't wire anything up (pages that already embed the comment widget are left as-is). |
+| **Document wiki entry — a PDF / DOCX / XLSX read at `/wiki/<slug>`** (deck, market model, memo you were handed) | **Wiki (document)** | `llama wiki save <slug> --title "..." --file <path.{pdf,docx,xlsx}> --sources "..."`. The document itself is what readers open: a PDF in the browser's own viewer with page navigation, a DOCX or XLSX converted for reading with the original still downloadable. Use when someone hands you a file and wants it ON the wiki. Do NOT transcribe it into markdown, and do NOT write an article describing a file nobody can open. |
 | Large files (deck / PDF / transcript) | Drive deal folder | the deal's `folder_url` (from `llama deal show`) → upload via your filesystem / Drive tool |
 | Cross-team cues | Inbox + email | `llama post <dealId> "@<teammate> ..." --cue` — use `--cue` only after the user explicitly authorized that recipient |
 
@@ -288,6 +289,13 @@ llama wiki save <slug> --title "..." --file path.html --sources "..." [--content
 #   --content-type html (or markdown) overrides the inference.
 #   Refuses to switch content_type on an existing slug; delete + re-create
 #   if you really mean to change format.
+
+# Document entry — the file IS the entry, readable at /wiki/<slug>:
+llama wiki save <slug> --title "..." --file path.{pdf,docx,xlsx} --sources "..." [--doc-kind ...]
+#   PDF opens in the browser's viewer; DOCX and XLSX are converted for reading
+#   (a spreadsheet keeps one tab per sheet). The original stays downloadable.
+#   Upload the document you have — do NOT transcribe it into markdown first,
+#   and do NOT write an article describing a file nobody can open.
 # Delete / restore (soft, reversible — CONSTITUTION §8):
 llama wiki delete  <slug> [--lang en|zh]
 llama wiki restore <slug> [--lang en|zh]
