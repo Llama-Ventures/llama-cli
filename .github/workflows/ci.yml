@@ -79,3 +79,14 @@ jobs:
         env:
           REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
         run: node scripts/verify-tarball-clean.mjs
+
+      - name: Identifier guard — repo-public paths
+        run: |
+          PATTERN='\bvirtual-[a-z][a-z-]+\b|\b[a-z]+_analysis\b'
+          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ contracts/ scripts/ .github/ *.md 2>/dev/null || true)
+          if [ -n "$MATCHES" ]; then
+            echo "FAIL: sensitive identifier shape detected:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "OK: no flagged identifier shapes"
