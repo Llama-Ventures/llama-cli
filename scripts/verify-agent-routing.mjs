@@ -243,7 +243,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/me") {
-      writeJson(res, { id: 13, name: "Kevin Yu", role: "associate" });
+      writeJson(res, { id: 13, name: "Example Associate", role: "associate" });
       return;
     }
 
@@ -646,7 +646,7 @@ try {
 
   resetCalls();
   const claimRun = await runCli(
-    ["claim", "deal-owner", "--reason", "Kevin is driving DD and the memo."],
+    ["claim", "deal-owner", "--reason", "The associate is driving DD and the memo."],
     baseUrl,
     homeDir,
   );
@@ -657,7 +657,7 @@ try {
   ]);
   assert.deepEqual(businessCalls()[1].body, {
     userId: 13,
-    reason: "Kevin is driving DD and the memo.",
+    reason: "The associate is driving DD and the memo.",
   });
 
   resetCalls();

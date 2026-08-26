@@ -379,7 +379,9 @@ External pitch — talk to Llama Ventures' intake agent (no token required):
 
 Setup:
   llama auth status                    # show current credentials + verify with server
-  llama token set <llc_token> [--base https://command.llamaventures.vc]
+  llama token set [<llc_token>] [--base https://command.llamaventures.vc]
+                             (omit the token to paste it at a hidden prompt,
+                              or pipe it in — keeps it out of shell history)
   llama token show
 
 Zero-config: if you've already run \`gcloud auth login\` with your
@@ -1245,9 +1247,57 @@ async function main() {
     return;
   }
 
+  // Hidden-input token read: raw-mode prompt on a TTY (no echo), one line
+  // from stdin otherwise. Backspace supported; Ctrl+C aborts.
+  async function readTokenQuietly() {
+    if (!process.stdin.isTTY) {
+      const chunks = [];
+      for await (const chunk of process.stdin) chunks.push(chunk);
+      return Buffer.concat(chunks).toString("utf8").trim().split(/\s+/)[0] || "";
+    }
+    process.stderr.write("Paste token (input hidden): ");
+    return await new Promise((resolve, reject) => {
+      const stdin = process.stdin;
+      let value = "";
+      const cleanup = () => {
+        stdin.setRawMode(false);
+        stdin.pause();
+        stdin.off("data", onData);
+      };
+      const onData = (chunk) => {
+        for (const ch of chunk) {
+          if (ch === "\r" || ch === "\n" || ch === "\u0004") {
+            cleanup();
+            process.stderr.write("\n");
+            resolve(value.trim());
+            return;
+          }
+          if (ch === "\u0003") {
+            cleanup();
+            process.stderr.write("\n");
+            reject(new Error("Aborted"));
+            return;
+          }
+          if (ch === "\u007f" || ch === "\b") {
+            value = value.slice(0, -1);
+            continue;
+          }
+          value += ch;
+        }
+      };
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding("utf8");
+      stdin.on("data", onData);
+    });
+  }
+
   if (area === "token" && action === "set") {
     const { flags, positional } = parseFlags(rest);
-    const token = positional[0];
+    // Omitting the token argument keeps the value out of shell history and
+    // process listings: prompt with hidden input on a TTY, or read one line
+    // from stdin when piped (e.g. `pbpaste | llama token set`).
+    const token = positional[0] ?? (await readTokenQuietly());
     if (!token?.startsWith("llc_")) throw new Error("Expected a token starting with llc_");
     if (token.length !== 36) {
       throw new Error(

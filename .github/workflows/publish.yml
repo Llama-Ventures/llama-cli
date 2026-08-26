@@ -46,13 +46,12 @@ jobs:
 
       - name: Identifier guard — block known leak shapes from publish
         run: |
-          # Block publish if any known-sensitive identifier shape slipped into
-          # files that go into the tarball (bin/, lib/, root .md). The pattern
-          # is intentionally narrow: it targets internal naming conventions
-          # that should never appear in a public artifact. Extend as new
-          # patterns surface.
+          # Block publish if any known-sensitive identifier shape appears in
+          # any published or repo-public path. The pattern is intentionally
+          # narrow: it targets internal naming conventions that should never
+          # appear in a public artifact. Extend as new patterns surface.
           PATTERN='\bvirtual-[a-z][a-z-]+\b|\b[a-z]+_analysis\b'
-          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ contracts/ *.md 2>/dev/null || true)
+          MATCHES=$(grep -rE "$PATTERN" bin/ lib/ contracts/ scripts/ .github/ *.md 2>/dev/null || true)
           if [ -n "$MATCHES" ]; then
             echo "FAIL: publish blocked — sensitive identifier shape detected:"
             echo "$MATCHES"
