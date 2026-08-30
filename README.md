@@ -91,8 +91,28 @@ promise.
 The CLI is the canonical interface — it handles auth, error formatting, and
 schema forward-compatibility. Prefer it even from scripts.
 
+Agents use one progressive Deal surface with four actions. Mutations are JSON
+files (or stdin) so exact user wording and provenance survive shell quoting:
+
 ```bash
-llama deal search "acme ai"            # find deals (deal list takes the same filters)
+llama deal search "acme ai" --limit 10
+llama deal read <dealId> --detail overview
+llama deal read <dealId> --detail all
+llama deal create --json create.json
+llama deal write --json write.json
+```
+
+`write` accepts only `input.submit`, `information.put`, `page.patch`, or
+`artifact.put`. Core creates the append-only Event Feed entry automatically;
+clients cannot forge Events or Chat. A user-originated mutation must include
+the exact `origin.originalUserUtterance` or a canonical
+`origin.originatingChatRecordId`. Retry safety is automatic through a stable
+content-derived idempotency key.
+
+The older commands below remain available as a compatibility layer while the
+server cutover is completed.
+
+```bash
 llama deal show <dealId>
 llama deal feed <dealId>               # every contribution, newest first
 llama activity new-deals --since 24h   # recent deal creations

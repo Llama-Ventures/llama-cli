@@ -6,6 +6,19 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- Add the four-action Deal contract for agents: `deal search`, `deal read`,
+  `deal create --json`, and `deal write --json`. Writes accept only Deal Input,
+  Information, Live Page, or Artifact intent; Core owns the append-only Event
+  Feed and Chat records.
+- Derive deterministic idempotency keys for Deal mutations and reject
+  user-originated writes that omit both the exact original wording and a
+  canonical originating Chat record.
+
+### Changed
+- Pin the Core API consumer contract to 3.39.0. Legacy Deal commands remain as
+  compatibility surfaces while agents can use the smaller contract.
+
 ## [1.26.0] - 2026-08-11
 
 ### Added

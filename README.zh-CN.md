@@ -113,8 +113,27 @@ llama auth status         # 看当前身份和生效的认证方式
 CLI 是 canonical 接口——认证、错误格式、schema 前向兼容都由它处理。
 写脚本也优先用 CLI。
 
+Agent 面向 Deal 只有四个渐进式动作。写入使用 JSON 文件（或 stdin），避免
+shell quoting 丢失用户原话与 provenance：
+
 ```bash
-llama deal search "acme ai"            # 找 deal（deal list 用同一套过滤参数）
+llama deal search "acme ai" --limit 10
+llama deal read <dealId> --detail overview
+llama deal read <dealId> --detail all
+llama deal create --json create.json
+llama deal write --json write.json
+```
+
+`write` 只接受 `input.submit`、`information.put`、`page.patch` 或
+`artifact.put`。append-only Event Feed 由 Core 自动生成，客户端不能伪造
+Event 或 Chat。用户发起的写入必须保留准确的
+`origin.originalUserUtterance`，或引用 canonical
+`origin.originatingChatRecordId`。CLI 会根据内容生成稳定 idempotency key，
+同一次写入可以安全重试。
+
+下面的旧命令在服务端 cutover 期间继续作为兼容层存在。
+
+```bash
 llama deal show <dealId>
 llama deal feed <dealId>               # 该 deal 的全部贡献，最新在前
 llama activity new-deals --since 24h   # 最近新建的 deal

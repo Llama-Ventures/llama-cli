@@ -41,6 +41,12 @@ import {
   WORKFLOW_REMEDIATION_PATH,
   workflowRemediationBody,
 } from "../lib/workflow-remediation.mjs";
+import {
+  buildDealReadPath,
+  buildDealSearchPath,
+  prepareDealCommand,
+  readJsonInput,
+} from "../lib/deal-actions.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -389,7 +395,17 @@ Zero-config: if you've already run \`gcloud auth login\` with your
 auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
 Manually-set \`llc_\` tokens are used as a fallback.
 
-Deals:
+Deals — four-action Agent contract:
+  llama deal search [query] [--state active|archived|trashed] [--limit 10]
+  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
+  llama deal create --json <file|->
+  llama deal write --json <file|->
+
+  Every mutation goes through one command endpoint. Event Feed entries are
+  system-generated. User-originated JSON must preserve the exact user wording
+  in origin.originalUserUtterance or reference origin.originatingChatRecordId.
+
+  Legacy compatibility (not part of the four-action Agent contract):
   llama deal create "Company" --source <name> --deal-owner <name|email|userId> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
   llama deal founders set <dealId> --json '[{"name":"Ada","email":"ada@example.com","linkedin_url":"https://linkedin.com/in/ada"}]'
   llama deal show <dealId>
@@ -640,8 +656,8 @@ const HELP_ROOT = `Llama Command CLI — the \`llama\` command for the Llama Ven
 
 Common:
   llama deal search "<name>"        find a deal in the pipeline
-  llama deal show <dealId>          full deal record
-  llama deal feed <dealId>          every contribution (facts + notes), newest first
+  llama deal read <dealId>          live page first; expand memory only when needed
+  llama deal write --json <file|->  submit input/information/page/artifact intent
   llama post <dealId> "..."         add a note to a deal
   llama activity new-deals --since 24h  recent deal creations
   llama activity updated-deals --since 7d meaningful deal updates
@@ -651,7 +667,7 @@ Common:
   llama explain <url-or-object>     explain Command URLs, 404s, deleted objects
 
 Command groups — run \`llama help <group>\` for that group's commands:
-  deal        create · show · feed · update · enrich · search · collaborators · links · delete
+  deal        search · read · create · write (legacy commands remain compatible)
   activity    new-deals · updated-deals · events for agent read models
   brief       brief blocks: list · add · edit · history · refresh
   facts       deal facts — the sourced, trust-rated layer
@@ -1492,6 +1508,14 @@ async function main() {
     return;
   }
 
+  if (area === "deal" && action === "create" && rest.includes("--json")) {
+    const { flags } = parseFlags(rest, ["json"]);
+    const input = await readJsonInput(flags.json);
+    const command = prepareDealCommand("create", input);
+    print(await request("POST", "/api/occam/deals/commands", command));
+    return;
+  }
+
   if (area === "deal" && action === "create") {
     const { flags, positional } = parseFlags(rest);
     const companyName = positional.join(" ").trim();
@@ -1583,6 +1607,23 @@ async function main() {
     return;
   }
 
+  if (area === "deal" && action === "read") {
+    const dealId = rest[0];
+    const { flags } = parseFlags(rest.slice(1), ["detail"]);
+    const detail = flags.detail && flags.detail !== true ? String(flags.detail) : "overview";
+    // @core-api-operation GET /api/occam/deals/{dealId}
+    print(await request("GET", buildDealReadPath(dealId, detail)));
+    return;
+  }
+
+  if (area === "deal" && action === "write") {
+    const { flags } = parseFlags(rest, ["json"]);
+    const input = await readJsonInput(flags.json);
+    const command = prepareDealCommand("write", input);
+    print(await request("POST", "/api/occam/deals/commands", command));
+    return;
+  }
+
   if (area === "deal" && action === "feed") {
     const dealId = rest[0];
     if (!dealId) throw new Error("Usage: llama deal feed <dealId>");
@@ -1660,12 +1701,19 @@ async function main() {
   if (area === "deal" && action === "search") {
     const { flags, positional } = parseFlags(rest);
     const q = positional.join(" ").trim();
-    if (!q && Object.keys(flags).length === 0) {
-      throw new Error(
-        `Usage: llama deal search <query> [--founder ...] [--owner ...] [--status ...] [--stage ...] [--source-direction Inbound|Outbound] [--limit N]`
-      );
+    const legacyOnlyFlags = ["founder", "owner", "status", "theirStage", "stage", "sourceDirection", "source-direction", "offset", "companyName"];
+    if (legacyOnlyFlags.some((key) => flags[key] !== undefined)) {
+      print(await searchDeals(q, flags));
+      return;
     }
-    print(await searchDeals(q, flags));
+    try {
+      // @core-api-operation GET /api/occam/deals
+      print(await request("GET", buildDealSearchPath(q, flags)));
+    } catch (error) {
+      if (error?.status !== 404 || flags.state !== undefined) throw error;
+      process.stderr.write("warning: server has not enabled the four-action Deal contract; using legacy search compatibility\n");
+      print(await searchDeals(q, flags));
+    }
     return;
   }
 

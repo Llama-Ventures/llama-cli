@@ -35,6 +35,31 @@ This npm package is public, but Llama OS skills are private. Do not assume the s
 
 The boundary matters: public CLI/MCP discovers skills, but authenticated Command decides which skill content the token may read.
 
+## Deal runtime: four actions
+
+When `llama agent bootstrap` reports the four-action Deal contract, that
+contract replaces the legacy Deal-writing guidance later in this fallback
+document. An agent gets exactly four Deal actions:
+
+1. `llama deal search [query]` — return small Live Page candidates.
+2. `llama deal read <dealId> [--detail ...]` — read the Live Page first, then
+   expand only the Information, Artifact, Chat, or Event history needed.
+3. `llama deal create --json <file|->` — submit one create intent; Core owns
+   synchronous Drive provisioning and the resulting Event.
+4. `llama deal write --json <file|->` — submit only `input.submit`,
+   `information.put`, `page.patch`, or `artifact.put` intent.
+
+Do not write Chat or Event records. They are system-owned. Any user-originated
+mutation must preserve the exact wording in `origin.originalUserUtterance` or
+reference its canonical `origin.originatingChatRecordId`. Put raw input through
+`input.submit` even if no Information or Live Page projection follows; this is
+what makes every received input traceable without inventing a second source of
+truth. The CLI derives a stable idempotency key when one is omitted.
+
+Legacy Deal commands remain temporarily available for older servers and human
+workflows. They are not extra actions for an agent after the server advertises
+the four-action contract.
+
 ## Pipeline First (hard rule)
 
 Any time the user mentions a company name or founder name:
