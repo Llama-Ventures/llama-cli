@@ -3,7 +3,7 @@
   "name": "llama-core-api",
   "apiVersion": "3.39.0",
   "openapiVersion": "3.0.3",
-  "sha256": "b1dd922ca6621d168dcc75d649ecf7dbc8bc008c7373c2a07fd409c759ea28e0",
+  "sha256": "aae1fd05c50081b8208536afab2c91774eb678cf95680934a0841140b28780a0",
   "pathCount": 247,
   "operationCount": 323
 }
