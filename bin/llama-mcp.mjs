@@ -99,7 +99,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Use the read/bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
+    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. For Artifact, submit bytes as contentBase64; Core stores them in the Deal's canonical Google Drive folder and success requires Drive parent plus checksum read-back. Never provide or guess storage identity. All Page content fields are Agent-writable; author controls attribution, not permission. Use the read/bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
     inputSchema: {
       operation: z.enum(["input.submit", "information.put", "page.patch", "artifact.put"]),
       dealId: z.string().uuid(),
@@ -119,10 +119,6 @@ server.registerTool(
       title: z.string().min(1).max(500).optional(),
       mimeType: z.string().min(1).max(240).optional(),
       contentBase64: z.string().min(1).optional(),
-      storageKey: z.string().min(1).optional(),
-      storageUrl: z.string().url().optional(),
-      byteSize: z.number().int().nonnegative().optional(),
-      sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
       metadata: z.record(z.string(), z.any()).optional(),
       origin: originSchema,
       idempotencyKey: z.string().min(1).max(240).optional(),
