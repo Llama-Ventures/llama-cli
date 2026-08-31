@@ -43,3 +43,22 @@ test("keeps create and write as a closed operation set", () => {
     /write JSON operation must be/,
   );
 });
+
+test("rejects half-localized Page content before it reaches Core", () => {
+  const base = {
+    operation: "page.patch",
+    dealId: "11111111-1111-4111-8111-111111111111",
+    origin: { kind: "agent" },
+  };
+  assert.doesNotThrow(() => prepareDealCommand("write", {
+    ...base,
+    patch: { description: { en: "Field service workflow", zh: "现场服务工作流" } },
+  }));
+  assert.throws(
+    () => prepareDealCommand("write", {
+      ...base,
+      patch: { description: { zh: "只有中文" } },
+    }),
+    /non-empty en and zh/,
+  );
+});

@@ -84,6 +84,11 @@ Core 会补上 `operation: deal.create`，创建或复用 Drive 文件夹，并�
 - `page.patch`：更新人类直接看到的 Live Deal Page；
 - `artifact.put`：添加不可变的 memo、HTML 或源文件。
 
+给人看的 Page 文字必须在写入时同时提供自然的中英文：
+`{"en":"natural English","zh":"自然中文"}`。Web 的语言开关从同一个
+Page revision 选择对应内容，不创建中文页和英文页两套真相。公司名、枚举、URL、数字、日期、
+人名和 source ID 等语言无关值继续使用 scalar；Information 和原始 Input 保留原语言与 provenance。
+
 原始用户输入示例：
 
 ```json

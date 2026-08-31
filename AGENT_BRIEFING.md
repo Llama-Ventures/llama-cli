@@ -137,13 +137,25 @@ Update the human-facing state only when you know the intended field:
 {
   "operation": "page.patch",
   "dealId": "<uuid>",
-  "patch": {"location": "San Francisco, CA"},
+  "patch": {
+    "location": {
+      "en": "San Francisco, CA",
+      "zh": "美国加州旧金山"
+    }
+  },
   "origin": {
     "kind": "user",
     "originalUserUtterance": "The company is in SF, CA."
   }
 }
 ```
+
+Human-visible Page prose is bilingual at write time. Store one field value as
+`{"en":"natural English","zh":"自然中文"}`; do not create separate English
+and Chinese Pages. Language-neutral company names, enums, URLs, numbers, dates,
+person names, and source IDs remain scalar. A localized object missing either
+language is invalid. Information and raw Input retain their original language
+and provenance; do not manufacture a second source quote.
 
 Artifacts use `artifact.put`. Treat them as immutable source material. Read the
 artifact, then decide whether its content deserves Information or a Page patch.
