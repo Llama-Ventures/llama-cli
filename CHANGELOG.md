@@ -30,6 +30,13 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+- Make the authenticated live bootstrap mandatory before Deal work and clarify
+  that it loads the server-owned private Live Deal Page field contract.
+- Teach CLI and MCP Agents that Information never updates Page automatically,
+  every Page content field is Agent-writable, and field authorship controls
+  attribution rather than permission.
+
 ## [1.26.0] - 2026-08-11
 
 ### Added

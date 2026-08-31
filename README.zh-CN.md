@@ -151,6 +151,10 @@ llama skills search "<任务>"
 llama skills show <slug>
 ```
 
+Agent 在处理 Deal 前应先运行 `llama agent bootstrap`。该命令会从鉴权后的
+Llama Command 服务端加载最新 mental model 和完整 Live Deal Page 字段契约；
+这些私有字段 prompts 不会随公开 npm 包发布。
+
 服务端实时 briefing 是权威合同；包内 `AGENT_BRIEFING.md` 是相同四动作
 合同的离线兜底。
 

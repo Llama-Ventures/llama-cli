@@ -175,6 +175,8 @@ try {
   const help = await runCli(["help", "deal"], baseUrl, homeDir);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /Exactly four actions/);
+  assert.match(help.stdout, /agent bootstrap/);
+  assert.match(help.stdout, /arrays replace whole arrays/);
   console.log("PASS CLI 2 routing: four Deal actions, capability headers, live briefing, and pre-HTTP invalid-command fences");
 } finally {
   server.close();

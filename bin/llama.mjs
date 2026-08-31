@@ -69,6 +69,14 @@ Exactly four actions:
   llama deal create --json <file|->
   llama deal write --json <file|->
 
+Before any Page write:
+  llama agent bootstrap
+
+The authenticated bootstrap contains the complete private 61-field Page
+contract. Information never updates Page automatically. page.patch is JSON
+Merge Patch: objects merge, null deletes, and arrays replace whole arrays, so
+read-modify-write complete Page arrays and preserve sibling slots.
+
 create JSON:
   {"companyName":"Acme","page":{},"information":[],"origin":{"kind":"user","originalUserUtterance":"..."}}
 

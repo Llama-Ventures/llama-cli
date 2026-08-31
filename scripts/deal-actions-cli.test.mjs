@@ -37,6 +37,13 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+    if (req.url?.startsWith("/api/agent/manifest?")) {
+      res.end(JSON.stringify({
+        ok: true,
+        briefing: "PRIVATE LIVE CONTRACT\nInformation never updates Page automatically.\nallFieldsAgentWritable=true",
+      }));
+      return;
+    }
     res.end(JSON.stringify({ ok: true, request: { method: req.method, url: req.url, body } }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -47,6 +54,12 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   const search = await runCli(baseUrl, ["deal", "search", "Example", "--limit", "3"]);
   assert.equal(search.code, 0, search.stderr);
   assert.equal(JSON.parse(search.stdout).request.url, "/api/occam/deals?q=Example&limit=3");
+
+  const bootstrap = await runCli(baseUrl, ["agent", "bootstrap"]);
+  assert.equal(bootstrap.code, 0, bootstrap.stderr);
+  assert.match(bootstrap.stdout, /PRIVATE LIVE CONTRACT/);
+  assert.match(bootstrap.stdout, /Information never updates Page automatically/);
+  assert.match(bootstrap.stdout, /allFieldsAgentWritable=true/);
 
   const read = await runCli(baseUrl, ["deal", "read", "deal-1", "--detail", "memory"]);
   assert.equal(read.code, 0, read.stderr);

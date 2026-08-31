@@ -4,6 +4,23 @@ This package is the authenticated tool boundary for Llama Command. For Deal
 work, the interface is intentionally small: search, read, create, and write.
 Do not bypass it with SQL, Google APIs, or retired HTTP routes.
 
+## Mandatory live bootstrap
+
+Before any Llama workflow, run:
+
+```bash
+llama agent bootstrap
+```
+
+The authenticated response is the current private runtime contract. It includes
+the complete Live Deal Page field vocabulary: what every visible slot means,
+where it is stored, what must and must not be written, and how to verify it.
+The public CLI intentionally does not bundle those private field prompts.
+
+Do not assume the Page is only `description` plus `notes`, and do not infer its
+schema from a previous session. If bootstrap fails, repair authentication or
+upgrade the CLI before writing; do not guess the fields.
+
 ## The Deal model
 
 Each company has five business resources:
@@ -16,6 +33,21 @@ Each company has five business resources:
 
 Archive, trash, status, founder, opinion, fact, memo section, and artifact kind
 are data or labels inside these resources. They are not separate tools.
+
+Information and Page are deliberately different. Information is traceable
+working memory; it never becomes Page automatically. Page is the bounded,
+human-visible current projection, so patch the exact semantic fields described
+by the live contract instead of hiding structured analysis in `notes`.
+
+Every Page content field is Agent-writable. A field's `author` or
+`semanticOwner` describes attribution, not permission. Preserve a real human
+judgment with its author; otherwise label the value as an Agent proposal / 待人确认.
+
+`page.patch` uses JSON Merge Patch: objects merge, `null` deletes, and arrays
+replace the entire array. Before changing one `whatTheyDo`, `peopleSteps`,
+`foundersJson`, or `industryMaps` item, read the current Page, preserve every
+sibling item, and submit the complete updated array. The live field contract
+includes the exact payload path and write mode for all 61 semantic fields.
 
 ## Exactly four Deal actions
 

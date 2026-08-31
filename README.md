@@ -158,6 +158,10 @@ llama skills search "<task>"
 llama skills show <slug>
 ```
 
+Agents should run `llama agent bootstrap` before Deal work. The command loads
+the authenticated, server-owned mental model and current Live Deal Page field
+contract; private field prompts are not shipped in this public package.
+
 The live server briefing is authoritative. The bundled
 `AGENT_BRIEFING.md` is an offline fallback with the same four-action contract.
 
