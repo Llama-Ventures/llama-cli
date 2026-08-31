@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 function listMcpTools() {
@@ -55,13 +54,4 @@ test("MCP publishes exactly four Deal tools", async () => {
     ["search_deals", "read_deal", "create_deal", "write_deal"].includes(name),
   );
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
-});
-
-test("MCP Artifact intent cannot supply storage identity", async () => {
-  const source = await readFile(new URL("../bin/llama-mcp.mjs", import.meta.url), "utf8");
-  assert.match(source, /contentBase64: z\.string\(\)\.min\(1\)\.optional\(\)/);
-  for (const forbidden of ["storageKey:", "storageUrl:", "byteSize:", "sha256:"]) {
-    assert.equal(source.includes(forbidden), false, `write_deal must not expose ${forbidden}`);
-  }
-  assert.match(source, /canonical Google Drive folder/);
 });

@@ -84,7 +84,7 @@ the initial Live Page and Information, and appends Events atomically.
 - `input.submit` — preserve raw input in the Event Feed.
 - `information.put` — add or update one structured memory unit.
 - `page.patch` — update the human-visible Live Deal Page.
-- `artifact.put` — submit an immutable file; Core stores it in the Deal's canonical Drive folder.
+- `artifact.put` — add an immutable memo/HTML/source artifact.
 
 When Page prose is human-visible, write one bilingual field value as
 `{"en":"natural English","zh":"自然中文"}`. The Web language switch selects
@@ -93,11 +93,6 @@ enums, URLs, numbers, dates, and source IDs scalar. Information and raw Input
 stay in their original language with provenance. The CLI rejects new scalar
 Page prose and incomplete language pairs before they reach Core; historical
 scalar prose remains readable.
-
-For `artifact.put`, send `contentBase64` plus filename/kind/MIME metadata only.
-Do not send or guess Drive IDs or storage URLs. Core resolves the canonical
-Deal folder and success returns the Drive file, parent, byte size, SHA-256, and
-`visibleInDealFolder: true` for read-back.
 
 Raw user input example:
 

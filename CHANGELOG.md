@@ -1,12 +1,5 @@
 # Changelog
 
-## [2.0.3] - 2026-08-31
-
-- Make `artifact.put` a bytes-only intent: Core owns the canonical Deal Drive
-  folder, storage identity, upload, checksum, and visibility verification.
-- Remove caller-controlled Artifact storage keys and URLs from the MCP action
-  space and strengthen Agent completion guidance.
-
 ## [2.0.2] - 2026-08-31
 
 - Correct the authenticated runtime model: Brain has exactly two private
