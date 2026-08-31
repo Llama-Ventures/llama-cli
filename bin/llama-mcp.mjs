@@ -70,7 +70,7 @@ server.registerTool(
 server.registerTool(
   "read_deal",
   {
-    description: "Read one Deal. Live Page is always returned; expand only the resource needed.",
+    description: "Read one Deal. Live Page and its current private field contract are always returned; Information is memory and never updates Page automatically.",
     inputSchema: {
       dealId: z.string().min(1),
       detail: z.enum(["overview", "memory", "files", "conversation", "history", "all"]).optional(),
@@ -99,7 +99,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. Human-visible Page prose uses one value with both en and zh.",
+    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Use the read/bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
     inputSchema: {
       operation: z.enum(["input.submit", "information.put", "page.patch", "artifact.put"]),
       dealId: z.string().uuid(),
@@ -152,7 +152,7 @@ server.registerTool(
 server.registerTool(
   "agent_bootstrap",
   {
-    description: "Fetch the authenticated runtime contract and visible Llama OS skills.",
+    description: "Mandatory before Llama work: fetch the authenticated private Brain (Investment Framework V3 + complete Live Deal Page field vocabulary), runtime contract, and visible Llama OS skills.",
     inputSchema: { limit: z.number().int().min(1).max(100).optional() },
   },
   async ({ limit } = {}) => {
@@ -361,7 +361,7 @@ server.registerTool(
 server.registerPrompt(
   "agent_briefing",
   {
-    description: "Fetch the authenticated current agent contract; bundled text is only an offline fallback.",
+    description: "Mandatory before Llama work: fetch the authenticated private Brain (Investment Framework V3 + complete Live Deal Page field vocabulary) and current runtime contract; bundled text is only an offline fallback.",
   },
   async () => {
     const headers = await getAuthHeaders();
