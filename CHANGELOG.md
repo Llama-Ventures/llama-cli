@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1] - 2026-08-30
+
+- Ship the four-action Occam Deal surface from the audited cleanup commit.
+- Pin the CLI to the final 4.0.0 Core contract after removing the retired
+  Secretary analysis API and cron.
+- Remove legacy Deal API examples from contract-verifier fixtures so the
+  package source and publish artifact contain no retired Deal action surface.
+
 ## [2.0.0] - 2026-08-30
 
 - Replace the split Deal command surface with exactly four actions: `search`,
