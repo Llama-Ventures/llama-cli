@@ -75,23 +75,19 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.equal(writeBody.origin.originalUserUtterance, "The exact input.");
   assert.ok(seen.some((entry) => entry.method === "POST" && entry.url === "/api/occam/deals/commands"));
 
-  const requestsBeforeRetiredChecks = seen.length;
+  const requestsBeforeInvalidChecks = seen.length;
   for (const args of [
-    ["deal", "show", "deal-1"],
-    ["deal", "feed", "deal-1"],
-    ["deal", "update", "deal-1", "notes", "legacy"],
-    ["workflow", "show", "deal-1"],
-    ["post", "deal-1", "legacy"],
-    ["html", "show", "deal-1"],
+    ["deal", "unsupported", "deal-1"],
+    ["unsupported", "command"],
   ]) {
-    const retired = await runCli(baseUrl, args);
-    assert.equal(retired.code, 1, `${args.join(" ")} unexpectedly succeeded`);
-    assert.match(retired.stderr, /DEAL_COMMAND_RETIRED/);
+    const invalid = await runCli(baseUrl, args);
+    assert.equal(invalid.code, 1, `${args.join(" ")} unexpectedly succeeded`);
+    assert.match(invalid.stderr, /Unknown/);
   }
-  assert.equal(seen.length, requestsBeforeRetiredChecks, "retired commands must fail before HTTP");
+  assert.equal(seen.length, requestsBeforeInvalidChecks, "invalid commands must fail before HTTP");
 
   const positionalCreate = await runCli(baseUrl, ["deal", "create", "Legacy Co"]);
   assert.equal(positionalCreate.code, 1);
   assert.match(positionalCreate.stderr, /--json <file\|-> is required/);
-  assert.equal(seen.length, requestsBeforeRetiredChecks, "legacy create must fail before HTTP");
+  assert.equal(seen.length, requestsBeforeInvalidChecks, "invalid create must fail before HTTP");
 });

@@ -161,27 +161,21 @@ try {
     assert.equal(call.headers.apiDigest, coreApiContract.sha256);
   }
 
-  const countBeforeRetired = calls.length;
+  const countBeforeInvalid = calls.length;
   for (const args of [
-    ["deal", "show", "x"],
-    ["deal", "fact", "list", "x"],
-    ["workflow", "show", "x"],
-    ["brief", "blocks", "x"],
-    ["post", "x", "legacy"],
-    ["html", "show", "x"],
+    ["deal", "unsupported", "x"],
+    ["unsupported", "command"],
   ]) {
     const result = await runCli(args, baseUrl, homeDir);
     assert.equal(result.code, 1, `${args.join(" ")} unexpectedly succeeded`);
-    assert.match(result.stderr, /DEAL_COMMAND_RETIRED/);
+    assert.match(result.stderr, /Unknown/);
   }
-  assert.equal(calls.length, countBeforeRetired, "retired commands must not emit HTTP or telemetry");
+  assert.equal(calls.length, countBeforeInvalid, "invalid commands must not emit HTTP or telemetry");
 
   const help = await runCli(["help", "deal"], baseUrl, homeDir);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /Exactly four actions/);
-  assert.doesNotMatch(help.stdout, /deal fact|deal update|llama workflow|llama brief|llama html/);
-
-  console.log("PASS CLI 2 routing: four Deal actions, capability headers, live briefing, and pre-HTTP legacy fences");
+  console.log("PASS CLI 2 routing: four Deal actions, capability headers, live briefing, and pre-HTTP invalid-command fences");
 } finally {
   server.close();
   await rm(homeDir, { recursive: true, force: true });

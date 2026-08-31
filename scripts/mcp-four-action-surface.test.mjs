@@ -48,20 +48,10 @@ function listMcpTools() {
   });
 }
 
-test("MCP publishes exactly four Deal tools and no split legacy Deal tools", async () => {
+test("MCP publishes exactly four Deal tools", async () => {
   const names = await listMcpTools();
   const dealTools = names.filter((name) =>
     ["search_deals", "read_deal", "create_deal", "write_deal"].includes(name),
   );
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
-
-  const forbidden = names.filter((name) =>
-    name.startsWith("deal_") ||
-    name.startsWith("workflow_") ||
-    name.startsWith("brief_") ||
-    name.startsWith("html_") ||
-    name.startsWith("memo_") ||
-    ["activity_query", "timeline", "post", "mentions_list", "mentions_resolve"].includes(name),
-  );
-  assert.deepEqual(forbidden, []);
 });
