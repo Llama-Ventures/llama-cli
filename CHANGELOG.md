@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.0.0] - 2026-08-30
+
+- Replace the split Deal command surface with exactly four actions: `search`,
+  `read`, `create`, and `write`.
+- Make Live Deal Page, Deal Information, Artifact, Chat Record, and Deal Event
+  the only Deal business resources exposed in the agent contract.
+- Retire legacy Deal CLI/MCP verbs with deterministic upgrade guidance instead
+  of falling back to old APIs.
+- Preserve exact user wording for user-originated writes and make Event/Chat
+  system-owned.
+- Keep Wiki, admin audit, external pitch, authentication, preferences, and
+  progressive skill discovery as separate non-Deal domains.
+
 All notable changes to `@llamaventures/cli` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org).

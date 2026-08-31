@@ -1,15 +1,9 @@
 #!/usr/bin/env node
 
-import { createRequire } from "module";
-import { randomUUID } from "crypto";
-import { readFile } from "fs/promises";
-import readline from "readline";
+import { createRequire } from "node:module";
+import { readFile } from "node:fs/promises";
+import readline from "node:readline";
 import {
-  DEFAULT_BASE_URL,
-  LEGACY_DIR,
-  LEGACY_FILE,
-  TOKEN_DIR,
-  TOKEN_FILE,
   getAuthHeaders,
   getBaseUrl,
   getToken,
@@ -18,7 +12,6 @@ import {
   readCanonicalToken,
   readLegacyConfig,
   request,
-  requestSse,
   tryGcloudIdentityToken,
   writeCanonicalToken,
   writeLegacyConfig,
@@ -34,1405 +27,303 @@ import {
 } from "../lib/external.mjs";
 import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
 import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
-import { maybeNudgeUpdate, getUpdateNudge } from "../lib/version-check.mjs";
 import { getBuildInfo } from "../lib/build-info.mjs";
-import { workflowAuditPath } from "../lib/workflow-audit.mjs";
+import { getUpdateNudge, maybeNudgeUpdate } from "../lib/version-check.mjs";
 import {
-  WORKFLOW_REMEDIATION_PATH,
-  workflowRemediationBody,
-} from "../lib/workflow-remediation.mjs";
+  DEAL_ACTIONS,
+  buildDealReadPath,
+  buildDealSearchPath,
+  prepareDealCommand,
+  readJsonInput,
+} from "../lib/deal-actions.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
 
-function newHtmlUploadId() {
-  return `cli-${randomUUID()}`;
-}
+const HELP_ROOT = `Llama Command CLI 2 — small authenticated tools for agents.
 
-function normalizeUploadId(value) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const id = value.trim();
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id)) {
-    throw new Error("--upload-id must be 1-128 chars: letters, numbers, dot, underscore, colon, or hyphen");
-  }
-  return id;
-}
+Deal has exactly four actions:
+  llama deal search "<company or founder>" [--state active|archived|trashed] [--limit 10]
+  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
+  llama deal create --json <file|->
+  llama deal write --json <file|->
 
-function parseFlags(args, knownFlags = null) {
+Separate preserved domains:
+  llama auth status|login|logout
+  llama token set|show
+  llama agent bootstrap
+  llama skills list|search|show
+  llama pref list|add|approve|retire
+  llama explain <url-or-object>
+  llama wiki search|read|save|delete|restore
+  llama admin auth-events|deal-events|agent-events
+  llama pitch start|say|upload|status|finalize|end
+
+Run \`llama help deal\` for the mutation contract.`;
+
+const HELP_DEAL = `Llama Command CLI 2 — Deal contract
+
+Exactly four actions:
+  llama deal search [query] [--state active|archived|trashed] [--limit 10]
+  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
+  llama deal create --json <file|->
+  llama deal write --json <file|->
+
+create JSON:
+  {"companyName":"Acme","page":{},"information":[],"origin":{"kind":"user","originalUserUtterance":"..."}}
+
+write operation:
+  input.submit | information.put | page.patch | artifact.put
+
+Core owns Chat Records, append-only Deal Events, Drive provisioning, audit,
+and idempotency. User-originated work must preserve exact wording in
+origin.originalUserUtterance or reference origin.originatingChatRecordId.`;
+
+const RETIRED_DEAL_AREAS = new Set([
+  "activity",
+  "approvals",
+  "brief",
+  "claim",
+  "html",
+  "memo",
+  "mentions",
+  "nominate",
+  "nominations",
+  "post",
+  "timeline",
+  "workflow",
+]);
+
+function parseFlags(args, allowed = null) {
   const flags = {};
   const positional = [];
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const next = args[i + 1];
-      if (!next || next.startsWith("--")) {
-        flags[key] = true;
-      } else {
-        flags[key] = next;
-        i++;
-      }
-    } else {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (!arg.startsWith("--")) {
       positional.push(arg);
+      continue;
+    }
+    const key = arg.slice(2);
+    const next = args[index + 1];
+    if (!next || next.startsWith("--")) {
+      flags[key] = true;
+    } else {
+      flags[key] = next;
+      index += 1;
     }
   }
-  // Opt-in unknown-flag warning. Handlers that pass a `knownFlags` array
-  // get a stderr nudge when they see typos like `--slug` for `--doc`.
-  // Don't reject — agents wrap legacy options, breaking them silently is
-  // worse than a one-line warning.
-  if (Array.isArray(knownFlags)) {
-    const known = new Set(knownFlags);
-    for (const key of Object.keys(flags)) {
-      if (!known.has(key)) {
-        const suggestion = closestKnownFlag(key, knownFlags);
-        process.stderr.write(
-          suggestion
-            ? `warning: unknown flag --${key} (did you mean --${suggestion}?)\n`
-            : `warning: unknown flag --${key}\n`,
-        );
-      }
-    }
+  if (allowed) {
+    const unknown = Object.keys(flags).filter((key) => !allowed.includes(key));
+    if (unknown.length) throw new Error(`Unknown flag(s): ${unknown.map((key) => `--${key}`).join(", ")}`);
   }
   return { flags, positional };
 }
 
-function agentOnboardNoAuthMessage() {
-  return `Llama Ventures team onboarding requires credentials.
-
-Team member?
-  - Run \`gcloud auth login\` with your @llamaventures.vc account, OR
-  - Mint a token at https://command.llamaventures.vc/settings/tokens
-    then \`llama token set <llc_...>\`.
-  Re-run \`llama agent-onboard\` after — the workflow contract will print.
-
-Founder or external visitor (no Llama account)?
-  Run \`llama pitch start --name "Your Name" --email "you@company.com"\`
-  to chat with our intake agent — no token required.`;
-}
-
-function agentOnboardRejectedMessage() {
-  return `Llama Ventures team onboarding requires valid credentials.
-
-Server rejected the credentials we sent. Re-mint at
-https://command.llamaventures.vc/settings/tokens, run
-\`llama token set <llc_...>\`, then re-run \`llama agent-onboard\`.`;
-}
-
-async function fetchServerAgentBriefing() {
-  const params = new URLSearchParams({ clientVersion: PKG_VERSION });
-  const result = await request("GET", `/api/agent/briefing?${params}`);
-  return result?.briefing || "";
-}
-
-function closestKnownFlag(input, candidates) {
-  let best = null;
-  let bestScore = Infinity;
-  for (const c of candidates) {
-    const d = levenshtein(input, c);
-    const tolerance = Math.max(2, Math.floor(c.length / 3));
-    if (d < bestScore && d <= tolerance) {
-      best = c;
-      bestScore = d;
-    }
-  }
-  return best;
-}
-
-function levenshtein(a, b) {
-  if (a === b) return 0;
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp = Array(n + 1).fill(0).map((_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const tmp = dp[j];
-      dp[j] = a[i - 1] === b[j - 1]
-        ? prev
-        : 1 + Math.min(prev, dp[j - 1], dp[j]);
-      prev = tmp;
-    }
-  }
-  return dp[n];
-}
-
-// Slug shape used by deal_documents.slug (matches server-side SLUG_RE).
-function isValidDocSlug(s) {
-  return typeof s === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(s);
-}
-
-// Best-effort title → slug. Strips diacritics, lowercases, collapses
-// non-alnum to single hyphens, trims, caps at 64. Returns null if the
-// result wouldn't pass `isValidDocSlug` (caller must then require --doc).
-function slugifyTitle(title) {
-  if (typeof title !== "string") return null;
-  const slug = title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-  if (!slug || !/^[a-z0-9]/.test(slug)) return null;
-  return slug;
-}
-
-// Client-side fuzzy match — used as a fallback when the server hasn't yet
-// shipped the search/filter API (Fix B, 2026-04-25). Once the server
-// returns the `{deals,total,limit,offset}` envelope, this path is never
-// taken.
-function clientSideMatch(deal, filters) {
-  const incl = (haystack, needle) =>
-    !!haystack && String(haystack).toLowerCase().includes(needle.toLowerCase());
-  const eq = (haystack, needle) =>
-    String(haystack ?? "").toLowerCase() === String(needle).toLowerCase();
-
-  if (filters.q) {
-    const fields = [
-      deal.companyName, deal.founders, deal.founderInfo,
-      deal.description, deal.notes, deal.dealOwner,
-      deal.source, deal.sourceDirection, deal.location,
-    ];
-    if (!fields.some((f) => incl(f, filters.q))) return false;
-  }
-  if (filters.companyName && !incl(deal.companyName, filters.companyName)) return false;
-  if (filters.founder && !(incl(deal.founders, filters.founder) || incl(deal.founderInfo, filters.founder))) return false;
-  if (filters.owner && !incl(deal.dealOwner, filters.owner)) return false;
-  if (filters.status && !eq(deal.status, filters.status)) return false;
-  if (filters.theirStage && !eq(deal.theirStage, filters.theirStage)) return false;
-  if (filters.stage && !eq(deal.stage, filters.stage)) return false;
-  if (filters.sourceDirection && !eq(deal.sourceDirection, filters.sourceDirection)) return false;
-  return true;
-}
-
-// Build the `?...` query string for /api/deals from CLI flags + positional q.
-function buildDealsQuery(q, flags) {
-  const params = new URLSearchParams();
-  if (q) params.set("q", q);
-  for (const key of ["companyName", "founder", "owner", "status", "theirStage", "stage", "sourceDirection", "limit", "offset"]) {
-    if (flags[key] !== undefined && flags[key] !== true) {
-      params.set(key, String(flags[key]));
-    }
-  }
-  if (flags["source-direction"] !== undefined && flags["source-direction"] !== true) {
-    params.set("sourceDirection", String(flags["source-direction"]));
-  }
-  return params;
-}
-
-// Hit /api/deals with the given filters. Handles both response shapes:
-//   - bare array (old API or no params) → client-side filter, return envelope
-//   - {deals,total,limit,offset} (new API) → return as-is
-async function searchDeals(q, flags) {
-  const params = buildDealsQuery(q, flags);
-  const qs = params.toString();
-  const result = await request("GET", `/api/deals${qs ? `?${qs}` : ""}`);
-
-  if (Array.isArray(result)) {
-    // Fix B not deployed yet, OR no params sent. Filter locally so the
-    // CLI behavior is consistent regardless of server version.
-    const filters = {
-      q,
-      companyName: flags.companyName,
-      founder: flags.founder,
-      owner: flags.owner,
-      status: flags.status,
-      theirStage: flags.theirStage,
-      stage: flags.stage,
-      sourceDirection: flags.sourceDirection || flags["source-direction"],
-    };
-    const filtered = result.filter((d) => clientSideMatch(d, filters));
-    const limit = Number(flags.limit) > 0 ? Number(flags.limit) : 200;
-    const offset = Number(flags.offset) > 0 ? Number(flags.offset) : 0;
-    return {
-      deals: filtered.slice(offset, offset + limit),
-      total: filtered.length,
-      limit,
-      offset,
-      _source: "client-filter",
-    };
-  }
-  return result;
-}
-
-function buildActivityQuery(kind, flags) {
-  const params = new URLSearchParams({ kind });
-  const mappings = [
-    ["since", "since"],
-    ["limit", "limit"],
-    ["cursor", "cursor"],
-    ["before-id", "before_id"],
-    ["before_id", "before_id"],
-    ["deal", "deal"],
-    ["deal-id", "deal_id"],
-    ["deal_id", "deal_id"],
-    ["entity", "entity"],
-    ["min-sig", "min_sig"],
-    ["min_sig", "min_sig"],
-    ["min-significance", "min_sig"],
-  ];
-  for (const [flag, param] of mappings) {
-    if (flags[flag] !== undefined && flags[flag] !== true) {
-      params.set(param, String(flags[flag]));
-    }
-  }
-  for (const verb of splitCsvFlag(flags.verb) ?? []) {
-    params.append("verb", verb);
-  }
-  return params;
-}
-
-async function fetchActivity(kind, flags) {
-  const params = buildActivityQuery(kind, flags);
-  return request("GET", `/api/agent/activity?${params}`);
-}
-
-function splitCsvFlag(value) {
-  if (!value || value === true) return undefined;
-  return String(value)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function boolFlag(flags, ...names) {
-  return names.some((name) => flags[name] === true || flags[name] === "true" || flags[name] === "1");
-}
-
-function buildEnrichmentAgentMessage(flags) {
-  if (flags.message && flags.message !== true) return String(flags.message);
-  const sources = splitCsvFlag(flags.sources) ?? [
-    "website",
-    "github",
-    "linkedin",
-    "yc",
-    "launch",
-    "web",
-    "monid",
-  ];
-  const budget = flags["budget-cents"] || flags.budgetCents || "50";
-  return [
-    "Run server-side deal enrichment for this deal.",
-    `Use sources: ${sources.join(", ")}.`,
-    `Private Monid budget cap: ${budget} cents.`,
-    "Read the enrichment harness first, then collect current company/founder evidence.",
-    "Write canonical evidence links, sourced deal facts, stable deal fields, and typed factual values where supported.",
-    "For typed factual values, call read_typed_factual_layer first and use upsert_typed_fact for queryable fields.",
-    "Search snippets alone are not high-confidence evidence; fetch direct sources where possible.",
-    "Do not generate Memo; the durable Memo Agent in Llama Command owns that separate workflow.",
-    "End with what was written, what was skipped, and open questions.",
-  ].join(" ");
-}
-
-async function runDealAgentViaThread(dealId, message, title = "CLI agent run") {
-  const thread = await request("POST", `/api/deals/${encodeURIComponent(dealId)}/threads`, { title });
-  if (!thread?.id) throw new Error("Thread creation did not return an id");
-  process.stderr.write(`Running Deal Agent in thread ${thread.id}\n`);
-  const result = await requestSse(
-    "POST",
-    `/api/deals/${encodeURIComponent(dealId)}/threads/${encodeURIComponent(thread.id)}`,
-    { message },
-    {
-      onEvent(event) {
-        if (event.tool_use?.name) {
-          process.stderr.write(`[tool] ${event.tool_use.name}\n`);
-        }
-        if (event.tool_result?.name) {
-          const status = event.tool_result.ok ? "ok" : "error";
-          process.stderr.write(
-            `[tool] ${event.tool_result.name}: ${status} — ${event.tool_result.summary ?? ""}\n`,
-          );
-        }
-        if (event.text) {
-          process.stdout.write(event.text);
-        }
-      },
-    },
-  );
-  if (result.text && !result.text.endsWith("\n")) process.stdout.write("\n");
-  return { thread, ...result };
-}
-
-const HELP_FULL = `Llama Command CLI
-
-Agent onboarding (run once on first install):
-  llama agent-onboard                  # print AGENT_BRIEFING.md — the workflow contract for AI agents
-  llama agent bootstrap                # fetch live Command + Llama OS skill manifest
-  llama skills search "pipeline update" # discover relevant runtime skills
-  llama skills show llama-pipeline      # read a skill from Command
-  llama activity new-deals --since 24h  # recent deal creations for agents
-  llama activity updated-deals --since 7d # meaningful deal updates, grouped
-  llama explain <url-or-object>         # explain Command URL/object status + lifecycle
-  llama pref list [--status proposed]   # standing agent preferences (injected every turn)
-  llama pref add reply-style "Lead with the conclusion." [--team]
-
-External pitch — talk to Llama Ventures' intake agent (no token required):
-  llama pitch start --name "Jane Doe" --email "jane@acme.ai"
-  llama pitch say "We're building X..."   # single message, prints reply
-  llama pitch upload ./deck.pdf           # attach a file
-  llama pitch                             # interactive REPL (existing session)
-  llama pitch status                      # session info
-  llama pitch end                         # clear local session
-
-Setup:
-  llama auth status                    # show current credentials + verify with server
-  llama token set [<llc_token>] [--base https://command.llamaventures.vc]
-                             (omit the token to paste it at a hidden prompt,
-                              or pipe it in — keeps it out of shell history)
-  llama token show
-
-Zero-config: if you've already run \`gcloud auth login\` with your
-@llamaventures.vc account, you don't need to set anything — the CLI
-auto-detects \`gcloud auth print-identity-token\` and uses Bearer auth.
-Manually-set \`llc_\` tokens are used as a fallback.
-
-Deals:
-  llama deal create "Company" --source <name> --deal-owner <name|email|userId> --source-direction Inbound|Outbound --description "..." --status Interested|Outreached|Sourced --website https://...
-  llama deal founders set <dealId> --json '[{"name":"Ada","email":"ada@example.com","linkedin_url":"https://linkedin.com/in/ada"}]'
-  llama deal show <dealId>
-  llama deal feed <dealId>                                     # every contribution (facts + notes), human-typed or assistant-drafted, newest first
-  llama deal update <dealId> <field> <value>
-      Writable fields: theirStage, stage, notes, source, sourceDirection,
-      description, website, location, founders, founderInfo, proposedAmount,
-      roundSize, valuation, deckLink, folderUrl, sector, subsector,
-      foundedYear, leadInvestor, investors, agentActive.
-      'notes' is the ONE-LINE judgment shown as the Summary headline at the top of
-      the deal page (~280 chars). Meeting notes and narrative go in a comment
-      (llama post); verifiable claims go in facts (llama deal fact add).
-      e.g.  llama deal update <dealId> website https://acme.ai
-            llama deal update <dealId> sector "Developer Tools"
-            llama deal update <dealId> foundedYear 2024
-            llama deal update <dealId> leadInvestor "Acme Capital"
-  llama deal enrich <dealId> [--dry-run] [--apply] [--executor server_agent|external_agent|planner]
-                            [--sources website,github,linkedin,yc,monid] [--budget-cents 50]
-                            [--prompt] [--harness-only]
-      dry-run returns the harness; --apply --executor server_agent runs the server Deal Agent.
-  llama deal agent run <dealId> --message "collect founder evidence and update typed facts"
-  llama deal extra set <dealId> <key> <value>        # system-admin only
-      Patch one top-level key in deals.extra JSONB. Value is parsed as
-      JSON when possible ('{"a":1}', 'true', '3'), else stored as a
-      string. Audited to deal_events as field_change "extra.<key>".
-  llama deal extra unset <dealId> <key>              # delete the key (admin)
-  llama deal search <query> [--founder name] [--owner <user-key>] [--status Interested]
-                            [--theirStage Raising] [--stage Seed] [--source-direction Inbound]
-                            [--limit 200] [--offset 0]
-  llama deal list [--owner ...] [--status ...] [...same flags as search]
-
-Investment Workflow V2 (the only stage-write surface):
-  llama workflow show <dealId>
-  llama workflow initialize <dealId> --reason "..."   # audited legacy migration/bootstrap
-  llama workflow request-support <dealId> --partner <userId> --reason "..."
-  llama workflow decide-support <dealId> support|need_more|pass --reason "..."
-  llama workflow proceed <dealId> --transition <key> --reason "..."
-  llama workflow waive <dealId> --guard <key> --reason "..."
-  llama workflow control <dealId> hold|resume|pass|restore|return --reason "..." [--disposition stalled|future]
-  llama workflow organize-ic <dealId> --note "..."
-  llama workflow vote <dealId> yes|no --reason "..."
-  llama workflow reassign-owner <dealId> --owner <userId> --reason "..."
-  llama workflow execution-status <dealId> term-sheet|verbal-commit|invested --reason "..."
-
-Agent activity (read-only, cheap read model over append-only activity):
-  llama activity new-deals [--since 24h|7d|<ISO>] [--limit 50]
-  llama activity updated-deals [--since 24h|7d|<ISO>] [--limit 50] [--deal <uuid>]
-  llama activity events [--since 24h] [--verb fact.added,brief.revised] [--entity deal|wiki|all]
-      Use this before scanning raw timelines or event-bus payloads. It returns
-      JSON from Command's curated activity_events projection: source ids included.
-
-Collaborators (besides owner — attribution candidates, no approval):
-  llama deal collab list <dealId>
-  llama deal collab add <dealId> --user <userId|email>
-  llama deal collab remove <dealId> --user <userId|email>     # soft-delete
-  llama deal collab restore <dealId> --user <userId|email>
-
-Soft-delete:
-  All UI/CLI deletes are soft. Real delete = direct DB only. Each
-  removal/restore writes a deal_events row so the timeline records who
-  did what when. Trash views via ?include_deleted=1 on read endpoints.
-
-Brief blocks (text/link/embed/callout):
-  llama brief blocks <dealId>                      # list (excludes trashed)
-  llama brief block <dealId> <blockId>             # fetch single block (with body)
-  llama brief delete <dealId> <blockId>            # soft-delete
-  llama brief restore <dealId> <blockId>
-
-Deal links (separate from brief link blocks — these live in deal_links):
-  llama deal link list <dealId> [--include-deleted]
-  llama deal link add <dealId> --url <url> [--label "..."]
-  llama deal link delete <dealId> <linkId>          # soft-delete
-  llama deal link restore <dealId> <linkId>
-
-Ownership:
-  llama claim <dealId> --reason "..."                        # set yourself as Owner
-  llama nominate <dealId> --user <userId> --reason "..."     # set another teammate as Owner
-  Owner is an audited responsibility label, not a permission boundary. Any
-  internal teammate can change it after Partner Support; reason is mandatory.
-
-Approvals (Partner queue — contribution decisions):
-  llama approvals list
-  llama approvals decide <approvalId> approved|rejected [--note "..."]
-
-Timeline / Posts:
-  llama timeline <dealId>                                    # full unified feed
-  llama post <dealId> "message body" [--link url] [--link-name "name"] [--cue]
-                                                               # --cue only after explicit user approval
-
-Brief blocks:
-  llama brief blocks <dealId>                                  # list current block array
-  llama brief block <dealId> <blockId>                         # fetch one block's body (manifest in 'llama deal show')
-  llama brief add-text <dealId> --heading "..." --body "..." [--cue]
-  llama brief add-link <dealId> --url "..." --label "..." [--description "..."] [--cue]
-  llama brief add-embed <dealId> --url "..." [--label "..."] [--cue]
-  llama brief add-callout <dealId> --tone insight|info|warning|success --heading "..." --body "..." [--cue]
-  llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--tone ...] [--cue]
-                          [--source-section <key>] [--lock|--unlock] [--hide|--unhide]
-  llama brief delete <dealId> <blockId>
-  llama brief history <dealId> <blockId> [--limit 50]            # prior versions of this block (newest first)
-  llama brief restore-version <dealId> <blockId> <historyId>      # restore from a history entry; the outgoing
-                                                                  # version is itself snapshotted (reversible)
-
-  Common flags on every add-*:
-    --source-section <key>   Target a structured section (team, highlights, recommendation,
-                             landscape_map, competitors). Without this, blocks land in "_other"
-                             at the bottom of the TOC. AI writers want this.
-    --reply-to <blockId>     Make the block a reply to <blockId>. Snapshots parent's heading
-                             + 200-char excerpt into meta so the back-link survives parent
-                             edits/deletes. Renders as an amber strip with a jump-link.
-    --position top|bottom    Where to insert. Default: top (matches UI behavior since
-                             2026-05-03). Use bottom for batched writes that need to
-                             preserve insertion order.
-
-Brief refresh + agent-run revert:
-  llama deal refresh-brief <dealId> [--force]                  # re-eval stale sections
-                                                                # --force = every unlocked watcher-managed section
-  llama deal revert-run <dealId> <runId> --section <key>       # legacy 4-section model only
-                                                                # section: company|team|highlights|recommendation
-
-Deal soft-delete / restore / trash list:
-  llama deal delete <dealId>                                   # soft (audit-logged via deal_events)
-  llama deal restore <dealId>                                  # ⚠ session-only on server today (token → 401)
-  llama deal trash                                             # list deleted deals
-
-Deal facts (AI-extracted or human-asserted, with verification):
-  llama deal ingest <dealId> --file <packet.json> [--idempotency-key <key>]  # atomic facts + optional Feed note
-    packet: {"source":{"kind":"meeting_note","title":"Office visit"},"facts":[{"category":"team","claim":"..."}],"note":"..."}
-    categories: company_basics | team | product | market | financials | fundraise | risk | milestone | meta
-  llama deal fact list <dealId>
-  llama deal fact add <dealId> --category <cat> --claim "<text>" [--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]
-  llama deal fact verify <dealId> <factId> --status confirmed|disputed [--corrected-value "..."]
-  llama deal fact uncontest <dealId> <factId> --reason "<why the contest was wrong>"
-    contest and trust are separate axes: 'verify --status confirmed' does NOT lift a contest,
-    and a contested fact stays excluded from what the Deal Agent treats as current.
-
-Mentions / Inbox:
-  llama mentions                                       # default: my unresolved cues
-  llama mentions list [--everyone] [--all]             # --everyone = team-wide; --all = include resolved
-  llama mentions show <mentionId>                      # full row
-  llama mentions resolve <mentionId>                   # mark thread resolved (idempotent)
-  llama mentions unread                                # just the badge count
-
-Where does this HTML / thesis / artifact go?
-  About ONE specific deal? ........ llama html publish <deal-id-or-name> --file <path> --title "..."
-                                      (renders at /deals/<id>/browse/<slug>; see "Deal page HTML" below)
-  Cross-deal / institutional? ..... llama wiki save <slug> --title "..." --file <path>.html --sources "..."
-                                      (renders at /wiki/<slug>; see "Wiki" below)
-  A document, not a page? ......... llama wiki save <slug> --title "..." --file <path>.{pdf,docx,xlsx} --sources "..."
-                                      (the file itself becomes the entry; see "Wiki" below)
-  Founder-facing public share? .... Netlify (with netlify-access-guard skill), only when user explicitly
-                                      says "share publicly". Llama Command outranks Netlify for everything
-                                      internal — don't reach for Netlify by default.
-
-Wiki:
-  llama wiki search <query>
-  llama wiki read <slug>
-  Markdown entry (default):
-    llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"]
-  HTML entry — standalone HTML page at /wiki/<slug> (full-viewport sandboxed iframe):
-    llama wiki save <slug> --title "..." --file path.html --sources "..." [--content-type html]
-      (.html / .htm extension auto-implies content_type=html)
-      Native comments + working in-page (#) links are added automatically — just upload self-contained HTML.
-  Document entry — the file itself is the entry, readable at /wiki/<slug>:
-    llama wiki save <slug> --title "..." --file path.{pdf,docx,xlsx} --sources "..." [--doc-kind ...]
-      PDF opens in the browser's viewer (pages, search, zoom); DOCX and XLSX are converted for reading,
-      a spreadsheet keeping one tab per sheet. The original stays downloadable from the page either way.
-      Upload the document you have — don't transcribe it into markdown first.
-  ➜ Use Wiki when the artifact is NOT tied to one specific deal — sector landscape, market map,
-    thesis, framework, methodology. For deal-specific HTML use "llama html publish <deal>" instead.
-  Delete / restore (soft — reversible):
-    llama wiki delete <slug> [--lang en|zh]
-    llama wiki restore <slug> [--lang en|zh]
-
-Memo (read-only; generation runs only from the Memo Agent in Llama Command):
-  llama memo show <dealId> [--out <path>] [--json]          # default: html → stdout (pipeable to file / browser)
-
-Deal page HTML (hand-authored sandboxed pages on /deals/<id>/browse/<slug>):
-  ➜ Use this for DEAL-SPECIFIC artifacts: IC memo for X, dashboard for X, 2×2 for X.
-    For cross-deal / institutional pages (sector landscape, market map, thesis) use
-    "llama wiki save <slug> --file ..." instead — see "Wiki" above.
-  Each deal can host many HTML artifacts (IC report, dashboard, market map, …).
-  Each one has a stable slug. UPLOAD must declare intent — update an existing
-  artifact or add a new one — to avoid silent overwrites.
-
-  Agent-safe publish path (recommended for Claude Code / Codex / Cursor):
-    llama html publish <deal-id-or-name> --file <path> [--title "..."] [--doc <slug>]
-      # Defaults to NEW doc unless --doc points at an existing slug; verifies version/bytes/sha256 after upload.
-      # Auto-detects sibling *_files asset folders unless --no-auto-assets is set.
-
-  List existing artifacts:
-    llama html docs <dealId>                                  # who-has-what
-    llama html docs create <dealId> <slug> [--title "..."]    # pre-create a slot
-    llama html docs archive <dealId> <slug>                   # soft-archive (browse hides)
-
-  Link a card to a wiki article (one file, multiple entrances — the wiki
-  stays canonical, the deal card is a live, read-only pointer):
-    llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]
-    llama html unlink <dealId> <slug>                         # revert to a normal self-hosted doc
-
-  Update an EXISTING artifact (slug must exist):
-    llama html upload <dealId> --doc <slug> --file <path> [--assets DIR]
-
-  Add a NEW artifact (slug must NOT already exist):
-    llama html upload <dealId> --new --title "..." --file <path> [--doc <slug>] [--assets DIR]
-      (omit --doc → CLI slugifies the title; appends -2 / -3 on collision)
-
-  Default (no --doc, no --new) targets slug 'main' but REFUSES if 'main'
-  already has content — pass --doc main or --new --title "..." explicitly.
-
-  llama html show <dealId> [--doc <slug>] [--out <path>] [--json]   # default: current html → stdout
-  llama html versions <dealId> [--doc <slug>]                       # list version history
-  llama html restore <dealId> <version> [--doc <slug>]              # promote an old version to new latest
-  llama html reset <dealId> [--doc <slug>]                          # soft-delete latest; /browse reverts to empty
-
-  Caps: HTML 5 MB, each asset 50 MB, total bundle 100 MB. Every write
-  triggers SSE push — any browser viewing /deals/<id>/browse refreshes
-  automatically. Same write path as the in-app deal agent's
-  update_deal_browse_html tool and the MCP html_upload_file tool.
-
-Admin (system admin only — server returns 403 for non-admin tokens):
-  llama admin workflow audit --deal <uuid> | --all
-  llama admin workflow remediate --deal <uuid> --guard intake.reason_why[,intake.founder_identity]
-                                [--apply --expected-revision <n> --reason "..."]
-  llama admin auth-events  [--kind X] [--actor email] [--subject email] [--since 24h|7d|30d|<ISO>] [--limit 100]
-  llama admin deal-events  [--kind X] [--actor email] [--deal <uuid>] [--since 24h] [--limit 100]
-  llama admin agent-events [--kind tool_call|loop_stalled|max_turns_reached] [--agent-kind deal|secretary|main|inbox]
-                           [--actor email] [--tool name] [--deal <uuid>] [--errors-only] [--since 24h] [--limit 100]
-
-  Same data as the /admin web console tabs (Auth events / Deal Activity / Agent Activity)
-  but scriptable. Pipe through jq / grep for monitoring & forensics.
-
-Token discovery (in order):
-  1. $LLAMA_TOKEN env var
-  2. ~/.llama/token (canonical, single line)
-  3. ~/.llama-command/config.json (legacy v0.1 — auto-migrated forward on first read)
-
-Env:
-  LLAMA_TOKEN    token override
-  LLAMA_API_URL  API base URL override
-`;
-
-// ── Progressive help (Constitution §1) ──
-// Default `llama` / `llama --help` prints a SHORT root: the command groups +
-// a few starters. Drill into one group with `llama help <area>` (or
-// `llama <area> --help`); `llama help all` prints the full reference above.
-const HELP_ROOT = `Llama Command CLI — the \`llama\` command for the Llama Ventures workbench.
-
-Common:
-  llama deal search "<name>"        find a deal in the pipeline
-  llama deal show <dealId>          full deal record
-  llama deal feed <dealId>          every contribution (facts + notes), newest first
-  llama post <dealId> "..."         add a note to a deal
-  llama activity new-deals --since 24h  recent deal creations
-  llama activity updated-deals --since 7d meaningful deal updates
-  llama agent-onboard               print the AI-agent workflow contract
-  llama agent bootstrap             live Llama OS skill manifest from Command
-  llama skills search "<query>"     discover which skill to read
-  llama explain <url-or-object>     explain Command URLs, 404s, deleted objects
-
-Command groups — run \`llama help <group>\` for that group's commands:
-  deal        create · show · feed · update · enrich · search · collaborators · links · delete
-  activity    new-deals · updated-deals · events for agent read models
-  brief       brief blocks: list · add · edit · history · refresh
-  facts       deal facts — the sourced, trust-rated layer
-  timeline    timeline · posts · mentions
-  wiki        cross-deal knowledge entries (markdown or HTML)
-  pref        standing agent preferences: list · add · retire · approve
-  memo        long-form HTML investment memo
-  html        deal-specific HTML artifacts (/deals/<id>/browse/<slug>)
-  pitch       external founder intake (no token needed)
-  ownership   claim · nominate · approvals
-  admin       audit events (system admin only)
-  agent       bootstrap · skills · explain for AI agents
-  skills      search · show runtime Llama OS skills
-  auth        setup · tokens · auth status
-
-  llama help all     the full command reference (everything at once)
-
-Auth: if you've run \`gcloud auth login\` with your @llamaventures.vc account,
-the CLI auto-detects it — no token needed (\`llc_\` tokens are a fallback).`;
-
-// Area → which top-level sections of HELP_FULL belong to it.
-const HELP_AREA_MATCH = {
-  deal: [
-    /^Deals/,
-    /^Collaborators/,
-    /^Soft-delete/,
-    /^Deal links/,
-    /^Deal soft-delete/,
-    // `llama deal refresh-brief` / `revert-run` live under this heading. Without
-    // it here the section matched no area and was reachable only via `help all`,
-    // which read as "the command does not exist".
-    /^Brief refresh/,
-  ],
-  activity: [/^Agent activity/],
-  brief: [/^Brief blocks/, /^Brief refresh/],
-  facts: [/^Deal facts/],
-  timeline: [/^Timeline/, /^Mentions/],
-  wiki: [/^Wiki/, /^Where does this HTML/],
-  memo: [/^Memo/],
-  html: [/^Deal page HTML/],
-  pitch: [/^External pitch/],
-  ownership: [/^Ownership/, /^Approvals/],
-  admin: [/^Admin/],
-  agent: [/^Agent onboarding/],
-  skills: [/^Agent onboarding/],
-  auth: [/^Setup/, /^Zero-config/, /^Token discovery/, /^Env/],
-};
-
-// Slice HELP_FULL into sections: a top-level (non-indented) header line plus
-// the indented/blank lines that follow it, until the next header.
-function helpSections() {
-  const out = [];
-  let cur = null;
-  for (const line of HELP_FULL.split("\n")) {
-    if (/^[A-Za-z]/.test(line)) {
-      cur = { head: line, lines: [line] };
-      out.push(cur);
-    } else if (cur) {
-      cur.lines.push(line);
-    }
-  }
-  return out;
-}
-
 function usage(area) {
-  if (area === "all") {
-    console.log(HELP_FULL);
-    return;
-  }
-  const matchers = area && HELP_AREA_MATCH[area];
-  if (matchers) {
-    const blocks = helpSections()
-      .filter((s) => matchers.some((re) => re.test(s.head)))
-      .map((s) => s.lines.join("\n").replace(/\s+$/, ""));
-    if (blocks.length) {
-      console.log(blocks.join("\n\n"));
-      return;
-    }
-  }
-  console.log(HELP_ROOT);
+  console.log(area === "deal" ? HELP_DEAL : HELP_ROOT);
 }
 
-// ============================================================
-// `llama pitch` family — external founder-pitch intake
-// ============================================================
-//
-// No Llama Command token required. Bootstraps a session against
-// /api/external/* via PoW + cookie. Subcommands:
-//
-//   llama pitch                   → REPL (requires existing session)
-//   llama pitch start --name X --email Y
-//   llama pitch say "<msg>"
-//   llama pitch upload <path>
-//   llama pitch status
-//   llama pitch end
+function assertActiveSurface(area, action) {
+  if (area === "deal" && !DEAL_ACTIONS.includes(action)) {
+    throw new Error(
+      `DEAL_COMMAND_RETIRED: \`llama deal ${action || "<missing>"}\` is not part of CLI 2. ` +
+      "Use only search, read, create --json, or write --json.",
+    );
+  }
+  if (RETIRED_DEAL_AREAS.has(area)) {
+    throw new Error(
+      `DEAL_COMMAND_RETIRED: \`llama ${area}\` belonged to the split legacy Deal model. ` +
+      "Use `llama deal read` or `llama deal write --json <file|->`.",
+    );
+  }
+}
+
+function onboardingNoAuth() {
+  return `Llama team onboarding requires credentials.
+
+Run \`llama auth login\`, or mint a token in Llama Command and run
+\`llama token set <llc_...>\`. External founders use \`llama pitch\`.`;
+}
+
+async function readTokenQuietly() {
+  if (!process.stdin.isTTY) {
+    let value = "";
+    for await (const chunk of process.stdin) value += chunk;
+    return value.trim().split(/\s+/)[0] || "";
+  }
+  process.stderr.write("Paste token (input hidden): ");
+  return new Promise((resolve, reject) => {
+    let value = "";
+    const cleanup = () => {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdin.off("data", onData);
+    };
+    const onData = (chunk) => {
+      for (const char of chunk) {
+        if (["\r", "\n", "\u0004"].includes(char)) {
+          cleanup();
+          process.stderr.write("\n");
+          resolve(value.trim());
+          return;
+        }
+        if (char === "\u0003") {
+          cleanup();
+          process.stderr.write("\n");
+          reject(new Error("Aborted"));
+          return;
+        }
+        if (char === "\u007f" || char === "\b") value = value.slice(0, -1);
+        else value += char;
+      }
+    };
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", onData);
+  });
+}
 
 async function handlePitch(action, rest) {
-  if (!action || action === "help" || action === "--help" || action === "-h") {
-    console.log(`Llama Ventures pitch intake — chat with our intake agent (no token required).
-
-Setup:
-  llama pitch start --name "Your Name" --email "you@company.com"
-
-Single message (non-interactive):
-  llama pitch say 'We have $8k MRR and 5 design partners'
-
-  ⚠ Tip: wrap pitch text in SINGLE quotes ('...') if it contains
-  characters like $, \`, or !. Double quotes let the shell expand
-  variables — e.g. "$8k MRR" becomes "k MRR" because $8 is empty.
-  Interactive REPL (\`llama pitch\`) doesn't have this problem.
-
-Upload a file (deck / pitch / one-pager):
+  if (!action || ["help", "--help", "-h"].includes(action)) {
+    console.log(`External founder pitch intake (no internal token required):
+  llama pitch start --name "Jane Doe" --email "jane@acme.ai"
+  llama pitch say 'We are building X'
   llama pitch upload ./deck.pdf
-
-Interactive REPL (requires existing session):
-  llama pitch
-
-Wrap up the pitch (asks the agent to call finalize_intake immediately):
-  llama pitch finalize       # use when you're done — agent stops asking
-
-Inspect / clean up:
-  llama pitch status         # session id, idle minutes, finalized?
-  llama pitch end            # clear local session state
-
-Caps:
-  Server-enforced per-IP / per-email / per-session rate limits apply.
-  The CLI surfaces server messages if a limit is hit.
-
-Environment:
-  LLAMA_API_URL              override base URL (dev: http://localhost:3000)
-`);
+  llama pitch finalize
+  llama pitch status
+  llama pitch end
+  llama pitch                         interactive session`);
     return;
   }
-
   if (action === "start") {
-    const { flags } = parseFlags(rest);
-    if (!flags.name || !flags.email) {
-      throw new Error(
-        "pitch start: --name and --email are required.\n" +
-          "  Example: llama pitch start --name \"Jane Doe\" --email \"jane@acme.ai\""
-      );
+    const { flags } = parseFlags(rest, ["name", "email"]);
+    if (typeof flags.name !== "string" || typeof flags.email !== "string") {
+      throw new Error('Usage: llama pitch start --name "Jane Doe" --email "jane@acme.ai"');
     }
     const existing = readExternalSession();
-    if (existing && !existing.finalized) {
-      const status = getExternalSessionStatus();
-      if (status.active) {
-        throw new Error(
-          `An active pitch session already exists (started ${existing.started_at}, idle ${status.idle_minutes}min).\n` +
-            `  Run \`llama pitch end\` to clear it, or \`llama pitch say "..."\` to continue.`
-        );
-      }
+    const status = existing ? getExternalSessionStatus() : null;
+    if (existing && !existing.finalized && status?.active) {
+      throw new Error("An active pitch session already exists. Continue it or run `llama pitch end`.");
     }
-    process.stderr.write("Computing proof-of-work + opening session...\n");
-    const session = await startExternalSession({
-      name: String(flags.name),
-      email: String(flags.email),
-    });
-    print({
-      session_id: session.session_id,
-      name: session.name,
-      email: session.email,
-      started_at: session.started_at,
-      hint: 'Now run `llama pitch say "..."` to chat, or just `llama pitch` for interactive REPL.',
-    });
+    print(await startExternalSession({ name: flags.name, email: flags.email }));
     return;
   }
-
   if (action === "say") {
     const message = rest.join(" ").trim();
-    if (!message) {
-      throw new Error('pitch say: message required. Example: llama pitch say "We\'re building X"');
-    }
+    if (!message) throw new Error("Usage: llama pitch say <message>");
     const result = await sendExternalMessage(message);
-    process.stdout.write(result.text + "\n");
-    if (result.finalized) {
-      process.stderr.write("\n--- Pitch session finalized by the agent ---\n");
-      if (result.finalize_payload) {
-        process.stderr.write(JSON.stringify(result.finalize_payload, null, 2) + "\n");
-      }
-    }
+    process.stdout.write(`${result.text}\n`);
     return;
   }
-
   if (action === "upload") {
-    const { flags, positional } = parseFlags(rest);
-    const filePath = positional[0];
-    if (!filePath) {
-      throw new Error("pitch upload: file path required. Example: llama pitch upload ./deck.pdf");
-    }
-    process.stderr.write(`Uploading ${filePath}...\n`);
-    const result = await uploadExternalFile(filePath);
-    if (flags.json) {
-      print(result);
-    } else {
-      // Friendly default — drop server-internal fields (drive_file_id /
-      // sha256 / file_id). Founders just want "did it work + what does
-      // the agent do next." Pass --json for the full payload.
-      const sizeKb = (result.size / 1024).toFixed(1);
-      console.log(`✓ Uploaded ${result.filename} (${sizeKb} KB).`);
-      console.log(`  The intake agent can now reference this file in your pitch.`);
-    }
+    const { flags, positional } = parseFlags(rest, ["json"]);
+    if (!positional[0]) throw new Error("Usage: llama pitch upload <file>");
+    const result = await uploadExternalFile(positional[0]);
+    if (flags.json) print(result);
+    else console.log(`Uploaded ${result.filename} (${(result.size / 1024).toFixed(1)} KB).`);
     return;
   }
-
   if (action === "status") {
     print(getExternalSessionStatus());
     return;
   }
-
   if (action === "end") {
-    const had = readExternalSession();
+    const previous = readExternalSession();
     clearExternalSession();
-    print({
-      ok: true,
-      cleared: !!had,
-      session_file: EXTERNAL_SESSION_FILE,
-      note: had
-        ? "Local session state cleared. Server-side session may still be active until idle timeout."
-        : "No local session was active.",
-    });
+    print({ ok: true, cleared: Boolean(previous), session_file: EXTERNAL_SESSION_FILE });
     return;
   }
-
   if (action === "finalize") {
-    // Founder-initiated finalize: send a sentinel token in the chat
-    // stream that the system prompt recognizes as "wrap up now." The
-    // intake agent calls finalize_intake on this turn with whatever
-    // fields are recorded — no extra questions, no confirmation prompt.
-    // Local session is left as-is; on next read its `finalized=true`
-    // reflects the server's status.
     const session = readExternalSession();
-    if (!session) {
-      throw new Error(
-        "No active pitch session. Run `llama pitch start --name \"...\" --email \"...\"` first."
-      );
-    }
-    if (session.finalized) {
-      throw new Error(
-        "This pitch session is already finalized. Run `llama pitch end` to clear local state."
-      );
-    }
-    process.stderr.write("Asking the agent to wrap up...\n");
+    if (!session || session.finalized) throw new Error("No active unfinalized pitch session.");
     const result = await sendExternalMessage("[FOUNDER_FINALIZE_REQUEST]");
-    process.stdout.write(result.text + "\n");
-    if (result.finalized) {
-      process.stderr.write("\n--- Pitch session finalized ---\n");
-      if (result.finalize_payload) {
-        process.stderr.write(JSON.stringify(result.finalize_payload, null, 2) + "\n");
-      }
-    } else {
-      process.stderr.write(
-        "\n⚠ Agent did not call finalize_intake on this turn. " +
-        "Try `llama pitch finalize` once more, or `llama pitch end` to abandon.\n"
-      );
-    }
+    process.stdout.write(`${result.text}\n`);
     return;
   }
-
-  // No action → REPL mode (requires existing session)
-  if (action === undefined || (rest.length === 0 && !["start", "say", "upload", "status", "end", "finalize"].includes(action))) {
-    // Treat any unknown bare action as "join existing session in REPL mode"
-    const session = readExternalSession();
-    if (!session) {
-      throw new Error(
-        "No active pitch session. Start one with:\n" +
-          '  llama pitch start --name "Your Name" --email "you@company.com"'
-      );
-    }
-    if (session.finalized) {
-      throw new Error(
-        "This pitch session is finalized. Run `llama pitch end` then `pitch start` for a new one."
-      );
-    }
+  if (action === "repl") {
     await runPitchRepl();
     return;
   }
-
-  throw new Error(`Unknown pitch subcommand: ${action}. Run \`llama pitch help\` for the full list.`);
+  throw new Error(`Unknown pitch subcommand: ${action}`);
 }
 
 async function runPitchRepl() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: "you> ",
-  });
-
-  console.log("Connected to Llama Ventures intake agent. Type your pitch — :q to exit, :upload <path> to attach a file.");
-  console.log("");
-
-  const send = async (msg) => {
-    process.stdout.write("\nllama> ");
-    let buffered = "";
-    const result = await sendExternalMessage(msg, {
-      onChunk: (chunk) => {
-        process.stdout.write(chunk);
-        buffered += chunk;
-      },
-    });
-    if (!buffered) process.stdout.write(result.text);
-    process.stdout.write("\n\n");
-    if (result.finalized) {
-      console.log("--- Pitch session finalized ---");
-      if (result.finalize_payload) {
-        console.log(JSON.stringify(result.finalize_payload, null, 2));
-      }
-      rl.close();
-      return true;
-    }
-    return false;
-  };
-
+  const session = readExternalSession();
+  if (!session || session.finalized) throw new Error("Start an active pitch session first.");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "you> " });
+  console.log("Connected to Llama Ventures intake agent. :q exits; :upload <path> attaches a file.");
   rl.prompt();
   rl.on("line", async (line) => {
-    const trimmed = line.trim();
-    if (trimmed === ":q" || trimmed === ":quit" || trimmed === ":exit") {
-      rl.close();
-      return;
-    }
-    if (trimmed.startsWith(":upload ")) {
-      const filePath = trimmed.slice(8).trim();
-      try {
-        process.stdout.write("uploading...\n");
-        const result = await uploadExternalFile(filePath);
-        console.log(`uploaded: ${result.filename} (${result.drive_file_id})`);
-      } catch (err) {
-        console.error("upload error:", err.message);
-      }
-      rl.prompt();
-      return;
-    }
-    if (!trimmed) {
-      rl.prompt();
-      return;
-    }
+    const input = line.trim();
+    if ([":q", ":quit", ":exit"].includes(input)) return rl.close();
     try {
-      const finalized = await send(trimmed);
-      if (finalized) return;
-    } catch (err) {
-      console.error("error:", err.message);
+      if (input.startsWith(":upload ")) {
+        const result = await uploadExternalFile(input.slice(8).trim());
+        console.log(`uploaded: ${result.filename}`);
+      } else if (input) {
+        const result = await sendExternalMessage(input);
+        console.log(`llama> ${result.text}`);
+        if (result.finalized) return rl.close();
+      }
+    } catch (error) {
+      console.error(`error: ${error.message}`);
     }
     rl.prompt();
   });
-
   await new Promise((resolve) => rl.on("close", resolve));
 }
 
-async function main() {
-  const [area, action, ...rest] = process.argv.slice(2);
-  if (area === "--version" || area === "-v" || area === "version") {
-    if (action === "--json" || action === "json") {
-      print(getBuildInfo());
-      return;
-    }
-    // `llama version --check` — explicitly check npm for a newer release and
-    // print the upgrade line (or "up to date"). Lets an agent surface the
-    // nudge on demand, separate from the throttled, TTY-gated auto-nudge.
-    if (action === "--check" || action === "check") {
-      const nudge = await getUpdateNudge();
-      console.log(nudge || `llama CLI ${PKG_VERSION} — up to date`);
-      return;
-    }
-    console.log(PKG_VERSION);
-    return;
-  }
-  if (!area || area === "help" || area === "--help" || area === "-h") {
-    usage(area === "help" ? action : undefined);
-    return;
-  }
-  // `llama <area> --help` / `-h` → just that group's commands
-  if (action === "--help" || action === "-h") {
-    usage(area);
-    return;
-  }
-  // `llama <area> <action> --help` (e.g. `brief add-text --help`). Without this
-  // short-circuit, "--help" falls through to the action handler, where rest[0]
-  // can be read as a positional (e.g. dealId="--help") and trigger a REAL write.
-  // Catch --help/-h anywhere in the sub-command args and print group help first.
-  if (rest.includes("--help") || rest.includes("-h")) {
-    usage(area);
-    return;
-  }
-
-  // `llama agent-onboard` — fetch the server-owned Agent Runtime Contract
-  // so an AI agent reads the current Llama Ventures workflow contract. The
-  // bundled AGENT_BRIEFING.md is now only a fallback when the server route
-  // is unavailable during rollout.
-  // Also: `llama agent onboard` (two-word form) for symmetry.
-  //
-  // Gated behind Command auth — without valid credentials we print a short
-  // bootstrap stub instead. Stops unauthenticated callers from harvesting
-  // internal command surface / workflow conventions just by running the
-  // public CLI.
-  if (
-    area === "agent-onboard" ||
-    (area === "agent" && (action === "onboard" || action === "briefing"))
-  ) {
-    const headers = await getAuthHeaders();
-    if (Object.keys(headers).length === 0) {
-      console.log(agentOnboardNoAuthMessage());
-      return;
-    }
-    try {
-      const briefing = await fetchServerAgentBriefing();
-      process.stdout.write(briefing || readBriefing());
-    } catch (e) {
-      const msg = e?.message || "";
-      if (msg.includes("Error[UNAUTHORIZED]") || msg.includes("Error[NO_AUTH]")) {
-        console.log(agentOnboardRejectedMessage());
-        process.exitCode = 1;
-        return;
-      }
-      process.stderr.write(
-        `warning: server agent briefing unavailable (${msg}); using bundled fallback.\n`,
-      );
-      process.stdout.write(readBriefing());
-    }
-    return;
-  }
-
-  // Live runtime bootstrap from Llama Command. Unlike agent-onboard, this is
-  // not bundled in the public npm package; Command returns the current
-  // authenticated skill manifest and object-inspection contract.
-  if (area === "agent" && action === "bootstrap") {
-    const { flags } = parseFlags(rest, ["json", "limit"]);
-    const params = new URLSearchParams();
-    params.set("clientVersion", PKG_VERSION);
-    if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
-    const manifest = await request("GET", `/api/agent/manifest${params.toString() ? `?${params}` : ""}`);
-    if (flags.json) {
-      print(manifest);
-    } else {
-      process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
-    }
-    return;
-  }
-
-  if (area === "activity") {
-    const sub = action || "events";
-    const normalized = sub.replace(/-/g, "_");
-    const kind =
-      normalized === "new" || normalized === "new_deal" || normalized === "new_deals"
-        ? "new_deals"
-        : normalized === "updated" || normalized === "updates" || normalized === "updated_deal" || normalized === "updated_deals"
-          ? "updated_deals"
-          : normalized === "event" || normalized === "events" || normalized === "feed" || normalized === "all"
-            ? "events"
-            : null;
-    if (!kind) {
-      throw new Error("Usage: llama activity new-deals|updated-deals|events [--since 24h] [--limit 50]");
-    }
-    const { flags } = parseFlags(rest, [
-      "json",
-      "since",
-      "limit",
-      "cursor",
-      "before-id",
-      "before_id",
-      "deal",
-      "deal-id",
-      "deal_id",
-      "entity",
-      "verb",
-      "min-sig",
-      "min_sig",
-      "min-significance",
-    ]);
-    print(await fetchActivity(kind, flags));
-    return;
-  }
-
-  if (area === "skills" || (area === "agent" && action === "skills")) {
-    const sub = area === "skills" ? action : rest[0];
-    const args = area === "skills" ? rest : rest.slice(1);
-    if (!sub || sub === "list") {
-      const { flags } = parseFlags(args, ["json", "limit"]);
-      const params = new URLSearchParams();
-      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
-      const result = await request("GET", `/api/agent/skills${params.toString() ? `?${params}` : ""}`);
-      print(result);
-      return;
-    }
-    if (sub === "search") {
-      const { flags, positional } = parseFlags(args, ["json", "limit"]);
-      const q = positional.join(" ").trim();
-      if (!q) throw new Error("Usage: llama skills search <query> [--limit 20]");
-      const params = new URLSearchParams({ q });
-      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
-      const result = await request("GET", `/api/agent/skills?${params}`);
-      print(result);
-      return;
-    }
-    if (sub === "show" || sub === "read") {
-      const { flags, positional } = parseFlags(args, ["json"]);
-      const slug = positional[0];
-      if (!slug) throw new Error("Usage: llama skills show <slug> [--json]");
-      const result = await request("GET", `/api/agent/skills/${encodeURIComponent(slug)}`);
-      if (flags.json) {
-        print(result);
-      } else {
-        process.stdout.write(`${result.skill?.content || JSON.stringify(result, null, 2)}\n`);
-      }
-      return;
-    }
-    throw new Error(`Unknown skills subcommand "${sub}". Use: list / search / show.`);
-  }
-
-  // `llama pref ...` — standing agent preferences (learning-domain v1).
-  // Own user scope activates immediately; team scope needs a system admin.
-  if (area === "pref" || area === "prefs" || area === "preferences") {
-    const sub = action;
-    if (!sub || sub === "list") {
-      const { flags } = parseFlags(rest, ["json", "status"]);
-      const params = new URLSearchParams();
-      if (flags.status && flags.status !== true) params.set("status", String(flags.status));
-      const result = await request("GET", `/api/agent/preferences${params.toString() ? `?${params}` : ""}`);
-      print(result);
-      return;
-    }
-    if (sub === "add") {
-      const { flags, positional } = parseFlags(rest, ["team", "evidence", "json"]);
-      const key = positional[0];
-      const content = positional.slice(1).join(" ").trim();
-      if (!key || !content) {
-        throw new Error('Usage: llama pref add <key> "<content, max 280 chars>" [--team] [--evidence "..."]');
-      }
-      const result = await request("POST", "/api/agent/preferences", {
-        scope: flags.team ? "team" : "user",
-        key,
-        content,
-        evidence: flags.evidence && flags.evidence !== true ? String(flags.evidence) : undefined,
-      });
-      print(result);
-      return;
-    }
-    if (sub === "retire" || sub === "approve") {
-      const { positional } = parseFlags(rest, ["json"]);
-      const id = Number(positional[0]);
-      if (!Number.isInteger(id) || id <= 0) {
-        throw new Error(`Usage: llama pref ${sub} <id>`);
-      }
-      const result = await request("PATCH", `/api/agent/preferences/${id}`, {
-        status: sub === "approve" ? "active" : "retired",
-      });
-      print(result);
-      return;
-    }
-    throw new Error(`Unknown pref subcommand "${sub}". Use: list / add / retire / approve.`);
-  }
-
-  if (area === "explain" || (area === "agent" && action === "explain")) {
-    const args = area === "explain" ? [action, ...rest].filter(Boolean) : rest;
-    const { flags, positional } = parseFlags(args, ["json", "type", "id", "lang"]);
-    const params = new URLSearchParams();
-    const q = positional.join(" ").trim();
-    if (q) params.set("q", q);
-    if (flags.type && flags.type !== true) params.set("type", String(flags.type));
-    if (flags.id && flags.id !== true) params.set("id", String(flags.id));
-    if (flags.lang === "zh") params.set("lang", "zh");
-    if (!params.has("q") && !(params.has("type") && params.has("id"))) {
-      throw new Error("Usage: llama explain <url-or-object> OR llama explain --type <type> --id <id>");
-    }
-    const result = await request("GET", `/api/agent/explain?${params}`);
-    if (flags.json) {
-      print(result);
-    } else {
-      const target = result.result?.target;
-      const lifecycle = result.result?.lifecycle || [];
-      const lines = [
-        `${target?.objectType || "object"} ${target?.objectId || ""}`,
-        `Status: ${target?.status || "unknown"}`,
-        `Title: ${target?.title || "Untitled"}`,
-        target?.detail ? `Detail: ${target.detail}` : null,
-        target?.url ? `URL: ${target.url}` : null,
-        `Lifecycle events: ${lifecycle.length}`,
-      ].filter(Boolean);
-      if (lifecycle[0]) {
-        lines.push(
-          `Latest lifecycle: ${lifecycle[0].action} by ${lifecycle[0].actor_label || "unknown"} at ${lifecycle[0].created_at}`,
-        );
-        if (lifecycle[0].reason) lines.push(`Reason: ${lifecycle[0].reason}`);
-      }
-      process.stdout.write(`${lines.join("\n")}\n`);
-    }
-    return;
-  }
-
-  // `llama pitch ...` — external founder-pitch family. No Llama token
-  // required; bootstraps a session against /api/external/* via PoW + cookie.
-  // See lib/external.mjs and AGENT_BRIEFING.md for the full surface.
-  if (area === "pitch") {
-    await handlePitch(action, rest);
-    return;
-  }
-
-  // Hidden-input token read: raw-mode prompt on a TTY (no echo), one line
-  // from stdin otherwise. Backspace supported; Ctrl+C aborts.
-  async function readTokenQuietly() {
-    if (!process.stdin.isTTY) {
-      const chunks = [];
-      for await (const chunk of process.stdin) chunks.push(chunk);
-      return Buffer.concat(chunks).toString("utf8").trim().split(/\s+/)[0] || "";
-    }
-    process.stderr.write("Paste token (input hidden): ");
-    return await new Promise((resolve, reject) => {
-      const stdin = process.stdin;
-      let value = "";
-      const cleanup = () => {
-        stdin.setRawMode(false);
-        stdin.pause();
-        stdin.off("data", onData);
-      };
-      const onData = (chunk) => {
-        for (const ch of chunk) {
-          if (ch === "\r" || ch === "\n" || ch === "\u0004") {
-            cleanup();
-            process.stderr.write("\n");
-            resolve(value.trim());
-            return;
-          }
-          if (ch === "\u0003") {
-            cleanup();
-            process.stderr.write("\n");
-            reject(new Error("Aborted"));
-            return;
-          }
-          if (ch === "\u007f" || ch === "\b") {
-            value = value.slice(0, -1);
-            continue;
-          }
-          value += ch;
-        }
-      };
-      stdin.setRawMode(true);
-      stdin.resume();
-      stdin.setEncoding("utf8");
-      stdin.on("data", onData);
-    });
-  }
-
+async function handleAuth(area, action, rest) {
   if (area === "token" && action === "set") {
-    const { flags, positional } = parseFlags(rest);
-    // Omitting the token argument keeps the value out of shell history and
-    // process listings: prompt with hidden input on a TTY, or read one line
-    // from stdin when piped (e.g. `pbpaste | llama token set`).
-    const token = positional[0] ?? (await readTokenQuietly());
-    if (!token?.startsWith("llc_")) throw new Error("Expected a token starting with llc_");
-    if (token.length !== 36) {
-      throw new Error(
-        `Token has length ${token.length}; expected 36 (llc_ + 32 hex chars).\n` +
-        `  This usually means you copied the masked preview ("llc_xxxx…yyyy") from\n` +
-        `  the token list instead of the full string from the mint response.\n` +
-        `  Re-mint at https://command.llamaventures.vc/settings/tokens and use the\n` +
-        `  Copy button — it captures the full value.`
-      );
+    const { flags, positional } = parseFlags(rest, ["base", "skip-verify"]);
+    const token = positional[0] ?? await readTokenQuietly();
+    if (!/^llc_[0-9a-f]{32}$/i.test(token)) throw new Error("Expected a full llc_ token (llc_ + 32 hex chars).");
+    if (flags.base && flags.base !== true) {
+      writeLegacyConfig({ ...readLegacyConfig(), baseUrl: String(flags.base).replace(/\/$/, "") });
     }
-    if (flags.base) {
-      // baseUrl still lives in legacy config — rarely overridden. Keep the
-      // file there so we don't introduce a second config surface.
-      const legacy = readLegacyConfig();
-      legacy.baseUrl = String(flags.base).replace(/\/$/, "");
-      writeLegacyConfig(legacy);
-    }
-    // Round-trip the token against /api/me before persisting. Catches the
-    // pasted-preview / wrong-token / wrong-host cases at "set" time instead
-    // of letting them fester until the next CLI call (or worse, a CI run).
-    // --skip-verify is an escape hatch for offline / pre-deploy testing.
     if (!flags["skip-verify"]) {
-      try {
-        const res = await fetch(`${getBaseUrl()}/api/me`, {
-          headers: { "X-Llama-Token": token },
-        });
-        if (res.status === 401 || res.status === 403) {
-          const body = await res.text();
-          throw new Error(
-            `Server rejected this token (HTTP ${res.status}). Not saving.\n` +
-            `  Response: ${body.slice(0, 200)}\n` +
-            `  Base URL: ${getBaseUrl()}\n` +
-            `  Re-check that you copied the full token from the mint dialog\n` +
-            `  ("Shown once") and not the masked preview from the list view.\n` +
-            `  Override with --skip-verify if you know the server is unreachable.`
-          );
-        }
-        if (!res.ok) {
-          throw new Error(`Verify call failed: HTTP ${res.status}. Not saving.`);
-        }
-      } catch (e) {
-        if (e instanceof Error && (e.message.startsWith("Server rejected") || e.message.startsWith("Verify call failed"))) {
-          throw e;
-        }
-        // Network / DNS failure — surface but let the user override.
-        throw new Error(
-          `Could not reach ${getBaseUrl()} to verify token: ${e.message}\n` +
-          `  Add --skip-verify if you want to save anyway.`
-        );
-      }
+      const response = await fetch(`${getBaseUrl()}/api/me`, { headers: { "X-Llama-Token": token } });
+      if (!response.ok) throw new Error(`Server rejected token (HTTP ${response.status}); not saved.`);
     }
     writeCanonicalToken(token);
-    console.log(`Saved token to ~/.llama/token (mode 0600).`);
-    console.log(`Base URL: ${getBaseUrl()}`);
-    if (!flags["skip-verify"]) console.log(`Verified against ${getBaseUrl()}/api/me — token works.`);
-    return;
+    console.log("Saved token to ~/.llama/token (mode 0600).");
+    return true;
   }
-
   if (area === "token" && action === "show") {
     const token = getToken();
-    if (!token) {
-      console.log("No token set.");
-      return;
-    }
-    console.log(`${token.slice(0, 8)}...${token.slice(-4)} @ ${getBaseUrl()}`);
-    return;
+    console.log(token ? `${token.slice(0, 8)}...${token.slice(-4)} @ ${getBaseUrl()}` : "No token set.");
+    return true;
   }
-
-  // Self-diagnosis for agents and humans — what credentials do we have, and
-  // are they accepted by the server right now? Designed so an agent can
-  // parse the output and decide whether to drive a recovery flow.
   if (area === "auth" && action === "status") {
-    const bearer = await tryGcloudIdentityToken();
+    const [oauth, bearer] = await Promise.all([readBundle(), tryGcloudIdentityToken()]);
     const token = getToken();
-    const tokenSrc = process.env.LLAMA_TOKEN
-      ? "$LLAMA_TOKEN"
-      : readCanonicalToken()
-        ? "~/.llama/token"
-        : readLegacyConfig().token
-          ? "~/.llama-command/config.json (legacy)"
-          : null;
-
-    const oauthBundle = await readBundle();
-    const oauthBackend = oauthBundle ? await detectBackend() : null;
-
     let serverCheck = "skipped (no credentials)";
-    if (oauthBundle?.access_token || bearer || token) {
+    if (oauth?.access_token || bearer || token) {
       try {
         const me = await request("GET", "/api/me");
-        serverCheck = `ok — authenticated as ${me?.email ?? "unknown"} (role: ${me?.role ?? "unknown"})`;
-      } catch (e) {
-        serverCheck = `failed — ${e.message.split("\n")[0]}`;
+        serverCheck = `ok — ${me?.email ?? "unknown"} (${me?.role ?? "unknown"})`;
+      } catch (error) {
+        serverCheck = `failed — ${error.message.split("\n")[0]}`;
       }
     }
-
-    const out = {
+    const oauthBackend = oauth ? await detectBackend() : null;
+    print({
       baseUrl: getBaseUrl(),
-      activeMethod: oauthBundle?.access_token
-        ? "oauth"
-        : bearer
-          ? "gcloud-bearer"
-          : token
-            ? "llama-token"
-            : "none",
-      oauth: oauthBundle
-        ? {
-            storage: oauthBackend,
-            client_id: oauthBundle.client_id,
-            scope: oauthBundle.scope,
-            issuer: oauthBundle.issuer,
-            expires_in_seconds: Math.max(0, Math.round((oauthBundle.expires_at - Date.now()) / 1000)),
-          }
-        : "absent (run `llama auth login`)",
+      activeMethod: oauth?.access_token ? "oauth" : bearer ? "gcloud-bearer" : token ? "llama-token" : "none",
+      oauth: oauth ? { storage: oauthBackend, scope: oauth.scope } : "absent",
       gcloudIdentityToken: bearer ? "present" : "absent",
       llamaToken: token ? `${token.slice(0, 8)}...${token.slice(-4)}` : "absent",
-      llamaTokenSource: tokenSrc,
+      llamaTokenSource: process.env.LLAMA_TOKEN ? "$LLAMA_TOKEN" : readCanonicalToken() ? "~/.llama/token" : null,
       serverCheck,
-    };
-    print(out);
-    return;
+    });
+    return true;
   }
-
-  // ============================================================
-  // auth login — PKCE + loopback browser flow
-  // ============================================================
   if (area === "auth" && action === "login") {
-    const { flags } = parseFlags(rest);
-    const requestedScope = typeof flags.scope === "string" && flags.scope.trim()
-      ? flags.scope.trim()
-      : "read write";
+    const { flags } = parseFlags(rest, ["scope"]);
+    const scope = typeof flags.scope === "string" ? flags.scope : "read write";
     const baseUrl = getBaseUrl();
-    const resource = baseUrl; // general API audience (oauthApiResource on the server)
-
-    console.error(`Signing in to ${baseUrl} as Llama CLI (client_id=${LLAMA_CLI_CLIENT_ID})...`);
-    const bundle = await pkceLoopbackFlow({ baseUrl, scope: requestedScope, resource });
+    const bundle = await pkceLoopbackFlow({ baseUrl, scope, resource: baseUrl });
     const stored = await writeBundle({
       access_token: bundle.access_token,
       refresh_token: bundle.refresh_token,
@@ -1443,2317 +334,252 @@ async function main() {
       resource: bundle.resource,
       created_at: Date.now(),
     });
-
-    // Verify by hitting /api/me with the new token.
-    let identity = "(unable to verify — /api/me did not respond)";
-    try {
-      const me = await request("GET", "/api/me");
-      identity = `${me?.email ?? "unknown"} (role: ${me?.role ?? "unknown"})`;
-    } catch (e) {
-      identity = `verification failed: ${e.message.split("\n")[0]}`;
-    }
-
-    print({
-      ok: true,
-      message: "Signed in",
-      identity,
-      storage: stored.backend,
-      scope: bundle.scope,
-      expires_in_seconds: bundle.expires_in,
-    });
-    return;
+    print({ ok: true, client_id: LLAMA_CLI_CLIENT_ID, storage: stored.backend, scope: bundle.scope });
+    return true;
   }
-
-  // ============================================================
-  // auth logout — revoke + clear local
-  // ============================================================
   if (area === "auth" && action === "logout") {
     const bundle = await readBundle();
-    if (!bundle) {
-      print({ ok: true, message: "No OAuth credentials to clear" });
-      return;
-    }
     let revoked = false;
-    try {
-      revoked = await revokeOAuthToken({
-        baseUrl: bundle.issuer ?? getBaseUrl(),
-        token: bundle.refresh_token,
-        tokenTypeHint: "refresh_token",
-      });
-    } catch {
-      revoked = false;
-    }
-    await deleteBundle();
-    print({
-      ok: true,
-      message: "Signed out — local credentials cleared",
-      serverRevoke: revoked ? "succeeded" : "failed (server unreachable or token already invalid; local state cleared anyway)",
-    });
-    return;
-  }
-
-  if (area === "deal" && action === "create") {
-    const { flags, positional } = parseFlags(rest);
-    const companyName = positional.join(" ").trim();
-    if (!companyName) throw new Error("Usage: llama deal create \"Company\" [--source Name] [--deal-owner name|email|userId]");
-    const body = {
-      companyName,
-      source: flags.source,
-      dealOwner: flags.dealOwner || flags["deal-owner"],
-      sourceDirection: flags.sourceDirection || flags["source-direction"],
-      description: flags.description,
-      website: flags.website,
-      notes: flags.notes,
-      status: flags.status,
-      theirStage: flags["their-stage"],
-      stage: flags.stage,
-      proposedAmount: flags["proposed-amount"],
-      roundSize: flags["round-size"],
-      valuation: flags.valuation,
-      founders: flags.founders,
-      location: flags.location,
-    };
-    print(await request("POST", "/api/deals/create", body));
-    return;
-  }
-
-  if (area === "workflow") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama workflow show|initialize|request-support|decide-support|proceed|waive|control|organize-ic|vote|reassign-owner|execution-status <dealId> [...flags]");
-    if (action === "show") {
-      print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/workflow`));
-      return;
-    }
-    const { flags, positional } = parseFlags(rest.slice(1));
-    const current = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/workflow`);
-    const expectedRevision = current?.workflow?.revision;
-    if (!Number.isInteger(expectedRevision)) {
-      throw new Error("This deal has no initialized Investment Workflow V2 state. Open its workflow panel once, then retry.");
-    }
-    const base = {
-      requestId: `cli:${action}:${randomUUID()}`,
-      expectedRevision,
-    };
-    let command;
-    if (action === "initialize") {
-      if (!flags.reason) throw new Error('Usage: llama workflow initialize <dealId> --reason "..."');
-      command = { ...base, type: "initialize", reason: String(flags.reason) };
-    } else if (action === "request-support") {
-      if (!flags.partner || !flags.reason) throw new Error('Usage: llama workflow request-support <dealId> --partner <userId> --reason "..."');
-      command = { ...base, type: "request_partner_support", partnerId: String(flags.partner), reason: String(flags.reason) };
-    } else if (action === "decide-support") {
-      const decision = positional[0];
-      if (!["support", "need_more", "pass"].includes(decision) || !flags.reason) throw new Error('Usage: llama workflow decide-support <dealId> support|need_more|pass --reason "..."');
-      command = { ...base, type: "partner_support_decision", decision, reason: String(flags.reason) };
-    } else if (action === "proceed") {
-      if (!flags.transition || !flags.reason) throw new Error('Usage: llama workflow proceed <dealId> --transition <key> --reason "..."');
-      command = { ...base, type: "proceed", transitionKey: String(flags.transition), reason: String(flags.reason) };
-    } else if (action === "waive") {
-      if (!flags.guard || !flags.reason) throw new Error('Usage: llama workflow waive <dealId> --guard <key> --reason "..."');
-      command = { ...base, type: "resolve_guard", guardKey: String(flags.guard), status: "waived", reason: String(flags.reason) };
-    } else if (action === "control") {
-      const control = positional[0];
-      if (!["hold", "resume", "pass", "restore", "return"].includes(control) || !flags.reason) throw new Error('Usage: llama workflow control <dealId> hold|resume|pass|restore|return --reason "..." [--disposition stalled|future]');
-      command = { ...base, type: "control", action: control, reason: String(flags.reason), ...(flags.disposition ? { holdDisposition: String(flags.disposition) } : {}) };
-    } else if (action === "organize-ic") {
-      if (!flags.note) throw new Error('Usage: llama workflow organize-ic <dealId> --note "..."');
-      command = { ...base, type: "organize_ic", note: String(flags.note) };
-    } else if (action === "vote") {
-      const vote = positional[0];
-      if (!["yes", "no"].includes(vote) || !flags.reason) throw new Error('Usage: llama workflow vote <dealId> yes|no --reason "..."');
-      command = { ...base, type: "cast_vote", vote, reason: String(flags.reason) };
-    } else if (action === "reassign-owner") {
-      if (!flags.owner || !flags.reason) throw new Error('Usage: llama workflow reassign-owner <dealId> --owner <userId> --reason "..."');
-      command = { ...base, type: "reassign_owner", ownerId: String(flags.owner), ownerName: "resolved by server", reason: String(flags.reason) };
-    } else if (action === "execution-status") {
-      const status = { "term-sheet": "Term Sheet", "verbal-commit": "Verbal Commit", invested: "Invested" }[positional[0]];
-      if (!status || !flags.reason) throw new Error('Usage: llama workflow execution-status <dealId> term-sheet|verbal-commit|invested --reason "..."');
-      command = { ...base, type: "update_execution_status", executionStatus: status, reason: String(flags.reason) };
-    } else {
-      throw new Error(`Unknown workflow command "${action || ""}".`);
-    }
-    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/workflow`, command));
-    return;
-  }
-
-  if (area === "deal" && action === "show") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama deal show <dealId>");
-    print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/command-center`));
-    return;
-  }
-
-  if (area === "deal" && action === "feed") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama deal feed <dealId>");
-    print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/feed`));
-    return;
-  }
-
-  if (area === "deal" && action === "update") {
-    const [dealId, field, ...valueParts] = rest;
-    const value = valueParts.join(" ");
-    if (!dealId || !field) throw new Error("Usage: llama deal update <dealId> <field> <value>");
-    if (field === "status") {
-      throw new Error("Direct status writes are retired. Use `llama workflow show <dealId>` and a formal `llama workflow ...` command.");
-    }
-    print(await request("POST", "/api/deals/update", { dealId, field, value }));
-    return;
-  }
-
-  if (area === "deal" && action === "founders") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    const { flags } = parseFlags(rest.slice(2), ["json"]);
-    if (sub !== "set" || !dealId || typeof flags.json !== "string") {
-      throw new Error(
-        "Usage: llama deal founders set <dealId> --json '[{\"name\":\"Ada\",\"email\":\"ada@example.com\"}]'"
-      );
-    }
-    let founders;
-    try {
-      founders = JSON.parse(flags.json);
-    } catch {
-      throw new Error("--json must be a valid JSON array");
-    }
-    if (!Array.isArray(founders)) throw new Error("--json must be a JSON array");
-    print(await request("PUT", `/api/deals/${encodeURIComponent(dealId)}/founders`, { founders }));
-    return;
-  }
-
-  // ----- deals.extra JSONB patches (system-admin only, server-gated) -----
-  // Same endpoint as `deal update`, but `extraKey` instead of `field`.
-  // Server patches one top-level key via jsonb_set and audits the change
-  // to deal_events as field_change with field "extra.<key>". value=null
-  // deletes the key.
-  if (area === "deal" && action === "extra") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    const key = rest[2];
-    if (["stage_gates", "stage4_gate"].includes(key)) {
-      throw new Error(`Legacy ${key} is retired. Use \`llama workflow ...\` commands.`);
-    }
-    if (sub === "set") {
-      const raw = rest.slice(3).join(" ");
-      if (!dealId || !key || !raw) {
-        throw new Error(
-          "Usage: llama deal extra set <dealId> <key> <value>  (value parsed as JSON when possible, else stored as string)"
-        );
-      }
-      let value;
+    if (bundle) {
       try {
-        value = JSON.parse(raw);
+        revoked = await revokeOAuthToken({
+          baseUrl: bundle.issuer ?? getBaseUrl(),
+          token: bundle.refresh_token,
+          tokenTypeHint: "refresh_token",
+        });
       } catch {
-        value = raw;
+        revoked = false;
       }
-      print(await request("POST", "/api/deals/update", { dealId, extraKey: key, value }));
-      return;
+      await deleteBundle();
     }
-    if (sub === "unset") {
-      if (!dealId || !key) throw new Error("Usage: llama deal extra unset <dealId> <key>");
-      print(await request("POST", "/api/deals/update", { dealId, extraKey: key, value: null }));
-      return;
-    }
-    throw new Error("Usage: llama deal extra set|unset <dealId> <key> [value]");
+    print({ ok: true, message: "Local OAuth credentials cleared", serverRevoke: revoked });
+    return true;
   }
+  return false;
+}
 
-  if (area === "deal" && action === "search") {
-    const { flags, positional } = parseFlags(rest);
-    const q = positional.join(" ").trim();
-    if (!q && Object.keys(flags).length === 0) {
-      throw new Error(
-        `Usage: llama deal search <query> [--founder ...] [--owner ...] [--status ...] [--stage ...] [--source-direction Inbound|Outbound] [--limit N]`
-      );
-    }
-    print(await searchDeals(q, flags));
-    return;
-  }
-
-  if (area === "deal" && action === "list") {
-    const { flags } = parseFlags(rest);
-    print(await searchDeals("", flags));
-    return;
-  }
-
-  if (area === "deal" && action === "agent") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    const { flags, positional } = parseFlags(rest.slice(2), ["message"]);
-    const message =
-      flags.message && flags.message !== true ? String(flags.message) : positional.join(" ").trim();
-    if (sub !== "run" || !dealId || !message) {
-      throw new Error(`Usage: llama deal agent run <dealId> --message "what the server agent should do"`);
-    }
-    await runDealAgentViaThread(dealId, message, "CLI agent run");
-    return;
-  }
-
-  // ----- Deal enrichment: evidence plan + server-side enrichment trigger -----
-  // The server owns Monid credentials and all write/audit behavior. CLI only
-  // passes intent; default is dry-run so agents can inspect the harness before
-  // creating facts/links or touching memo state.
-  if (area === "deal" && action === "enrich") {
-    const dealId = rest[0];
-    if (!dealId) {
-      throw new Error(
-        "Usage: llama deal enrich <dealId> [--dry-run] [--apply] " +
-        "[--executor server_agent|external_agent|planner] " +
-        "[--sources website,github,linkedin,yc,monid] [--budget-cents 50] [--prompt]"
-      );
-    }
-    const { flags } = parseFlags(rest.slice(1), [
-      "dry-run",
-      "apply",
-      "executor",
-      "sources",
-      "budget-cents",
-      "prompt",
-      "handoff",
-      "harness-only",
-      "message",
-    ]);
-    const sources = splitCsvFlag(flags.sources);
-    const budgetCents =
-      flags["budget-cents"] !== undefined && flags["budget-cents"] !== true
-        ? Number(flags["budget-cents"])
-        : undefined;
-    const apply = boolFlag(flags, "apply");
-    const executor = flags.executor && flags.executor !== true ? String(flags.executor) : "server_agent";
-
-    if (apply && executor === "server_agent" && !boolFlag(flags, "harness-only")) {
-      await runDealAgentViaThread(dealId, buildEnrichmentAgentMessage(flags), "CLI enrichment");
-      return;
-    }
-
-    const result = await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/enrich`,
-      {
-        dryRun: apply ? false : true,
-        apply,
-        executor,
-        sources,
-        budgetCents,
-      }
-    );
-    if (flags.prompt === true || flags.handoff === true) {
-      print(result?.agentHarness?.handoffPrompt || result?.agentHarness?.systemInjection || "");
-    } else {
-      print(result);
-    }
-    return;
-  }
-
-  // ----- Collaborators (deal team — non-owner contributors) -----
-  // Accepts --user as numeric id OR @llamaventures.vc email; emails are
-  // resolved to id via /api/users so the CLI matches how the web picker
-  // works (you don't need to memorize ids).
-  if (area === "deal" && action === "collab") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    const { flags } = parseFlags(rest.slice(2));
-
-    if (!sub || !dealId) {
-      throw new Error(
-        "Usage: llama deal collab list|add|remove <dealId> [--user <userId|email>]"
-      );
-    }
-
-    if (sub === "list") {
-      print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/collaborators`));
-      return;
-    }
-
-    if (sub !== "add" && sub !== "remove" && sub !== "restore") {
-      throw new Error(`Unknown collab sub-command "${sub}". Use list, add, remove, or restore.`);
-    }
-
-    if (!flags.user) {
-      throw new Error(`Usage: llama deal collab ${sub} <dealId> --user <userId|email>`);
-    }
-
-    let userId = Number(flags.user);
-    if (!Number.isFinite(userId)) {
-      const email = String(flags.user).toLowerCase();
-      const usersPayload = await request("GET", "/api/users");
-      const list = Array.isArray(usersPayload) ? usersPayload : usersPayload.users ?? [];
-      const match = list.find((u) => String(u.email).toLowerCase() === email);
-      if (!match) throw new Error(`No active user with email "${flags.user}"`);
-      userId = match.id;
-    }
-
-    if (sub === "add") {
-      print(await request(
-        "POST",
-        `/api/deals/${encodeURIComponent(dealId)}/collaborators`,
-        { userId }
-      ));
-    } else if (sub === "remove") {
-      print(await request(
-        "DELETE",
-        `/api/deals/${encodeURIComponent(dealId)}/collaborators/${userId}`
-      ));
-    } else {
-      print(await request(
-        "POST",
-        `/api/deals/${encodeURIComponent(dealId)}/collaborators/${userId}/restore`
-      ));
-    }
-    return;
-  }
-
-  // ----- Deal links (URLs attached to a deal — separate from brief link blocks) -----
-  // Soft-delete: removal sets deleted_at, restore clears it. List excludes
-  // trashed by default; pass --include-deleted to see them.
-  if (area === "deal" && action === "link") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    if (!sub || !dealId) {
-      throw new Error(
-        "Usage: llama deal link list|add|delete|restore <dealId> [...flags|<linkId>]"
-      );
-    }
-
-    if (sub === "list") {
-      const { flags } = parseFlags(rest.slice(2));
-      const qs = flags["include-deleted"] ? "?include_deleted=1" : "";
-      print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/links${qs}`));
-      return;
-    }
-
-    if (sub === "add") {
-      const { flags } = parseFlags(rest.slice(2));
-      if (!flags.url) throw new Error("Usage: llama deal link add <dealId> --url <url> [--label \"...\"]");
-      print(await request(
-        "POST",
-        `/api/deals/${encodeURIComponent(dealId)}/links`,
-        { url: String(flags.url), label: flags.label ? String(flags.label) : "" }
-      ));
-      return;
-    }
-
-    if (sub === "delete" || sub === "restore") {
-      const linkId = rest[2];
-      if (!linkId) throw new Error(`Usage: llama deal link ${sub} <dealId> <linkId>`);
-      const path = `/api/deals/${encodeURIComponent(dealId)}/links/${encodeURIComponent(linkId)}`;
-      // @core-api-operation DELETE /api/deals/{dealId}/links/{linkId}
-      // @core-api-operation POST /api/deals/{dealId}/links/{linkId}/restore
-      print(await request(
-        sub === "delete" ? "DELETE" : "POST",
-        sub === "delete" ? path : `${path}/restore`
-      ));
-      return;
-    }
-
-    throw new Error(`Unknown link sub-command "${sub}". Use list, add, delete, or restore.`);
-  }
-
-  // ----- Deal soft-delete / restore / trash list -----
-  // Server side: DELETE /api/deals/:id uses authenticate() (token works).
-  // POST /restore currently uses session-only auth() — known asymmetry,
-  // pending server fix to swap to authenticate() for parity.
-  if (area === "deal" && action === "delete") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama deal delete <dealId>");
-    print(await request("DELETE", `/api/deals/${encodeURIComponent(dealId)}`));
-    return;
-  }
-
-  if (area === "deal" && action === "restore") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama deal restore <dealId>");
-    // NOTE: server uses session-only auth() today — token callers get 401
-    // until server is updated. CLI surface is forward-compatible.
-    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/restore`));
-    return;
-  }
-
-  if (area === "deal" && action === "trash") {
-    print(await request("GET", "/api/deals/deleted"));
-    return;
-  }
-
-  // ----- Canonical source-packet ingest (atomic facts + optional Feed note) -----
-  if (area === "deal" && action === "ingest") {
-    const dealId = rest[0];
-    const { flags } = parseFlags(rest.slice(1), ["file", "idempotency-key"]);
-    if (!dealId || !flags.file || flags.file === true) {
-      throw new Error(
-        "Usage: llama deal ingest <dealId> --file <packet.json> [--idempotency-key <key>]\n" +
-        'Packet: {"source":{"kind":"meeting_note","title":"Office visit"},' +
-        '"facts":[{"category":"team","claim":"..."}],"note":"..."}'
-      );
-    }
-
-    let packet;
-    try {
-      packet = JSON.parse(await readFile(String(flags.file), "utf8"));
-    } catch (error) {
-      throw new Error(`Cannot read ingest packet ${flags.file}: ${error?.message ?? String(error)}`);
-    }
-    if (!packet || Array.isArray(packet) || typeof packet !== "object") {
-      throw new Error("Ingest packet must be a JSON object");
-    }
-    if (flags["idempotency-key"] !== undefined && flags["idempotency-key"] !== true) {
-      packet.idempotencyKey = String(flags["idempotency-key"]);
-    }
-
-    // @core-api-operation POST /api/deals/{dealId}/ingest
-    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/ingest`, packet));
-    return;
-  }
-
-  // ----- Deal facts (AI-extracted or human-asserted, with verification) -----
-  if (area === "deal" && action === "fact") {
-    const sub = rest[0];
-    const dealId = rest[1];
-    const { flags } = parseFlags(rest.slice(2));
-
-    if (!sub || !dealId) {
-      throw new Error("Usage: llama deal fact list|add|verify <dealId> [...]");
-    }
-
-    if (sub === "list") {
-      print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/facts`));
-      return;
-    }
-
-    if (sub === "add") {
-      const claim = flags.claim ?? flags.value;
-      const sourceUrl = flags["source-url"] ?? flags.sourceUrl;
-      if (!flags.category || !claim) {
-        throw new Error(
-          `Usage: llama deal fact add <dealId> --category <cat> --claim "<text>" ` +
-          `[--source "..."] [--source-url <url>] [--confidence high|medium|low] [--attested]`
-        );
-      }
-      // --attested: the caller takes responsibility that this is accurate
-      // (verified against the source). With it, the fact is recorded as
-      // vouched; without it, it stays unverified. Declare honestly.
-      print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/facts`, {
-        category: String(flags.category),
-        claim: String(claim),
-        source: flags.source ? String(flags.source) : "",
-        ...(sourceUrl ? { sourceUrl: String(sourceUrl) } : {}),
-        confidence: flags.confidence ? String(flags.confidence) : "medium",
-        attested: flags.attested === true,
-      }));
-      return;
-    }
-
-    if (sub === "verify") {
-      const factId = rest[2];
-      if (!factId) {
-        throw new Error(
-          `Usage: llama deal fact verify <dealId> <factId> ` +
-          `--status confirmed|disputed [--corrected-value "..."]`
-        );
-      }
-      if (!flags.status || !["confirmed", "disputed"].includes(String(flags.status))) {
-        throw new Error("--status must be 'confirmed' or 'disputed'");
-      }
-      const body = { status: String(flags.status) };
-      if (flags["corrected-value"] !== undefined && flags["corrected-value"] !== true) {
-        body.correctedValue = String(flags["corrected-value"]);
-      }
-      print(await request(
-        "PATCH",
-        `/api/deals/${encodeURIComponent(dealId)}/facts/${encodeURIComponent(factId)}`,
-        body
-      ));
-      return;
-    }
-
-    // Lift a contest that turned out to be wrong. Contesting a claim removes
-    // it from everything the Deal Agent treats as current; before this existed
-    // there was no way back, so a TRUE claim contested on weak evidence stayed
-    // suppressed in every regenerated brief and memo. `verify --status
-    // confirmed` does NOT do this — trust and contest are separate axes.
-    if (sub === "uncontest") {
-      const factId = rest[2];
-      const reason = flags.reason !== undefined && flags.reason !== true ? String(flags.reason).trim() : "";
-      if (!factId || !reason) {
-        throw new Error(
-          `Usage: llama deal fact uncontest <dealId> <factId> --reason "<why the contest was wrong>"`
-        );
-      }
-      // @core-api-operation POST /api/deals/{dealId}/facts/{factId}/uncontest
-      print(await request(
-        "POST",
-        `/api/deals/${encodeURIComponent(dealId)}/facts/${encodeURIComponent(factId)}/uncontest`,
-        { reason }
-      ));
-      return;
-    }
-
-    throw new Error(`Unknown fact sub-command "${sub}". Use list, add, verify, or uncontest.`);
-  }
-
-  // ----- Brief refresh: trigger stale-section re-eval watcher run -----
-  // Server only fires for unlocked sections that are stale per the
-  // freshness policy; --force runs every unlocked watcher-managed section.
-  if (area === "deal" && action === "refresh-brief") {
-    const { flags } = parseFlags(rest);
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama deal refresh-brief <dealId> [--force]");
-    const qs = flags.force ? "?force=true" : "";
-    print(await request("POST", `/api/deals/${encodeURIComponent(dealId)}/refresh-brief${qs}`));
-    return;
-  }
-
-  // ----- Agent-run revert (legacy 4-section brief model) -----
-  // Reverts a single section to the `before` value snapshotted by the
-  // watcher run. Does NOT re-fire the watcher (intentional: human action).
-  // Logs `brief_reverted` in deal_events. Section keys are the legacy
-  // top-level sections, not block ids.
-  if (area === "deal" && action === "revert-run") {
-    const { flags } = parseFlags(rest);
-    const dealId = rest[0];
-    const runId = rest[1];
-    const valid = ["company", "team", "highlights", "recommendation"];
-    if (!dealId || !runId || !flags.section) {
-      throw new Error(
-        `Usage: llama deal revert-run <dealId> <runId> --section ${valid.join("|")}`
-      );
-    }
-    if (!valid.includes(String(flags.section))) {
-      throw new Error(`--section must be one of ${valid.join(", ")}`);
-    }
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/agent-runs/${encodeURIComponent(runId)}/revert`,
-      { section: String(flags.section) }
-    ));
-    return;
-  }
-
-  if (area === "approvals" && action === "list") {
-    print(await request("GET", "/api/partner/approvals"));
-    return;
-  }
-
-  if (area === "approvals" && action === "decide") {
-    const { flags, positional } = parseFlags(rest);
-    const approvalId = Number(positional[0]);
-    const decision = positional[1];
-    if (!Number.isFinite(approvalId) || !["approved", "rejected"].includes(decision)) {
-      throw new Error("Usage: llama approvals decide <approvalId> approved|rejected [--note ...]");
-    }
-    print(await request("POST", "/api/partner/approvals", {
-      approvalId,
-      decision,
-      note: flags.note || "",
-    }));
-    return;
-  }
-
-  // ----- Ownership: self-claim -----
-  if (area === "claim") {
-    const dealId = action; // second positional
-    const { flags } = parseFlags(rest, ["reason"]);
-    const reason = typeof flags.reason === "string" ? flags.reason.trim() : "";
-    if (!dealId || !reason) {
-      throw new Error('Usage: llama claim <dealId> --reason "<why this person should own it>"');
-    }
-    const me = await request("GET", "/api/me");
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/propose-owner`,
-      { userId: me.id, reason }
-    ));
-    return;
-  }
-
-  // ----- Ownership: partner nominates someone else -----
-  if (area === "nominate") {
-    const dealId = action;
-    const { flags } = parseFlags(rest, ["user", "reason"]);
-    const userId = Number(flags.user);
-    const reason = typeof flags.reason === "string" ? flags.reason.trim() : "";
-    if (!dealId || !Number.isFinite(userId) || !reason) {
-      throw new Error('Usage: llama nominate <dealId> --user <userId> --reason "<why>"');
-    }
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/propose-owner`,
-      { userId, reason }
-    ));
-    return;
-  }
-
-  // ----- Nominations inbox (for the nominee) -----
-  if (area === "nominations" && action === "list") {
-    print(await request("GET", "/api/me/nominations"));
-    return;
-  }
-  if (area === "nominations" && action === "decide") {
-    const approvalId = Number(rest[0]);
-    const decision = rest[1];
-    if (!Number.isFinite(approvalId) || !["accepted", "declined"].includes(decision)) {
-      throw new Error("Usage: llama nominations decide <approvalId> accepted|declined");
-    }
-    print(await request("POST", `/api/nominations/${approvalId}`, { decision }));
-    return;
-  }
-
-  // ----- Timeline -----
-  if (area === "timeline") {
-    const dealId = action;
-    if (!dealId) throw new Error("Usage: llama timeline <dealId>");
-    print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/timeline`));
-    return;
-  }
-
-  // ----- Post to timeline -----
-  if (area === "post") {
-    const dealId = action;
-    const { flags, positional } = parseFlags(rest);
-    const body = positional[0];
-    if (!dealId || !body) {
-      throw new Error(`Usage: llama post <dealId> "message body" [--link url] [--link-name "name"] [--cue]`);
-    }
-    const attachments = flags.link
-      ? [{ url: String(flags.link), name: flags["link-name"] ? String(flags["link-name"]) : String(flags.link) }]
-      : [];
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/posts`,
-      { body, attachments, cue_authorized: flags.cue === true }
-    ));
-    return;
-  }
-
-  // ----- Wiki: search -----
-  if (area === "wiki" && action === "search") {
-    const { positional } = parseFlags(rest);
+async function handleWiki(action, rest) {
+  const { flags, positional } = parseFlags(rest);
+  const slug = positional[0];
+  if (action === "search") {
     const q = positional.join(" ").trim();
     if (!q) throw new Error("Usage: llama wiki search <query>");
     print(await request("GET", `/api/wiki/search?q=${encodeURIComponent(q)}`));
     return;
   }
-
-  // ----- Wiki: read a single article (EN by default) -----
-  // Hits /api/wiki/<slug> directly. Earlier versions did a fuzzy
-  // /api/wiki/search call and filtered for an exact slug match — that
-  // missed any article whose slug-as-string didn't appear in title or
-  // content (e.g. a slug like "foo-bar" against an article titled "Foo Bar"),
-  // so a real article would print as "not found" even though it existed.
-  if (area === "wiki" && action === "read") {
-    const { flags, positional } = parseFlags(rest);
-    const slug = positional[0];
+  if (action === "read") {
     if (!slug) throw new Error("Usage: llama wiki read <slug> [--lang en|zh]");
-    const lang = flags.lang === "zh" ? "zh" : "en";
-    const path = `/api/wiki/${encodeURIComponent(slug)}?lang=${lang}`;
     // @core-api-operation GET /api/wiki/{slug}
-    print(await request("GET", path));
+    print(await request("GET", `/api/wiki/${encodeURIComponent(slug)}?lang=${flags.lang === "zh" ? "zh" : "en"}`));
     return;
   }
-
-  // ----- Wiki: save (create or update) -----
-  // Two body modes:
-  //   --content "..."  inline markdown OR raw HTML (string)
-  //   --file <path>    read body from a file; if .html/.htm,
-  //                    content_type auto-detects to 'html'
-  // --content-type <markdown|html> overrides auto-detect.
-  // Refuses content_type mismatch on existing entries (server-side check;
-  // CLI surfaces the server error verbatim).
-  if (area === "wiki" && action === "save") {
-    const { flags, positional } = parseFlags(rest);
-    const slug = positional[0];
-    const title = flags.title;
-    const inlineContent = flags.content;
-    const filePath = flags.file;
-    const sourcesRaw = flags.sources;
-    if (!slug || !title || !sourcesRaw || (!inlineContent && !filePath)) {
-      throw new Error(
-        `Usage:
-  llama wiki save <slug> --title "..." --content "..." --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
-or
-  llama wiki save <slug> --title "..." --file path/to/article.{md,html} --sources "url1;url2" [--type company] [--related "A;B"] [--lang en|zh] [--content-type markdown|html]
-or, to put a document itself on the wiki:
-  llama wiki save <slug> --title "..." --file path/to/deck.{pdf,docx,xlsx} --sources "..." [--doc-kind ...]
-
-Pass either --content (inline) or --file (read from disk). With --file, content_type auto-detects from extension (.html/.htm → html, else markdown). Use --content-type to override.
-
-A .pdf / .docx / .xlsx uploads as the entry itself: readers open the document at /wiki/<slug> — a PDF in the browser's viewer, a spreadsheet with one tab per sheet — and the original stays downloadable. --content-type does not apply there.
-
-Routing — is this the right command?
-  ✓ Cross-deal / institutional knowledge (sector landscape, market map, thesis, framework, methodology)
-      → YES, you're in the right place.
-  ✗ Deal-specific HTML (IC memo for X, dashboard for X, 2×2 for one company)
-      → use \`llama html upload <dealId> --new --title "..." --file <path>\` instead.
-  ✗ Founder-facing public share link
-      → escape to Netlify only when the user explicitly says "share publicly" / "give it to the founder";
-        Llama Command outranks Netlify for everything internal.`
-      );
+  if (action === "save") {
+    if (!slug || typeof flags.title !== "string" || typeof flags.sources !== "string") {
+      throw new Error('Usage: llama wiki save <slug> --title "..." --content "..."|--file <path> --sources "url1;url2"');
     }
-    if (inlineContent && filePath) {
-      throw new Error("Pass either --content OR --file, not both.");
-    }
-    const splitCsvFlag = (v) => String(v).split(/[;|]/).map((s) => s.trim()).filter(Boolean);
-
-    // A document goes up as bytes, not as text. The server converts DOCX and
-    // XLSX for the reader and keeps the original for download; a PDF opens in
-    // the browser's own viewer. Everything else here stays the JSON path.
-    const docExt = filePath
-      ? String(filePath).toLowerCase().match(/\.(pdf|docx|xlsx)$/)?.[1]
-      : null;
-    if (docExt) {
-      if (flags["content-type"]) {
-        throw new Error(
-          `--content-type does not apply to a .${docExt}: the server decides how to render it from the file itself.`,
-        );
-      }
-      const { readFileSync } = await import("fs");
-      const { basename } = await import("path");
-      const buf = readFileSync(String(filePath));
-      const MAX = 50 * 1024 * 1024;
-      if (buf.length > MAX) {
-        throw new Error(
-          `${basename(String(filePath))} is ${buf.length} bytes; the wiki caps files at ${MAX} (50MB). Link to the Drive copy instead.`,
-        );
-      }
-      const mime = {
-        pdf: "application/pdf",
-        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }[docExt];
-      const form = new FormData();
-      form.append("file", new Blob([buf], { type: mime }), basename(String(filePath)));
-      form.append("lang", flags.lang === "zh" ? "zh" : "en");
-      form.append("title", String(title));
-      form.append("sources", splitCsvFlag(sourcesRaw).join(";"));
-      if (flags.type) form.append("type", String(flags.type));
-      if (flags["doc-kind"]) form.append("doc_kind", String(flags["doc-kind"]));
-
-      const headers = await getAuthHeaders();
-      // @core-api-operation POST /api/wiki/{slug}/file
-      const res = await fetch(
-        `${getBaseUrl()}/api/wiki/${encodeURIComponent(slug)}/file`,
-        { method: "POST", headers, body: form },
-      );
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          `HTTP ${res.status}: ${out?.error || JSON.stringify(out).slice(0, 300)}`,
-        );
-      }
-      print(out);
-      return;
-    }
-
-    // Read body — either inline or from file.
-    let body;
-    let inferredType = "markdown";
-    if (filePath) {
-      const { readFileSync } = await import("fs");
-      body = readFileSync(String(filePath), "utf-8");
-      const lower = String(filePath).toLowerCase();
-      if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-        inferredType = "html";
-      }
-    } else {
-      body = String(inlineContent);
-    }
-    // Determine content_type: explicit flag wins over file-extension inference.
-    let contentType = inferredType;
-    if (flags["content-type"]) {
-      const v = String(flags["content-type"]).toLowerCase();
-      if (v !== "markdown" && v !== "html") {
-        throw new Error(`--content-type must be 'markdown' or 'html', got "${v}"`);
-      }
-      contentType = v;
-    }
-    const splitCsv = (v) => String(v).split(/[;|]/).map((s) => s.trim()).filter(Boolean);
-    const payload = {
+    if (flags.content && flags.file) throw new Error("Use either --content or --file, not both.");
+    const content = flags.file ? await readFile(String(flags.file), "utf8") : flags.content;
+    if (typeof content !== "string") throw new Error("Wiki save requires --content or --file.");
+    const inferred = typeof flags.file === "string" && /\.html?$/i.test(flags.file) ? "html" : "markdown";
+    print(await request("POST", "/api/wiki/save", {
       slug,
-      title: String(title),
-      content: body,
-      sources: splitCsv(sourcesRaw),
-      type: flags.type ? String(flags.type) : undefined,
-      related: flags.related ? splitCsv(flags.related) : undefined,
+      title: flags.title,
+      content,
+      sources: flags.sources.split(/[;|]/).map((value) => value.trim()).filter(Boolean),
+      type: flags.type,
+      related: typeof flags.related === "string" ? flags.related.split(/[;|]/).map((value) => value.trim()).filter(Boolean) : undefined,
       lang: flags.lang === "zh" ? "zh" : "en",
-      status: flags.status ? String(flags.status) : undefined,
-      content_type: contentType,
-    };
-    print(await request("POST", "/api/wiki/save", payload));
+      content_type: typeof flags["content-type"] === "string" ? flags["content-type"] : inferred,
+    }));
     return;
   }
-
-  // ----- Wiki: delete (soft) / restore -----
-  // Soft-delete (CONSTITUTION §8 reversible). For HTML entries the
-  // sentinel deal_browse_html body + assets are soft-deleted too;
-  // `llama wiki restore <slug>` brings it all back.
-  if (area === "wiki" && (action === "delete" || action === "restore")) {
-    const { flags, positional } = parseFlags(rest);
-    const slug = positional[0];
+  if (["delete", "restore"].includes(action)) {
     if (!slug) throw new Error(`Usage: llama wiki ${action} <slug> [--lang en|zh]`);
     const lang = flags.lang === "zh" ? "zh" : "en";
-    const qs = `?lang=${lang}`;
     if (action === "delete") {
-      print(await request("DELETE", `/api/wiki/${encodeURIComponent(slug)}${qs}`));
+      // @core-api-operation DELETE /api/wiki/{slug}
+      print(await request("DELETE", `/api/wiki/${encodeURIComponent(slug)}?lang=${lang}`));
     } else {
-      print(await request("POST", `/api/wiki/${encodeURIComponent(slug)}/restore${qs}`));
+      // @core-api-operation POST /api/wiki/{slug}/restore
+      print(await request("POST", `/api/wiki/${encodeURIComponent(slug)}/restore?lang=${lang}`));
     }
     return;
   }
+  throw new Error("Wiki actions: search, read, save, delete, restore.");
+}
 
-  // ----- Brief blocks: list / add-* / edit / delete -----
-  // The block-based deal brief stores an ordered array of typed blocks
-  // (text / link / embed / callout) per deal. These commands wrap the
-  // /api/deals/:id/blocks{,/:id} endpoints. To add a block we read +
-  // append + PUT (two roundtrips); single-block edit + delete have
-  // dedicated PATCH/DELETE endpoints.
-  if (area === "brief" && action === "blocks") {
-    const dealId = rest[0];
-    if (!dealId) throw new Error("Usage: llama brief blocks <dealId>");
-    print(await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`));
+async function main() {
+  const [area, action, ...rest] = process.argv.slice(2);
+
+  if (["--version", "-v", "version"].includes(area)) {
+    if (["--json", "json"].includes(action)) print(getBuildInfo());
+    else if (["--check", "check"].includes(action)) console.log(await getUpdateNudge() || `llama CLI ${PKG_VERSION} — up to date`);
+    else console.log(PKG_VERSION);
+    return;
+  }
+  if (!area || ["help", "--help", "-h"].includes(area)) {
+    usage(area === "help" ? action : undefined);
+    return;
+  }
+  if (["--help", "-h"].includes(action) || rest.some((value) => ["--help", "-h"].includes(value))) {
+    usage(area);
     return;
   }
 
-  // Per-block read — pairs with the manifest returned by /command-center
-  // (i.e. `llama deal show`). Agent flow: read manifest → pick blocks
-  // by id → fetch only those bodies, instead of pulling the full array.
-  if (area === "brief" && action === "block") {
-    const dealId = rest[0];
-    const blockId = rest[1];
-    if (!dealId || !blockId) throw new Error("Usage: llama brief block <dealId> <blockId>");
-    print(await request(
-      "GET",
-      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`
-    ));
-    return;
-  }
+  assertActiveSurface(area, action);
 
-  if (area === "brief" && action?.startsWith("add-")) {
-    const type = action.slice(4); // "add-text" → "text"
-    if (!["text", "link", "embed", "callout"].includes(type)) {
-      throw new Error(`Unknown block type "${type}". Use add-text, add-link, add-embed, or add-callout.`);
-    }
-    const { flags } = parseFlags(rest);
-    const dealId = rest[0];
-    if (!dealId) throw new Error(`Usage: llama brief add-${type} <dealId> [...flags]`);
+  if (await handleAuth(area, action, rest)) return;
 
-    const id = (typeof crypto !== "undefined" && "randomUUID" in crypto)
-      ? crypto.randomUUID()
-      : `b_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const meta = { updated_at: new Date().toISOString(), updated_by: "cli", by_agent: false };
-
-    // --source-section <key>: target a structured section (e.g. team /
-    // highlights / competitors). Without this, blocks land in the
-    // "_other" group at the bottom of the TOC. AI writers want this
-    // virtually always — without it they cannot contribute to existing
-    // structured sections.
-    if (flags["source-section"]) {
-      meta.sourceSection = String(flags["source-section"]);
-    }
-
-    // --reply-to <blockId>: snapshot the parent block's heading + a
-    // 200-char excerpt into meta so the back-link survives parent edits
-    // or deletion. CLI only — replies are always text in the UI; allow
-    // any add-* type here for symmetry but the UI only renders the
-    // back-link on text + callout blocks today.
-    let cur = null;
-    if (flags["reply-to"]) {
-      const replyTo = String(flags["reply-to"]);
-      cur = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`);
-      const parent = (cur.blocks ?? []).find((b) => b.id === replyTo);
-      if (!parent) throw new Error(`--reply-to: block ${replyTo} not found on deal ${dealId}`);
-      meta.reply_to = parent.id;
-      // heading: text/callout → heading; link/embed → label; fallback "(untitled block)"
-      meta.reply_to_heading =
-        parent.heading || parent.label || "(untitled block)";
-      // excerpt: text/callout → heading + body; link → label + description; embed → label
-      const excerptParts =
-        parent.type === "text" || parent.type === "callout"
-          ? [parent.heading, parent.body]
-          : parent.type === "link"
-            ? [parent.label, parent.description]
-            : [parent.label];
-      const excerpt = excerptParts.filter(Boolean).join("\n\n").slice(0, 200);
-      meta.reply_to_excerpt = excerpt;
-    }
-
-    let block;
-    if (type === "text") {
-      block = { id, type, heading: flags.heading ? String(flags.heading) : "", body: flags.body ? String(flags.body) : "", meta };
-    } else if (type === "link") {
-      if (!flags.url || !flags.label) throw new Error("add-link requires --url and --label");
-      block = { id, type, url: String(flags.url), label: String(flags.label), description: flags.description ? String(flags.description) : undefined, meta };
-    } else if (type === "embed") {
-      if (!flags.url) throw new Error("add-embed requires --url");
-      block = { id, type, url: String(flags.url), label: flags.label ? String(flags.label) : undefined, meta };
-    } else {
-      block = { id, type, tone: flags.tone ? String(flags.tone) : "insight", heading: flags.heading ? String(flags.heading) : "", body: flags.body ? String(flags.body) : "", meta };
-    }
-
-    // --position top|bottom (default: top). Top matches the UI behavior
-    // changed 2026-05-03 — newly added blocks land at the top of the
-    // brief so the writer (or reader) sees the contribution without
-    // scrolling. Pass `--position bottom` to append, e.g. for batched
-    // AI writes that should preserve insertion order.
-    const position = flags.position ? String(flags.position) : "top";
-    if (position !== "top" && position !== "bottom") {
-      throw new Error(`--position must be "top" or "bottom" (got "${position}")`);
-    }
-
-    if (!cur) cur = await request("GET", `/api/deals/${encodeURIComponent(dealId)}/blocks`);
-    const existing = cur.blocks ?? [];
-    const next = position === "top" ? [block, ...existing] : [...existing, block];
-    print(await request("PUT", `/api/deals/${encodeURIComponent(dealId)}/blocks`, {
-      blocks: next,
-      cue_authorized: flags.cue === true,
-    }));
-    console.log(`Created block ${id}`);
-    return;
-  }
-
-  if (area === "brief" && action === "edit") {
-    const { flags } = parseFlags(rest);
-    const dealId = rest[0];
-    const blockId = rest[1];
-    if (!dealId || !blockId) {
-      throw new Error("Usage: llama brief edit <dealId> <blockId> [--heading ...] [--body ...] [--url ...] [--label ...] [--description ...] [--tone ...] [--source-section ...] [--lock|--unlock] [--hide|--unhide] [--cue]");
-    }
-    const patch = {};
-    for (const k of ["heading", "body", "url", "label", "description", "tone"]) {
-      if (flags[k] !== undefined && flags[k] !== true) patch[k] = String(flags[k]);
-    }
-
-    // Meta toggles. The PATCH endpoint accepts a meta object that gets
-    // merged with the existing block.meta server-side, so we only need
-    // to send the keys we want to change. lock/hide flags are pure
-    // toggles (no value); source-section takes a key.
-    const metaPatch = {};
-    if (flags.lock === true) metaPatch.locked = true;
-    if (flags.unlock === true) metaPatch.locked = false;
-    if (flags.hide === true) metaPatch.hidden = true;
-    if (flags.unhide === true) metaPatch.hidden = false;
-    if (flags["source-section"] !== undefined && flags["source-section"] !== true) {
-      metaPatch.sourceSection = String(flags["source-section"]);
-    }
-    if (Object.keys(metaPatch).length > 0) patch.meta = metaPatch;
-    if (flags.cue === true) patch.cue_authorized = true;
-
-    if (Object.keys(patch).length === 0 || (Object.keys(patch).length === 1 && patch.cue_authorized === true)) {
-      throw new Error("at least one field flag required");
-    }
-    print(await request("PATCH", `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`, patch));
-    return;
-  }
-
-  if (area === "brief" && action === "delete") {
-    const dealId = rest[0];
-    const blockId = rest[1];
-    if (!dealId || !blockId) throw new Error("Usage: llama brief delete <dealId> <blockId>");
-    print(await request("DELETE", `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}`));
-    return;
-  }
-
-  if (area === "brief" && action === "restore") {
-    const dealId = rest[0];
-    const blockId = rest[1];
-    if (!dealId || !blockId) throw new Error("Usage: llama brief restore <dealId> <blockId>");
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/restore`
-    ));
-    return;
-  }
-
-  // Per-block content history (Wikipedia model — every overwrite snapshots
-  // the prev full block JSON). Two sub-actions: list versions, and restore
-  // a specific version. Restore is itself reversible — when you restore
-  // version N, the OUTGOING version (the one being replaced) gets snapshotted
-  // into history, so undoing a wrong restore is one more `restore-version`
-  // call away.
-  if (area === "brief" && action === "history") {
-    const { flags } = parseFlags(rest);
-    const dealId = rest[0];
-    const blockId = rest[1];
-    if (!dealId || !blockId) {
-      throw new Error("Usage: llama brief history <dealId> <blockId> [--limit 50]");
-    }
-    const params = new URLSearchParams();
-    if (flags.limit) params.set("limit", String(flags.limit));
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    print(await request(
-      "GET",
-      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/history${qs}`
-    ));
-    return;
-  }
-
-  if (area === "brief" && action === "restore-version") {
-    const dealId = rest[0];
-    const blockId = rest[1];
-    const historyId = rest[2];
-    if (!dealId || !blockId || !historyId) {
-      throw new Error("Usage: llama brief restore-version <dealId> <blockId> <historyId>\n" +
-        "  Find <historyId> via `llama brief history <dealId> <blockId>`");
-    }
-    const idNum = Number(historyId);
-    if (!Number.isFinite(idNum)) throw new Error(`<historyId> must be a number, got "${historyId}"`);
-    print(await request(
-      "POST",
-      `/api/deals/${encodeURIComponent(dealId)}/blocks/${encodeURIComponent(blockId)}/history`,
-      { history_id: idNum }
-    ));
-    return;
-  }
-
-  // ----- Admin (system admin only) -----
-  // System-admin gated commands — server enforces via isSystemAdmin()
-  // checking LLAMA_COMMAND_ADMIN_EMAILS env. Non-admin tokens get 403.
-  // CLI doesn't pre-check; if you can't run these, ask the system admin
-  // to mint you an admin token (rare — most ops should never need this surface).
-  //
-  // The three event feeds map 1:1 to the /admin web console tabs:
-  //   - auth-events  : signin / token / impersonation audit (security)
-  //   - deal-events  : every field/owner/brief change cross-deal (business)
-  //   - agent-events : every AI tool call / loop_stalled / max_turns (AI ops)
-  if (area === "admin") {
-    const sub = action;
-    const valid = ["workflow", "auth-events", "deal-events", "agent-events"];
-    if (!valid.includes(sub)) {
-      throw new Error(
-        `Unknown admin sub-command "${sub || ""}". Use: ${valid.join(", ")}`
-      );
-    }
-    if (sub === "workflow") {
-      if (!["audit", "remediate"].includes(rest[0])) {
-        throw new Error("Usage: llama admin workflow audit|remediate ...");
-      }
-      if (rest[0] === "audit") {
-        const { flags } = parseFlags(rest.slice(1), ["deal", "all"]);
-        // @core-api-operation GET /api/admin/workflow-audit
-        print(await request("GET", workflowAuditPath(flags)));
-        return;
-      }
-      const { flags } = parseFlags(rest.slice(1), [
-        "deal",
-        "guard",
-        "apply",
-        "expected-revision",
-        "reason",
-      ]);
-      const body = workflowRemediationBody(
-        flags,
-        flags.apply === true ? `cli-workflow-remediation-${randomUUID()}` : undefined,
-      );
-      // @core-api-operation POST /api/admin/workflow-remediation
-      print(await request("POST", WORKFLOW_REMEDIATION_PATH, body));
+  if (area === "agent-onboard" || (area === "agent" && ["onboard", "briefing"].includes(action))) {
+    const headers = await getAuthHeaders();
+    if (!Object.keys(headers).length) {
+      console.log(onboardingNoAuth());
       return;
     }
+    try {
+      const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+      const response = await request("GET", `/api/agent/briefing?${params}`);
+      process.stdout.write(response?.briefing || readBriefing());
+    } catch (error) {
+      process.stderr.write(`warning: live briefing unavailable (${error.message}); using bundled fallback.\n`);
+      process.stdout.write(readBriefing());
+    }
+    return;
+  }
+
+  if (area === "agent" && action === "bootstrap") {
+    const { flags } = parseFlags(rest, ["json", "limit"]);
+    const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+    if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+    const manifest = await request("GET", `/api/agent/manifest?${params}`);
+    if (flags.json) print(manifest);
+    else process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
+    return;
+  }
+
+  if (area === "skills" || (area === "agent" && action === "skills")) {
+    const sub = area === "skills" ? action : rest[0];
+    const args = area === "skills" ? rest : rest.slice(1);
+    const { flags, positional } = parseFlags(args, ["json", "limit"]);
+    if (!sub || sub === "list") {
+      const params = new URLSearchParams();
+      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+      print(await request("GET", `/api/agent/skills${params.size ? `?${params}` : ""}`));
+      return;
+    }
+    if (sub === "search") {
+      const q = positional.join(" ").trim();
+      if (!q) throw new Error("Usage: llama skills search <query>");
+      const params = new URLSearchParams({ q });
+      if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
+      print(await request("GET", `/api/agent/skills?${params}`));
+      return;
+    }
+    if (["show", "read"].includes(sub)) {
+      if (!positional[0]) throw new Error("Usage: llama skills show <slug>");
+      const result = await request("GET", `/api/agent/skills/${encodeURIComponent(positional[0])}`);
+      if (flags.json) print(result);
+      else process.stdout.write(`${result.skill?.content || JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    throw new Error("Skills actions: list, search, show.");
+  }
+
+  if (["pref", "prefs", "preferences"].includes(area)) {
+    if (!action || action === "list") {
+      const { flags } = parseFlags(rest, ["status"]);
+      const params = new URLSearchParams();
+      if (flags.status && flags.status !== true) params.set("status", String(flags.status));
+      print(await request("GET", `/api/agent/preferences${params.size ? `?${params}` : ""}`));
+      return;
+    }
+    if (action === "add") {
+      const { flags, positional } = parseFlags(rest, ["team", "evidence"]);
+      const [key, ...contentParts] = positional;
+      const content = contentParts.join(" ").trim();
+      if (!key || !content) throw new Error('Usage: llama pref add <key> "<content>" [--team]');
+      print(await request("POST", "/api/agent/preferences", {
+        scope: flags.team ? "team" : "user",
+        key,
+        content,
+        evidence: flags.evidence === true ? undefined : flags.evidence,
+      }));
+      return;
+    }
+    if (["approve", "retire"].includes(action)) {
+      const id = Number(rest[0]);
+      if (!Number.isInteger(id) || id <= 0) throw new Error(`Usage: llama pref ${action} <id>`);
+      print(await request("PATCH", `/api/agent/preferences/${id}`, { status: action === "approve" ? "active" : "retired" }));
+      return;
+    }
+    throw new Error("Preference actions: list, add, approve, retire.");
+  }
+
+  if (area === "explain" || (area === "agent" && action === "explain")) {
+    const args = area === "explain" ? [action, ...rest].filter(Boolean) : rest;
+    const { flags, positional } = parseFlags(args, ["json", "type", "id", "lang"]);
+    const params = new URLSearchParams();
+    if (positional.length) params.set("q", positional.join(" "));
+    if (flags.type && flags.type !== true) params.set("type", String(flags.type));
+    if (flags.id && flags.id !== true) params.set("id", String(flags.id));
+    if (flags.lang === "zh") params.set("lang", "zh");
+    if (!params.has("q") && !(params.has("type") && params.has("id"))) throw new Error("Usage: llama explain <url-or-object>");
+    print(await request("GET", `/api/agent/explain?${params}`));
+    return;
+  }
+
+  if (area === "pitch") {
+    if (!action) await runPitchRepl();
+    else await handlePitch(action, rest);
+    return;
+  }
+
+  if (area === "deal" && action === "search") {
+    const { flags, positional } = parseFlags(rest, ["state", "limit"]);
+    // @core-api-operation GET /api/occam/deals
+    print(await request("GET", buildDealSearchPath(positional.join(" ").trim(), flags)));
+    return;
+  }
+  if (area === "deal" && action === "read") {
+    const dealId = rest[0];
+    const { flags } = parseFlags(rest.slice(1), ["detail"]);
+    // @core-api-operation GET /api/occam/deals/{dealId}
+    print(await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview")));
+    return;
+  }
+  if (area === "deal" && ["create", "write"].includes(action)) {
+    const { flags } = parseFlags(rest, ["json"]);
+    const input = await readJsonInput(flags.json);
+    print(await request("POST", "/api/occam/deals/commands", prepareDealCommand(action, input)));
+    return;
+  }
+
+  if (area === "wiki") {
+    await handleWiki(action, rest);
+    return;
+  }
+
+  if (area === "admin") {
+    const allowed = ["auth-events", "deal-events", "agent-events"];
+    if (!allowed.includes(action)) throw new Error(`Admin actions: ${allowed.join(", ")}.`);
     const { flags } = parseFlags(rest);
     const params = new URLSearchParams();
-    // Common filters across all three.
-    if (flags.kind) params.set("kind", String(flags.kind));
-    if (flags.actor) params.set("actor", String(flags.actor));
-    if (flags.subject) params.set("subject", String(flags.subject));
-    if (flags.since) params.set("since", String(flags.since));
-    if (flags.limit) params.set("limit", String(flags.limit));
-    if (flags.offset) params.set("offset", String(flags.offset));
-    // Per-feed extras.
-    if (sub === "deal-events" && flags.deal) params.set("deal", String(flags.deal));
-    if (sub === "agent-events") {
-      if (flags["agent-kind"]) params.set("agent_kind", String(flags["agent-kind"]));
-      if (flags.tool) params.set("tool", String(flags.tool));
-      if (flags.deal) params.set("deal", String(flags.deal));
-      if (flags["errors-only"]) params.set("errors_only", "1");
+    for (const key of ["kind", "actor", "subject", "since", "limit", "offset", "deal", "tool"]) {
+      if (flags[key] && flags[key] !== true) params.set(key, String(flags[key]));
     }
-    const qs = params.toString() ? `?${params.toString()}` : "";
+    if (flags["agent-kind"] && flags["agent-kind"] !== true) params.set("agent_kind", String(flags["agent-kind"]));
+    if (flags["errors-only"]) params.set("errors_only", "1");
     // @core-api-operation GET /api/admin/auth-events
     // @core-api-operation GET /api/admin/deal-events
     // @core-api-operation GET /api/admin/agent-events
-    print(await request("GET", `/api/admin/${sub}${qs}`));
+    print(await request("GET", `/api/admin/${action}${params.size ? `?${params}` : ""}`));
     return;
   }
 
-  // ----- Mentions / Inbox -----
-  // Server stores @-cues parsed out of brief blocks and posts in the
-  // `deal_mentions` table. UNIQUE per (source_kind, source_id, user)
-  // means re-saving a block that already cued someone won't re-fire
-  // the email; resolution is mutual-observability (anyone can mark a
-  // thread resolved, we record who).
-  //
-  // The CLI has no direct create — to "mention someone", write
-  // `@FirstName` (or `@email@llamaventures.vc`) inside a brief block
-  // body or a deal post. Hooks server-side do the rest.
-  if (area === "mentions") {
-    const sub = action || "list";
-    if (sub === "list" || sub === undefined) {
-      const { flags } = parseFlags(rest);
-      const params = new URLSearchParams();
-      if (flags.everyone) params.set("everyone", "1");
-      else params.set("for_me", "1");
-      if (!flags.all) params.set("unresolved", "1");
-      print(await request("GET", `/api/mentions?${params.toString()}`));
-      return;
-    }
-    if (sub === "show") {
-      const id = rest[0];
-      if (!id) throw new Error("Usage: llama mentions show <mentionId>");
-      // No dedicated single-row endpoint — fetch all and filter. Cheap
-      // (mentions table is small) and avoids a roundtrip endpoint.
-      const data = await request("GET", "/api/mentions?everyone=1");
-      const row = (data.mentions ?? []).find((m) => String(m.id) === String(id));
-      if (!row) throw new Error(`mention ${id} not found`);
-      print(row);
-      return;
-    }
-    if (sub === "resolve") {
-      const id = rest[0];
-      if (!id) throw new Error("Usage: llama mentions resolve <mentionId>");
-      print(await request("POST", `/api/mentions/${encodeURIComponent(id)}/resolve`));
-      return;
-    }
-    if (sub === "unread") {
-      print(await request("GET", "/api/mentions/unread-count"));
-      return;
-    }
-    throw new Error(`Unknown mentions subcommand "${sub}". Use: list / show / resolve / unread.`);
-  }
-
-  // ----- Memo (read-only) -----
-  // Generation is intentionally absent from CLI. The durable Memo Agent in
-  // Llama Command owns the only generation path.
-  if (area === "memo") {
-    const sub = action;
-
-    // show — fetch the current memo. Default: print HTML to stdout
-    // (pipeable to file or browser). --out writes to a path. --json
-    // returns the full envelope (memo + mode + inflight info).
-    if (sub === "show") {
-      const dealId = rest[0];
-      if (!dealId) {
-        throw new Error("Usage: llama memo show <dealId> [--out <path>] [--json]");
-      }
-      const { flags } = parseFlags(rest.slice(1));
-      const data = await request(
-        "GET",
-        `/api/deals/${encodeURIComponent(dealId)}/memo`
-      );
-      if (flags.json) {
-        print(data);
-        return;
-      }
-      const html = data?.memo?.html;
-      if (!html) {
-        if (data?.requires_compose) {
-          throw new Error("No memo for this deal yet — generate it with the Memo Agent in Llama Command.");
-        }
-        throw new Error("Memo response missing html field.");
-      }
-      if (flags.out) {
-        const { writeFileSync } = await import("fs");
-        writeFileSync(String(flags.out), html);
-        console.error(`Wrote ${html.length} bytes → ${flags.out}`);
-        return;
-      }
-      // Stdout — supports `llama memo show <id> > memo.html` and piping
-      // to e.g. `open -f -a Safari` for quick preview.
-      process.stdout.write(html);
-      return;
-    }
-
-    throw new Error(
-      `Unknown memo subcommand "${sub || ""}". Use: show. Memo generation is available only in Llama Command.`
-    );
-  }
-
-  // ============================================================
-  // `llama html` family — per-deal hand-authored HTML "deal page"
-  // ============================================================
-  //
-  // Each deal can have its own HTML browse view (sandboxed iframe).
-  // Upload via this CLI, or directly via the web UI's drag-drop / paste,
-  // or by the in-app deal agent via the update_deal_browse_html tool.
-  // Every upload creates a new monotonic version; old versions are
-  // soft-deleted on replace and can be restored.
-  //
-  //   llama html show <dealId> [--out PATH] [--json]
-  //   llama html upload <dealId> --file PATH [--source cli|web|agent]
-  //   llama html versions <dealId>
-  //   llama html restore <dealId> <version>
-  //   llama html reset <dealId>
-  if (area === "html") {
-    const sub = action;
-
-    // --doc <slug> selects which named document on the deal (default 'main').
-    // Slugs match /^[a-z0-9][a-z0-9_-]{0,63}$/. Use `llama html docs <dealId>`
-    // to list available slugs.
-    const MAX_HTML_BYTES = 5 * 1024 * 1024;
-    const MAX_ASSET_BYTES = 50 * 1024 * 1024;
-    const MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
-
-    function htmlEndpoint(dealId, slug) {
-      return `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}/html`;
-    }
-
-    function looksLikeHtml(html) {
-      const head = String(html || "").trim().slice(0, 256).toLowerCase();
-      return head.startsWith("<!doctype html") || head.startsWith("<html");
-    }
-
-    function extractHtmlTitle(html) {
-      const title = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
-      if (!title) return null;
-      const clean = title.replace(/\s+/g, " ").trim();
-      return clean ? clean.slice(0, 200) : null;
-    }
-
-    function docHasHtml(d) {
-      return Boolean(d && (d.latest_version > 0 || d.latest_updated_at));
-    }
-
-    function findDocBySlug(docs, slug) {
-      return docs.find((d) => d && d.slug === slug) || null;
-    }
-
-    function nextAvailableSlug(base, docs) {
-      let candidate = base;
-      let suffix = 2;
-      while (findDocBySlug(docs, candidate)) {
-        candidate = `${base.slice(0, Math.max(1, 64 - String(suffix).length - 1))}-${suffix}`;
-        suffix += 1;
-      }
-      return candidate;
-    }
-
-    function mimeForAsset(path) {
-      const ext = (String(path).split(".").pop() || "").toLowerCase();
-      return (
-        {
-          jpg: "image/jpeg",
-          jpeg: "image/jpeg",
-          png: "image/png",
-          gif: "image/gif",
-          webp: "image/webp",
-          svg: "image/svg+xml",
-          ico: "image/x-icon",
-          avif: "image/avif",
-          css: "text/css",
-          js: "text/javascript",
-          json: "application/json",
-          woff: "font/woff",
-          woff2: "font/woff2",
-          ttf: "font/ttf",
-          otf: "font/otf",
-          mp4: "video/mp4",
-          webm: "video/webm",
-          pdf: "application/pdf",
-        }[ext] || "application/octet-stream"
-      );
-    }
-
-    async function listHtmlDocs(dealId) {
-      const docList = await request(
-        "GET",
-        `/api/deals/${encodeURIComponent(dealId)}/documents`,
-      );
-      return Array.isArray(docList?.documents) ? docList.documents : [];
-    }
-
-    async function resolveDealForHtmlPublish(dealRef) {
-      const ref = String(dealRef || "").trim();
-      if (!ref) throw new Error("deal id or name is required");
-      try {
-        await listHtmlDocs(ref);
-        return { dealId: ref, resolvedFrom: "id" };
-      } catch {
-        // Not a readable deal id; fall through to pipeline search.
-      }
-
-      const result = await searchDeals(ref, { limit: 10 });
-      const deals = Array.isArray(result?.deals) ? result.deals : [];
-      if (deals.length === 0) {
-        throw new Error(
-          `No deal matched "${ref}". Run \`llama deal search "${ref}"\` first and pass the exact deal id.`,
-        );
-      }
-      const exact = deals.filter(
-        (d) => String(d.companyName || "").toLowerCase() === ref.toLowerCase(),
-      );
-      const candidates = exact.length > 0 ? exact : deals;
-      if (candidates.length !== 1) {
-        const lines = candidates
-          .slice(0, 8)
-          .map((d) => `- ${d.companyName || "(unnamed)"} — ${d.uuid || d.id}`)
-          .join("\n");
-        throw new Error(
-          `Deal name "${ref}" matched multiple records. Re-run with the exact deal id:\n${lines}`,
-        );
-      }
-      const dealId = candidates[0]?.uuid || candidates[0]?.id;
-      if (!dealId) {
-        throw new Error(`Deal search matched "${ref}" but did not return a deal id.`);
-      }
-      return {
-        dealId,
-        dealName: candidates[0]?.companyName || ref,
-        resolvedFrom: "search",
-      };
-    }
-
-    async function detectSiblingAssetsDir(filePath) {
-      const { existsSync, statSync } = await import("fs");
-      const { dirname, basename, extname, join } = await import("path");
-      const dir = dirname(filePath);
-      const ext = extname(filePath);
-      const stem = basename(filePath, ext);
-      const candidates = [
-        `${stem}_files`,
-        `${stem} files`,
-        `${basename(filePath)}_files`,
-      ];
-      for (const name of candidates) {
-        const p = join(dir, name);
-        if (existsSync(p) && statSync(p).isDirectory()) return p;
-      }
-      return null;
-    }
-
-    async function collectAssets(assetsRoot) {
-      const { readFileSync, readdirSync, statSync } = await import("fs");
-      const { join, relative, sep, basename } = await import("path");
-      const rootStat = statSync(assetsRoot);
-      if (!rootStat.isDirectory()) {
-        throw new Error(`assets path must be a directory: ${assetsRoot}`);
-      }
-      const collected = [];
-      const walk = (dir) => {
-        for (const name of readdirSync(dir)) {
-          const absPath = join(dir, name);
-          const st = statSync(absPath);
-          if (st.isDirectory()) {
-            walk(absPath);
-          } else if (st.isFile()) {
-            const relPath = relative(assetsRoot, absPath).split(sep).join("/");
-            collected.push({ absPath, relPath, bytes: st.size });
-          }
-        }
-      };
-      walk(assetsRoot);
-      if (collected.length === 0) {
-        throw new Error(`assets directory is empty: ${assetsRoot}`);
-      }
-      const rootName = basename(assetsRoot);
-      const looksLikeSavePageDir = /[_ ]files$/i.test(rootName);
-      const finalPaths = looksLikeSavePageDir
-        ? collected.map((c) => ({ ...c, relPath: `${rootName}/${c.relPath}` }))
-        : collected;
-      let totalBytes = 0;
-      for (const item of finalPaths) {
-        if (item.relPath.split("/").some((seg) => seg === "..")) {
-          throw new Error(`asset path "${item.relPath}" contains "..", refused`);
-        }
-        if (item.bytes > MAX_ASSET_BYTES) {
-          throw new Error(
-            `asset "${item.relPath}" is ${item.bytes} bytes; cap is ${MAX_ASSET_BYTES}`,
-          );
-        }
-        totalBytes += item.bytes;
-        if (totalBytes > MAX_BUNDLE_BYTES) {
-          throw new Error(`total asset bytes exceeds ${MAX_BUNDLE_BYTES}`);
-        }
-      }
-      return {
-        assets: finalPaths.map((item) => ({
-          ...item,
-          data: readFileSync(item.absPath),
-          contentType: mimeForAsset(item.relPath),
-        })),
-        totalBytes,
-      };
-    }
-
-    async function uploadHtmlPayload({ dealId, slug, html, source, assetsDir, uploadId }) {
-      if (!assetsDir) {
-        return request("PUT", htmlEndpoint(dealId, slug), {
-          html,
-          source,
-          client_upload_id: uploadId,
-        }, {
-          headers: { "X-Llama-Upload-Id": uploadId },
-        });
-      }
-      const { assets, totalBytes } = await collectAssets(assetsDir);
-      const form = new FormData();
-      form.append("html", html);
-      form.append("source", source);
-      form.append("client_upload_id", uploadId);
-      for (const asset of assets) {
-        form.append(
-          `asset:${asset.relPath}`,
-          new Blob([asset.data], { type: asset.contentType }),
-          asset.relPath,
-        );
-      }
-      console.error(
-        `Uploading bundle: html ${Buffer.byteLength(html, "utf8")} bytes + ${assets.length} assets (${totalBytes} bytes)`,
-      );
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
-        method: "PUT",
-        headers: { ...headers, "X-Llama-Upload-Id": uploadId },
-        body: form,
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
-        );
-      }
-      return body;
-    }
-
-    async function verifyHtmlUpload({ dealId, slug, expectedVersion, expectedBytes, expectedSha256 }) {
-      const latest = await request("GET", htmlEndpoint(dealId, slug));
-      if (latest?.empty) {
-        throw new Error(`verification failed: ${slug} came back empty after upload`);
-      }
-      if (expectedVersion != null && Number(latest.version) !== Number(expectedVersion)) {
-        throw new Error(
-          `verification failed: expected version ${expectedVersion}, got ${latest.version}`,
-        );
-      }
-      if (
-        expectedBytes != null &&
-        latest.bytes != null &&
-        Number(latest.bytes) !== Number(expectedBytes)
-      ) {
-        throw new Error(
-          `verification failed: expected ${expectedBytes} bytes, got ${latest.bytes}`,
-        );
-      }
-      if (
-        expectedSha256 &&
-        latest.sha256 &&
-        String(latest.sha256) !== String(expectedSha256)
-      ) {
-        throw new Error(
-          `verification failed: expected sha256 ${expectedSha256}, got ${latest.sha256}`,
-        );
-      }
-      return {
-        ok: true,
-        version: latest.version,
-        bytes: latest.bytes,
-        sha256: latest.sha256,
-        created_at: latest.created_at,
-      };
-    }
-
-    // Surface a clean `linked_wiki` field on linked docs so the listing
-    // reads as "this card points at wiki/<slug>" rather than exposing the
-    // raw source_wiki_* columns. Non-linked docs are returned unchanged.
-    function withLinkedWiki(data) {
-      if (!data || !Array.isArray(data.documents)) return data;
-      return {
-        ...data,
-        documents: data.documents.map((d) =>
-          d && d.source_wiki_slug
-            ? {
-                ...d,
-                linked_wiki: {
-                  slug: d.source_wiki_slug,
-                  lang: d.source_wiki_lang || "en",
-                },
-              }
-            : d,
-        ),
-      };
-    }
-
-    // docs — list / create / archive documents on a deal.
-    //
-    // Forms:
-    //   llama html docs <dealId>                      # list
-    //   llama html docs list <dealId>                 # list (explicit)
-    //   llama html docs create <dealId> <slug> [--title "..."]
-    //   llama html docs archive <dealId> <slug>
-    if (sub === "docs") {
-      const docSub = rest[0];
-      const isExplicitSubcommand =
-        docSub === "list" ||
-        docSub === "create" ||
-        docSub === "archive";
-      if (!isExplicitSubcommand) {
-        // First positional is the dealId (the common "just list" case).
-        const dealId = rest[0];
-        if (!dealId) {
-          throw new Error(
-            "Usage: llama html docs <dealId>\n" +
-              "       llama html docs create <dealId> <slug> --title \"...\"\n" +
-              "       llama html docs archive <dealId> <slug>",
-          );
-        }
-        const data = await request(
-          "GET",
-          `/api/deals/${encodeURIComponent(dealId)}/documents`,
-        );
-        print(withLinkedWiki(data));
-        return;
-      }
-      if (docSub === "list") {
-        const dealId = rest[1];
-        if (!dealId) {
-          throw new Error("Usage: llama html docs list <dealId>");
-        }
-        const data = await request(
-          "GET",
-          `/api/deals/${encodeURIComponent(dealId)}/documents`,
-        );
-        print(withLinkedWiki(data));
-        return;
-      }
-      if (docSub === "create") {
-        const dealId = rest[1];
-        const slug = rest[2];
-        if (!dealId || !slug) {
-          throw new Error(
-            "Usage: llama html docs create <dealId> <slug> [--title \"...\"]",
-          );
-        }
-        const { flags } = parseFlags(rest.slice(3));
-        const title = flags.title ? String(flags.title) : slug;
-        const data = await request(
-          "POST",
-          `/api/deals/${encodeURIComponent(dealId)}/documents`,
-          { slug, title },
-        );
-        print(data);
-        return;
-      }
-      if (docSub === "archive") {
-        const dealId = rest[1];
-        const slug = rest[2];
-        if (!dealId || !slug) {
-          throw new Error("Usage: llama html docs archive <dealId> <slug>");
-        }
-        const data = await request(
-          "DELETE",
-          `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}`,
-        );
-        print(data);
-        return;
-      }
-      throw new Error(
-        `Unknown html docs subcommand "${docSub}". Use: list / create / archive.`,
-      );
-    }
-
-    // link — turn a deal doc card into a live, read-only pointer to a wiki
-    // HTML article. "One file, multiple entrances": the wiki stays the
-    // canonical home, the card just renders the wiki's HTML. Edits go to
-    // the wiki source; uploads to a linked slug are refused server-side.
-    //
-    //   llama html link <dealId> --wiki <slug> [--lang en|zh] [--title "..."]
-    //
-    // Default deal-side slug = the wiki slug. Default title = the wiki
-    // article's title (fetched from `llama wiki read`).
-    if (sub === "link") {
-      const dealId = rest[0];
-      const { flags } = parseFlags(rest.slice(1), ["wiki", "lang", "title", "slug"]);
-      const wikiSlug =
-        typeof flags.wiki === "string" && flags.wiki.trim()
-          ? flags.wiki.trim()
-          : null;
-      if (!dealId || !wikiSlug) {
-        throw new Error(
-          "Usage: llama html link <dealId> --wiki <slug> [--lang en|zh] [--title \"...\"]",
-        );
-      }
-      const lang = flags.lang === "zh" ? "zh" : "en";
-      // Deal-side slug defaults to the wiki slug; --slug overrides.
-      const dealSlug =
-        typeof flags.slug === "string" && flags.slug.trim()
-          ? flags.slug.trim()
-          : wikiSlug;
-      // Title defaults to the wiki article's title.
-      let title =
-        typeof flags.title === "string" && flags.title.trim()
-          ? flags.title.trim()
-          : null;
-      if (!title) {
-        try {
-          const article = await request(
-            "GET",
-            `/api/wiki/${encodeURIComponent(wikiSlug)}?lang=${lang}`,
-          );
-          title = article?.frontmatter?.title || wikiSlug;
-        } catch {
-          // Fall back to the slug as the title; the server still validates
-          // that the wiki article exists + is HTML on the POST below.
-          title = wikiSlug;
-        }
-      }
-      const data = await request(
-        "POST",
-        `/api/deals/${encodeURIComponent(dealId)}/documents`,
-        {
-          slug: dealSlug,
-          title,
-          source_wiki_slug: wikiSlug,
-          source_wiki_lang: lang,
-        },
-      );
-      print(data);
-      return;
-    }
-
-    // unlink — revert a linked card back to a normal self-hosted doc.
-    //   llama html unlink <dealId> <slug>
-    if (sub === "unlink") {
-      const dealId = rest[0];
-      const slug = rest[1];
-      if (!dealId || !slug) {
-        throw new Error("Usage: llama html unlink <dealId> <slug>");
-      }
-      const data = await request(
-        "PATCH",
-        `/api/deals/${encodeURIComponent(dealId)}/documents/${encodeURIComponent(slug)}`,
-        { source_wiki_slug: null },
-      );
-      print(data);
-      return;
-    }
-
-    // show — fetch the current HTML. Default: print to stdout (pipeable).
-    if (sub === "show") {
-      const dealId = rest[0];
-      if (!dealId) {
-        throw new Error("Usage: llama html show <dealId> [--doc SLUG] [--out PATH] [--json]");
-      }
-      const { flags } = parseFlags(rest.slice(1));
-      const slug = typeof flags.doc === "string" && flags.doc.trim() ? flags.doc.trim() : "main";
-      const data = await request("GET", htmlEndpoint(dealId, slug));
-      if (flags.json) {
-        print(data);
-        return;
-      }
-      if (data?.empty) {
-        throw new Error(
-          `No HTML uploaded for deal ${dealId} yet. Upload via \`llama html upload\`, the web UI, or have the deal agent write it.`,
-        );
-      }
-      const html = data?.html;
-      if (typeof html !== "string") {
-        throw new Error("browse-html response missing html field.");
-      }
-      if (flags.out) {
-        const { writeFileSync } = await import("fs");
-        writeFileSync(String(flags.out), html);
-        console.error(
-          `Wrote ${html.length} bytes (v${data.version}) → ${flags.out}`,
-        );
-        return;
-      }
-      // Stdout — supports `llama html show <id> > page.html` and piping
-      // to e.g. `open -f -a Safari` for quick preview.
-      process.stdout.write(html);
-      return;
-    }
-
-    // publish — agent-safe high-level upload path. The agent gives us a file
-    // path + a deal id/name; the CLI handles search, slug decisions, asset
-    // discovery, upload, and read-after-write verification.
-    if (sub === "publish") {
-      const dealRef = rest[0];
-      const knownFlags = [
-        "file", "title", "doc", "slug", "new", "update",
-        "assets", "no-auto-assets", "source", "no-verify", "upload-id",
-      ];
-      const { flags } = parseFlags(rest.slice(1), knownFlags);
-      if (!dealRef || !flags.file || flags.file === true) {
-        throw new Error(
-          "Usage: llama html publish <deal-id-or-name> --file PATH [--title \"...\"] [--doc <slug>] [--update|--new] [--assets DIR]",
-        );
-      }
-      if (flags.slug && !flags.doc) {
-        process.stderr.write("note: --slug accepted as alias for --doc.\n");
-        flags.doc = flags.slug;
-      }
-      const wantsNew = boolFlag(flags, "new");
-      const wantsUpdate = boolFlag(flags, "update");
-      if (wantsNew && wantsUpdate) {
-        throw new Error("Choose only one of --new or --update.");
-      }
-
-      const filePath = String(flags.file);
-      const { readFileSync, statSync } = await import("fs");
-      const { basename, extname } = await import("path");
-      const fileStat = statSync(filePath);
-      if (!fileStat.isFile()) {
-        throw new Error(`--file must point to a readable HTML file: ${filePath}`);
-      }
-      const html = readFileSync(filePath, "utf8");
-      if (!html.trim()) throw new Error("HTML body is empty.");
-      const htmlBytes = Buffer.byteLength(html, "utf8");
-      if (htmlBytes > MAX_HTML_BYTES) {
-        throw new Error(
-          `HTML body is ${(htmlBytes / 1024 / 1024).toFixed(2)} MB; cap is 5 MB. Put large media in an asset folder or Drive, not inline HTML.`,
-        );
-      }
-      if (!looksLikeHtml(html)) {
-        throw new Error("HTML must start with <!doctype html> or <html.");
-      }
-
-      const resolved = await resolveDealForHtmlPublish(dealRef);
-      const docs = await listHtmlDocs(resolved.dealId);
-      const explicitDoc =
-        typeof flags.doc === "string" && flags.doc.trim()
-          ? flags.doc.trim()
-          : null;
-      const title =
-        typeof flags.title === "string" && flags.title.trim()
-          ? flags.title.trim()
-          : extractHtmlTitle(html) || basename(filePath, extname(filePath));
-      let slug;
-      let mode;
-      let createdMetadata = false;
-
-      if (explicitDoc) {
-        if (!isValidDocSlug(explicitDoc)) {
-          throw new Error(
-            `slug "${explicitDoc}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
-          );
-        }
-        const existingDoc = findDocBySlug(docs, explicitDoc);
-        if (wantsNew && existingDoc) {
-          throw new Error(
-            `--new requested, but document "${explicitDoc}" already exists on this deal.`,
-          );
-        }
-        if (wantsUpdate && !existingDoc) {
-          throw new Error(
-            `--update requested, but document "${explicitDoc}" does not exist on this deal.`,
-          );
-        }
-        slug = explicitDoc;
-        mode = existingDoc && docHasHtml(existingDoc) ? "updated" : "created";
-        if (!existingDoc) createdMetadata = true;
-      } else {
-        const baseSlug = slugifyTitle(title) || slugifyTitle(basename(filePath, extname(filePath)));
-        if (!baseSlug) {
-          throw new Error(
-            "Could not derive a valid slug from the title or filename. Pass --doc <slug>.",
-          );
-        }
-        const existingDoc = findDocBySlug(docs, baseSlug);
-        if (wantsUpdate) {
-          if (!existingDoc) {
-            throw new Error(
-              `--update requested, but derived document "${baseSlug}" does not exist. Pass --doc <existing-slug> or drop --update to create a new doc.`,
-            );
-          }
-          slug = baseSlug;
-          mode = docHasHtml(existingDoc) ? "updated" : "created";
-        } else {
-          slug = existingDoc ? nextAvailableSlug(baseSlug, docs) : baseSlug;
-          mode = "created";
-          createdMetadata = true;
-          if (existingDoc) {
-            process.stderr.write(
-              `note: "${baseSlug}" already exists; publishing as new document "${slug}". Use --update or --doc ${baseSlug} to replace it.\n`,
-            );
-          }
-        }
-      }
-
-      if (createdMetadata) {
-        await request(
-          "POST",
-          `/api/deals/${encodeURIComponent(resolved.dealId)}/documents`,
-          { slug, title },
-        );
-      }
-
-      let assetsDir =
-        typeof flags.assets === "string" && flags.assets.trim()
-          ? flags.assets.trim()
-          : null;
-      if (!assetsDir && !boolFlag(flags, "no-auto-assets")) {
-        assetsDir = await detectSiblingAssetsDir(filePath);
-        if (assetsDir) {
-          process.stderr.write(`note: auto-detected asset folder ${assetsDir}\n`);
-        }
-      }
-      const source =
-        typeof flags.source === "string" && flags.source.trim()
-          ? flags.source.trim()
-          : "cli";
-      const uploadId = normalizeUploadId(flags["upload-id"]) || newHtmlUploadId();
-      const uploaded = await uploadHtmlPayload({
-        dealId: resolved.dealId,
-        slug,
-        html,
-        source,
-        assetsDir,
-        uploadId,
-      });
-      const verification = boolFlag(flags, "no-verify")
-        ? { ok: false, skipped: true }
-        : await verifyHtmlUpload({
-            dealId: resolved.dealId,
-            slug,
-            expectedVersion: uploaded?.version,
-            expectedBytes: uploaded?.bytes,
-            expectedSha256: uploaded?.sha256,
-          });
-
-      print({
-        ok: true,
-        mode,
-        deal_uuid: resolved.dealId,
-        resolved_from: resolved.resolvedFrom,
-        deal_name: resolved.dealName,
-        document_slug: slug,
-        title,
-        version: uploaded?.version,
-        bytes: uploaded?.bytes ?? verification.bytes ?? htmlBytes,
-        sha256: uploaded?.sha256 ?? verification.sha256,
-        client_upload_id: uploaded?.client_upload_id ?? uploadId,
-        idempotent_replay: uploaded?.idempotent_replay,
-        asset_count: uploaded?.asset_count,
-        asset_bytes: uploaded?.asset_bytes,
-        verified: verification,
-        viewer: `${getBaseUrl()}/deals/${encodeURIComponent(resolved.dealId)}/browse/${encodeURIComponent(slug)}`,
-      });
-      return;
-    }
-
-    // upload — PUT a new version. Reads HTML from --file or stdin. With
-    // --assets <dir>, walks the folder, packages as a multipart bundle,
-    // and the server stores HTML + per-asset BYTEA rows atomically
-    // (deal_browse_assets table). Perfect for "Save Page As Complete"
-    // exports — the sibling `_files/` folder maps 1-to-1 to assets.
-    if (sub === "upload") {
-      const dealId = rest[0];
-      if (!dealId) {
-        throw new Error(
-          "Usage:\n" +
-            "  Update an existing artifact:\n" +
-            "    llama html upload <dealId> --doc <slug> --file PATH [--assets DIR]\n" +
-            "  Create a new artifact:\n" +
-            "    llama html upload <dealId> --new --title \"...\" --file PATH [--doc <slug>]\n" +
-            "  Stream from stdin (either form above with --stdin in place of --file PATH).\n" +
-            "\n" +
-            "Default (no --doc, no --new) targets slug 'main' but REFUSES if 'main'\n" +
-            "already has content — pass --doc main to update it explicitly, or\n" +
-            "--new --title \"...\" to add a NEW artifact alongside.\n" +
-            "\n" +
-            "Routing — is this the right command?\n" +
-            "  ✓ DEAL-specific HTML (IC memo for X, dashboard for X, 2×2 for X)\n" +
-            "      → YES, you're in the right place. Pass <dealId> + --new / --doc.\n" +
-            "  ✗ Cross-deal / institutional knowledge (sector landscape, market map,\n" +
-            "    thesis, framework, methodology, anything not tied to one company)\n" +
-            "      → use `llama wiki save <slug> --title \"...\" --file <path>.html --sources \"...\"`\n" +
-            "        instead (renders at /wiki/<slug>).\n" +
-            "  ✗ Founder-facing public share link\n" +
-            "      → escape to Netlify only when the user explicitly says \"share publicly\";\n" +
-            "        Llama Command outranks Netlify for everything internal.",
-        );
-      }
-      const knownFlags = [
-        "doc", "slug", "new", "title",
-        "file", "stdin", "assets", "source", "upload-id",
-      ];
-      const { flags } = parseFlags(rest.slice(1), knownFlags);
-
-      // --slug is the natural agent guess (DB column is `document_slug`).
-      // Accept it as an alias for --doc so the earlier failure mode
-      // (silent fall-through to 'main') can't happen again.
-      if (flags.slug && !flags.doc) {
-        process.stderr.write("note: --slug accepted as alias for --doc.\n");
-        flags.doc = flags.slug;
-      } else if (flags.slug && flags.doc) {
-        process.stderr.write("note: both --doc and --slug given; --doc wins.\n");
-      }
-
-      const isNew = Boolean(flags.new);
-      const explicitDoc =
-        typeof flags.doc === "string" && flags.doc.trim()
-          ? flags.doc.trim()
-          : null;
-      const titleFlag =
-        typeof flags.title === "string" && flags.title.trim()
-          ? flags.title.trim()
-          : null;
-
-      // Pre-flight: ask the server what slugs already exist on this deal.
-      // One extra GET round-trip — cheap insurance against silent overwrite.
-      let existing = [];
-      try {
-        const docList = await request(
-          "GET",
-          `/api/deals/${encodeURIComponent(dealId)}/documents`,
-        );
-        existing = Array.isArray(docList?.documents) ? docList.documents : [];
-      } catch (err) {
-        // If the deal exists but the list endpoint somehow errors, we
-        // shouldn't block the whole upload — surface the warning and
-        // proceed in "no existing docs" mode. The server is still the
-        // ultimate gate for permission failures.
-        process.stderr.write(
-          `warning: could not pre-check existing documents (${err.message}). Continuing.\n`,
-        );
-      }
-      const findDoc = (s) =>
-        existing.find((d) => d && d.slug === s) || null;
-      const docHasHtml = (d) =>
-        Boolean(d && (d.latest_version > 0 || d.latest_updated_at));
-
-      let slug;
-      let mode; // 'created' | 'updated'
-
-      if (isNew) {
-        // Create-new branch. Caller must provide --doc OR --title (we
-        // derive the slug from the title in the latter case).
-        let candidate = explicitDoc || (titleFlag ? slugifyTitle(titleFlag) : null);
-        if (!candidate) {
-          throw new Error(
-            "--new requires --doc <slug> or --title \"...\" so the new artifact has a stable identifier.",
-          );
-        }
-        if (!isValidDocSlug(candidate)) {
-          throw new Error(
-            `slug "${candidate}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
-          );
-        }
-        if (findDoc(candidate)) {
-          if (explicitDoc) {
-            const existingDoc = findDoc(candidate);
-            const meta = docHasHtml(existingDoc)
-              ? ` (currently at v${existingDoc.latest_version}, last update ${existingDoc.latest_updated_at})`
-              : "";
-            throw new Error(
-              `--new --doc ${candidate} but a document with slug "${candidate}" already exists${meta}.\n` +
-                `Pick a different slug, or drop --new to UPDATE the existing one.`,
-            );
-          }
-          // Auto-resolve title collisions: foo -> foo-2 -> foo-3 -> ...
-          let suffix = 2;
-          while (findDoc(`${candidate}-${suffix}`)) suffix++;
-          const oldCandidate = candidate;
-          candidate = `${candidate}-${suffix}`;
-          process.stderr.write(
-            `note: slug "${oldCandidate}" already in use; using "${candidate}" instead.\n`,
-          );
-        }
-        slug = candidate;
-        mode = "created";
-        // Stamp the doc metadata first (title, etc.) so the UI selection
-        // page shows a nice name. PUT auto-creates the row too, but
-        // POST gives us a chance to set --title.
-        await request(
-          "POST",
-          `/api/deals/${encodeURIComponent(dealId)}/documents`,
-          { slug, title: titleFlag || slug },
-        );
-      } else if (explicitDoc) {
-        // Update an existing slug.
-        if (!isValidDocSlug(explicitDoc)) {
-          throw new Error(
-            `slug "${explicitDoc}" must match /^[a-z0-9][a-z0-9_-]{0,63}$/`,
-          );
-        }
-        const target = findDoc(explicitDoc);
-        if (!target) {
-          if (explicitDoc === "main") {
-            // 'main' is the legacy default — fine to auto-init on first
-            // upload to an empty deal.
-            slug = "main";
-            mode = "created";
-          } else {
-            const slugList = existing.length
-              ? existing.map((d) => d.slug).join(", ")
-              : "(none)";
-            throw new Error(
-              `No document with slug "${explicitDoc}" exists on this deal.\n` +
-                `To create it: add --new --title "..."\n` +
-                `Or pre-create: llama html docs create ${dealId} ${explicitDoc} --title "..."\n` +
-                `Existing slugs: ${slugList}`,
-            );
-          }
-        } else {
-          slug = explicitDoc;
-          mode = docHasHtml(target) ? "updated" : "created";
-        }
-      } else {
-        // Bare upload — no --doc, no --new. Safe-default to 'main' only
-        // if 'main' is empty / absent. Otherwise refuse, naming the
-        // existing artifact so the caller can pick an explicit intent.
-        const main = findDoc("main");
-        if (docHasHtml(main)) {
-          const versionInfo = main.latest_version
-            ? ` (v${main.latest_version}, ${main.latest_updated_at || "last update unknown"})`
-            : "";
-          const slugList = existing.length
-            ? existing.map((d) => d.slug).join(", ")
-            : "main";
-          throw new Error(
-            `Refusing to silently overwrite the existing 'main' artifact${versionInfo}.\n` +
-              `\n` +
-              `If you meant to UPDATE 'main':         --doc main\n` +
-              `If you meant to add a NEW artifact:    --new --title "<name>"\n` +
-              `\n` +
-              `Existing slugs on this deal: ${slugList}\n` +
-              `List details:                llama html docs ${dealId}`,
-          );
-        }
-        slug = "main";
-        mode = main ? "updated" : "created";
-      }
-
-      let html;
-      if (flags.file) {
-        const { readFileSync } = await import("fs");
-        html = readFileSync(String(flags.file), "utf8");
-      } else if (flags.stdin) {
-        const chunks = [];
-        for await (const chunk of process.stdin) chunks.push(chunk);
-        html = Buffer.concat(chunks).toString("utf8");
-      } else {
-        throw new Error(
-          "Pass --file <path> to upload a file, or --stdin to read from stdin.",
-        );
-      }
-      if (!html || !html.trim()) {
-        throw new Error("HTML body is empty.");
-      }
-      const source =
-        typeof flags.source === "string" && flags.source.trim()
-          ? flags.source.trim()
-          : "cli";
-      const uploadId = normalizeUploadId(flags["upload-id"]) || newHtmlUploadId();
-
-      // No --assets → JSON path (small, faster).
-      if (!flags.assets) {
-        const data = await request("PUT", htmlEndpoint(dealId, slug), {
-          html,
-          source,
-          client_upload_id: uploadId,
-        }, {
-          headers: { "X-Llama-Upload-Id": uploadId },
-        });
-        print({
-          ok: true,
-          mode,
-          document_slug: slug,
-          version: data?.version,
-          bytes: data?.bytes ?? Buffer.byteLength(html, "utf8"),
-          sha256: data?.sha256,
-          client_upload_id: data?.client_upload_id ?? uploadId,
-          idempotent_replay: data?.idempotent_replay,
-          deal_uuid: dealId,
-          viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(slug)}`,
-        });
-        return;
-      }
-
-      // --assets path → multipart bundle. Walk the asset directory,
-      // attach every file as `asset:<relativePath>`, and let the server
-      // rewrite the HTML refs to /api/deals/<id>/asset/<path>?v=N.
-      const { readFileSync, readdirSync, statSync } = await import("fs");
-      const { join, relative, sep, basename } = await import("path");
-      const assetsRoot = String(flags.assets);
-      const assetsRootStat = statSync(assetsRoot);
-      if (!assetsRootStat.isDirectory()) {
-        throw new Error(`--assets must point to a directory: ${assetsRoot}`);
-      }
-
-      // Recursively collect every file under the assets root.
-      const collected = []; // { absPath, relPath, bytes }
-      const walk = (dir) => {
-        for (const name of readdirSync(dir)) {
-          const abs = join(dir, name);
-          const st = statSync(abs);
-          if (st.isDirectory()) {
-            walk(abs);
-          } else if (st.isFile()) {
-            const rel = relative(assetsRoot, abs).split(sep).join("/");
-            collected.push({ absPath: abs, relPath: rel, bytes: st.size });
-          }
-        }
-      };
-      walk(assetsRoot);
-      if (collected.length === 0) {
-        throw new Error(`--assets directory is empty: ${assetsRoot}`);
-      }
-
-      // Some "Save Page As" exports put assets in a sibling folder named
-      // after the HTML (e.g. "Foo.html" + "Foo_files/"). When the HTML
-      // references "./Foo_files/img.png" but we walk just the inner dir,
-      // the rel paths don't match. Detect this case: if the assets root's
-      // basename is "<something>_files" or "<something> files", the HTML
-      // probably uses that prefix — prepend it to each relPath.
-      const rootName = basename(assetsRoot);
-      const looksLikeSavePageDir = /[_ ]files$/i.test(rootName);
-      const finalPaths = looksLikeSavePageDir
-        ? collected.map((c) => ({ ...c, relPath: `${rootName}/${c.relPath}` }))
-        : collected;
-
-      // Mime sniff from extension. Server defaults to
-      // application/octet-stream if blob.type is empty.
-      const mimeFor = (path) => {
-        const ext = (path.split(".").pop() || "").toLowerCase();
-        return (
-          {
-            jpg: "image/jpeg",
-            jpeg: "image/jpeg",
-            png: "image/png",
-            gif: "image/gif",
-            webp: "image/webp",
-            svg: "image/svg+xml",
-            ico: "image/x-icon",
-            avif: "image/avif",
-            css: "text/css",
-            js: "text/javascript",
-            json: "application/json",
-            woff: "font/woff",
-            woff2: "font/woff2",
-            ttf: "font/ttf",
-            otf: "font/otf",
-            mp4: "video/mp4",
-            webm: "video/webm",
-            pdf: "application/pdf",
-          }[ext] || "application/octet-stream"
-        );
-      };
-
-      const form = new FormData();
-      form.append("html", html);
-      form.append("source", source);
-      form.append("client_upload_id", uploadId);
-      let totalBytes = 0;
-      for (const { absPath, relPath } of finalPaths) {
-        const buf = readFileSync(absPath);
-        totalBytes += buf.length;
-        // FormData wants a Blob; in Node 20+ Blob is global and accepts Buffer.
-        form.append(
-          `asset:${relPath}`,
-          new Blob([buf], { type: mimeFor(relPath) }),
-          relPath,
-        );
-      }
-
-      console.error(
-        `Uploading bundle: html ${Buffer.byteLength(html, "utf8")} bytes + ${finalPaths.length} assets (${totalBytes} bytes)`,
-      );
-
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${getBaseUrl()}${htmlEndpoint(dealId, slug)}`, {
-        method: "PUT",
-        headers: {
-          ...headers,
-          "X-Llama-Upload-Id": uploadId,
-          /* let fetch set the multipart boundary */
-        },
-        body: form,
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          `HTTP ${res.status}: ${body?.error || JSON.stringify(body).slice(0, 300)}`,
-        );
-      }
-      print({
-        ok: true,
-        mode,
-        document_slug: slug,
-        version: body.version,
-        bytes: body.bytes,
-        sha256: body.sha256,
-        client_upload_id: body.client_upload_id ?? uploadId,
-        idempotent_replay: body.idempotent_replay,
-        asset_count: body.asset_count,
-        asset_bytes: body.asset_bytes,
-        deal_uuid: dealId,
-        viewer: `${getBaseUrl()}/deals/${encodeURIComponent(dealId)}/browse/${encodeURIComponent(slug)}`,
-      });
-      return;
-    }
-
-    // versions — list version history (newest first, includes soft-deleted).
-    if (sub === "versions") {
-      const dealId = rest[0];
-      if (!dealId) {
-        throw new Error("Usage: llama html versions <dealId> [--doc SLUG]");
-      }
-      const { flags } = parseFlags(rest.slice(1));
-      const slug =
-        typeof flags.doc === "string" && flags.doc.trim()
-          ? flags.doc.trim()
-          : "main";
-      const data = await request("GET", `${htmlEndpoint(dealId, slug)}/history`);
-      print(data);
-      return;
-    }
-
-    // restore — re-promote an old version as the new latest.
-    if (sub === "restore") {
-      const dealId = rest[0];
-      const version = Number(rest[1]);
-      if (!dealId || !Number.isFinite(version)) {
-        throw new Error(
-          "Usage: llama html restore <dealId> <version> [--doc SLUG]",
-        );
-      }
-      const { flags } = parseFlags(rest.slice(2));
-      const slug =
-        typeof flags.doc === "string" && flags.doc.trim()
-          ? flags.doc.trim()
-          : "main";
-      const data = await request(
-        "POST",
-        `${htmlEndpoint(dealId, slug)}/restore/${version}`,
-      );
-      print({
-        ok: true,
-        document_slug: slug,
-        restored_from: version,
-        new_version: data?.version,
-        deal_uuid: dealId,
-      });
-      return;
-    }
-
-    // reset — soft-delete the current HTML. /browse page reverts to empty state.
-    if (sub === "reset" || sub === "delete") {
-      const dealId = rest[0];
-      if (!dealId) {
-        throw new Error("Usage: llama html reset <dealId> [--doc SLUG]");
-      }
-      const { flags } = parseFlags(rest.slice(1));
-      const slug =
-        typeof flags.doc === "string" && flags.doc.trim()
-          ? flags.doc.trim()
-          : "main";
-      const data = await request("DELETE", htmlEndpoint(dealId, slug));
-      print({
-        ok: true,
-        document_slug: slug,
-        soft_deleted_version: data?.version ?? null,
-        deal_uuid: dealId,
-      });
-      return;
-    }
-
-    throw new Error(
-      `Unknown html subcommand "${sub || ""}". Use: docs / link / unlink / show / publish / upload / versions / restore / reset.`,
-    );
-  }
-
-  usage();
-  process.exitCode = 1;
+  throw new Error(`Unknown command: llama ${[area, action].filter(Boolean).join(" ")}`);
 }
 
 main()
-  // Soft, throttled, TTY-gated update nudge. Runs AFTER the command's own
-  // output and is awaited so the registry check completes before exit — but
-  // it can never fail the command (all errors swallowed internally).
   .then(() => maybeNudgeUpdate())
   .catch((error) => {
     console.error(`Error: ${error.message}`);
