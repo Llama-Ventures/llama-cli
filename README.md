@@ -160,9 +160,10 @@ llama skills show <slug>
 
 Agents should run `llama agent bootstrap` before Deal work. The command loads
 the authenticated, server-owned private Brain: Investment Framework V3 for
-reasoning plus the complete Live Deal Page field contract for writing. Neither
-private component is shipped in this public package; CLI is only the tool and
-authenticated transport.
+thinking plus the Llama Command operating skill for working. It also loads the
+separate current Live Deal Page field contract for writing. None of that private
+content is shipped in this public package; CLI is only the tool and authenticated
+transport.
 
 The live server briefing is authoritative. The bundled
 `AGENT_BRIEFING.md` is an offline fallback with the same four-action contract.
