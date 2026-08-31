@@ -43,3 +43,47 @@ test("keeps create and write as a closed operation set", () => {
     /write JSON operation must be/,
   );
 });
+
+test("rejects half-localized Page content before it reaches Core", () => {
+  const base = {
+    operation: "page.patch",
+    dealId: "11111111-1111-4111-8111-111111111111",
+    origin: { kind: "agent" },
+  };
+  assert.doesNotThrow(() => prepareDealCommand("write", {
+    ...base,
+    patch: { description: { en: "Field service workflow", zh: "现场服务工作流" } },
+  }));
+  assert.throws(
+    () => prepareDealCommand("write", {
+      ...base,
+      patch: { description: { zh: "只有中文" } },
+    }),
+    /non-empty en and zh/,
+  );
+});
+
+test("requires future Agent-authored Page prose to be bilingual", () => {
+  const base = {
+    operation: "page.patch",
+    dealId: "11111111-1111-4111-8111-111111111111",
+    origin: { kind: "agent" },
+  };
+  assert.throws(
+    () => prepareDealCommand("write", {
+      ...base,
+      patch: { description: "English only" },
+    }),
+    /agent-authored prose must be one value with non-empty en and zh/,
+  );
+  assert.doesNotThrow(() => prepareDealCommand("write", {
+    ...base,
+    patch: {
+      description: { en: "Field workflow", zh: "现场工作流" },
+      stage: "Seed",
+      website: "https://example.test",
+      foundersJson: [{ name: "Maya Chen", role: { en: "Founder", zh: "创始人" } }],
+      manualTags: ["seed", "workflow"],
+    },
+  }));
+});

@@ -86,6 +86,14 @@ the initial Live Page and Information, and appends Events atomically.
 - `page.patch` — update the human-visible Live Deal Page.
 - `artifact.put` — add an immutable memo/HTML/source artifact.
 
+When Page prose is human-visible, write one bilingual field value as
+`{"en":"natural English","zh":"自然中文"}`. The Web language switch selects
+the reader's version from the same Page revision. Keep language-neutral names,
+enums, URLs, numbers, dates, and source IDs scalar. Information and raw Input
+stay in their original language with provenance. The CLI rejects new scalar
+Page prose and incomplete language pairs before they reach Core; historical
+scalar prose remains readable.
+
 Raw user input example:
 
 ```json

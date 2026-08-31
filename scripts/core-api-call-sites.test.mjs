@@ -5,14 +5,14 @@ import { extractApiOperations, operationKey } from "./core-api-call-sites.mjs";
 
 test("extracts literal, template, helper, fetch, and annotated operations", () => {
   const source = `
-    function htmlUrl(dealId, slug) {
-      return \`/api/deals/\${encodeURIComponent(dealId)}/documents/\${encodeURIComponent(slug)}/html\`;
+    function artifactUrl(dealId, artifactId) {
+      return \`/api/occam/deals/\${encodeURIComponent(dealId)}/artifacts/\${encodeURIComponent(artifactId)}\`;
     }
     request("GET", "/api/me");
-    requestSse("POST", \`/api/deals/\${dealId}/threads/\${threadId}\`, {});
+    requestSse("POST", \`/api/occam/deals/\${dealId}/chat\`, {});
     fetch(\`\${baseUrl}/api/oauth/token\`, { method: "POST" });
-    callApi("GET", \`\${htmlUrl(dealId, slug)}/history\`);
-    // @core-api-operation DELETE /api/deals/{dealId}/links/{linkId}
+    callApi("GET", artifactUrl(dealId, artifactId));
+    // @core-api-operation POST /api/occam/deals/commands
     request(method, dynamicPath);
   `;
   const result = extractApiOperations(source, "fixture.mjs");
@@ -20,11 +20,11 @@ test("extracts literal, template, helper, fetch, and annotated operations", () =
   assert.deepEqual(
     [...new Set(result.operations.map(({ method, path }) => operationKey(method, path)))].sort(),
     [
-      "DELETE /api/deals/{}/links/{}",
-      "GET /api/deals/{}/documents/{}/html/history",
       "GET /api/me",
-      "POST /api/deals/{}/threads/{}",
+      "GET /api/occam/deals/{}/artifacts/{}",
       "POST /api/oauth/token",
+      "POST /api/occam/deals/commands",
+      "POST /api/occam/deals/{}/chat",
     ],
   );
 });

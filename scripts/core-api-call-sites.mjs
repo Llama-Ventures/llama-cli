@@ -173,7 +173,7 @@ export function normalizeApiPath(rawPath) {
   if (apiIndex === -1) return null;
   let result = rawPath.slice(apiIndex).split(/[?#]/, 1)[0].replace(/\{[^}]*\}/g, "{}");
   // A template interpolation appended directly to a path is normally a
-  // conditional query-string expression (`/api/deals${query ? ... : ...}`).
+  // conditional query-string expression (`/api/occam/deals${query ? ... : ...}`).
   // Preserve a trailing path parameter (`/api/wiki/${slug}`).
   result = result.replace(/([^/])\{\}$/, "$1").replace(/\/$/, "");
   return result;

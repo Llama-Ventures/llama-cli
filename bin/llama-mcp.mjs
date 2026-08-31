@@ -99,7 +99,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put.",
+    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. Human-visible Page prose uses one value with both en and zh.",
     inputSchema: {
       operation: z.enum(["input.submit", "information.put", "page.patch", "artifact.put"]),
       dealId: z.string().uuid(),

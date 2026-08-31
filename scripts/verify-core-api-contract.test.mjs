@@ -5,16 +5,16 @@ import { compareOperationInventory } from "./verify-core-api-contract.mjs";
 
 test("operation inventory comparison detects missing and stale declarations", () => {
   const actual = [
-    { method: "GET", path: "/api/deals/{}/facts" },
-    { method: "PUT", path: "/api/deals/{}/founders" },
+    { method: "GET", path: "/api/occam/deals/{}/chat" },
+    { method: "POST", path: "/api/occam/deals/commands" },
   ];
   const declared = [
-    { method: "GET", path: "/api/deals/{dealId}/facts" },
-    { method: "DELETE", path: "/api/deals/{dealId}" },
+    { method: "GET", path: "/api/occam/deals/{dealId}/chat" },
+    { method: "GET", path: "/api/occam/deals/{dealId}" },
   ];
   assert.deepEqual(compareOperationInventory(actual, declared), {
-    undeclared: ["PUT /api/deals/{}/founders"],
-    stale: ["DELETE /api/deals/{}"],
+    undeclared: ["POST /api/occam/deals/commands"],
+    stale: ["GET /api/occam/deals/{}"],
   });
 });
 

@@ -79,21 +79,6 @@ Core owns Chat Records, append-only Deal Events, Drive provisioning, audit,
 and idempotency. User-originated work must preserve exact wording in
 origin.originalUserUtterance or reference origin.originatingChatRecordId.`;
 
-const RETIRED_DEAL_AREAS = new Set([
-  "activity",
-  "approvals",
-  "brief",
-  "claim",
-  "html",
-  "memo",
-  "mentions",
-  "nominate",
-  "nominations",
-  "post",
-  "timeline",
-  "workflow",
-]);
-
 function parseFlags(args, allowed = null) {
   const flags = {};
   const positional = [];
@@ -123,17 +108,11 @@ function usage(area) {
   console.log(area === "deal" ? HELP_DEAL : HELP_ROOT);
 }
 
-function assertActiveSurface(area, action) {
+function assertDealAction(area, action) {
   if (area === "deal" && !DEAL_ACTIONS.includes(action)) {
     throw new Error(
-      `DEAL_COMMAND_RETIRED: \`llama deal ${action || "<missing>"}\` is not part of CLI 2. ` +
-      "Use only search, read, create --json, or write --json.",
-    );
-  }
-  if (RETIRED_DEAL_AREAS.has(area)) {
-    throw new Error(
-      `DEAL_COMMAND_RETIRED: \`llama ${area}\` belonged to the split legacy Deal model. ` +
-      "Use `llama deal read` or `llama deal write --json <file|->`.",
+      `Unknown Deal action: ${action || "<missing>"}. ` +
+      "Use search, read, create --json, or write --json.",
     );
   }
 }
@@ -426,7 +405,7 @@ async function main() {
     return;
   }
 
-  assertActiveSurface(area, action);
+  assertDealAction(area, action);
 
   if (await handleAuth(area, action, rest)) return;
 
