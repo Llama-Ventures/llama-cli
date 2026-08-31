@@ -195,8 +195,14 @@ language is invalid. New scalar Page prose is also invalid; historical scalar
 prose is read-compatible only. Information and raw Input retain their original
 language and provenance; do not manufacture a second source quote.
 
-Artifacts use `artifact.put`. Treat them as immutable source material. Read the
-artifact, then decide whether its content deserves Information or a Page patch.
+Artifacts use `artifact.put`. Submit file bytes as `contentBase64` and metadata
+intent only; never provide or guess folder IDs, storage keys, or storage URLs.
+Core resolves the Deal's canonical Drive folder and performs the upload. Do not
+report completion until the receipt/read-back confirms `google_drive`, the
+canonical parent, matching byte size and SHA-256, `visibleInDealFolder: true`,
+the Artifact reference, its Event, and Deal UI visibility. Treat the body as
+immutable source material, then decide whether it supports Information or a
+Page patch.
 
 ## Verification and safety
 

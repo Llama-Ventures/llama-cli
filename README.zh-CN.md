@@ -82,13 +82,17 @@ Core 会补上 `operation: deal.create`，创建或复用 Drive 文件夹，并�
 - `input.submit`：把完整原始输入保存在 Event Feed；
 - `information.put`：写入一个结构化工作记忆单元；
 - `page.patch`：更新人类直接看到的 Live Deal Page；
-- `artifact.put`：添加不可变的 memo、HTML 或源文件。
+- `artifact.put`：提交不可变文件，由 Core 存入该 Deal 唯一的 Drive 文件夹。
 
 给人看的 Page 文字必须在写入时同时提供自然的中英文：
 `{"en":"natural English","zh":"自然中文"}`。Web 的语言开关从同一个
 Page revision 选择对应内容，不创建中文页和英文页两套真相。公司名、枚举、URL、数字、日期、
 人名和 source ID 等语言无关值继续使用 scalar；Information 和原始 Input 保留原语言与 provenance。
 CLI 会在请求到达 Core 前拒绝新的 scalar Page 文案或缺少任一语言的 pair；历史 scalar 文案仍可读取。
+
+`artifact.put` 只提交 `contentBase64`、文件名、kind 和 MIME 等意图；不要提供或猜测
+Drive ID、storage key 或 URL。Core 会解析唯一 Deal folder，成功回执必须包含 Drive
+file、parent、byte size、SHA-256 和 `visibleInDealFolder: true`。
 
 原始用户输入示例：
 
