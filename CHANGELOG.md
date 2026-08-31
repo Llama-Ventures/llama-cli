@@ -7,6 +7,8 @@
   Secretary analysis API and cron.
 - Remove legacy Deal API examples from contract-verifier fixtures so the
   package source and publish artifact contain no retired Deal action surface.
+- Enforce bilingual values for newly Agent-authored Page prose while retaining
+  read compatibility for historical scalar content.
 
 ## [2.0.0] - 2026-08-30
 

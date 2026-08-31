@@ -88,6 +88,7 @@ Core 会补上 `operation: deal.create`，创建或复用 Drive 文件夹，并�
 `{"en":"natural English","zh":"自然中文"}`。Web 的语言开关从同一个
 Page revision 选择对应内容，不创建中文页和英文页两套真相。公司名、枚举、URL、数字、日期、
 人名和 source ID 等语言无关值继续使用 scalar；Information 和原始 Input 保留原语言与 provenance。
+CLI 会在请求到达 Core 前拒绝新的 scalar Page 文案或缺少任一语言的 pair；历史 scalar 文案仍可读取。
 
 原始用户输入示例：
 

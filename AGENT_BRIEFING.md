@@ -154,8 +154,9 @@ Human-visible Page prose is bilingual at write time. Store one field value as
 `{"en":"natural English","zh":"自然中文"}`; do not create separate English
 and Chinese Pages. Language-neutral company names, enums, URLs, numbers, dates,
 person names, and source IDs remain scalar. A localized object missing either
-language is invalid. Information and raw Input retain their original language
-and provenance; do not manufacture a second source quote.
+language is invalid. New scalar Page prose is also invalid; historical scalar
+prose is read-compatible only. Information and raw Input retain their original
+language and provenance; do not manufacture a second source quote.
 
 Artifacts use `artifact.put`. Treat them as immutable source material. Read the
 artifact, then decide whether its content deserves Information or a Page patch.
