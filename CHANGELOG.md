@@ -9,6 +9,7 @@
   package source and publish artifact contain no retired Deal action surface.
 - Enforce bilingual values for newly Agent-authored Page prose while retaining
   read compatibility for historical scalar content.
+- Pin the release candidate to the final local Core API 5.0 contract.
 
 ## [2.0.0] - 2026-08-30
 
