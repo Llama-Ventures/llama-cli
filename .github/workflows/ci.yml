@@ -48,11 +48,11 @@ jobs:
             | node bin/llama-mcp.mjs)
           echo "$OUT"
           echo "$OUT" | grep -q '"name":"auth_status"'
-          echo "$OUT" | grep -q '"name":"deal_search"'
-          echo "$OUT" | grep -q '"name":"deal_create"'
-          echo "$OUT" | grep -q '"name":"brief_add_text"'
+          echo "$OUT" | grep -q '"name":"search_deals"'
+          echo "$OUT" | grep -q '"name":"read_deal"'
+          echo "$OUT" | grep -q '"name":"create_deal"'
+          echo "$OUT" | grep -q '"name":"write_deal"'
           echo "$OUT" | grep -q '"name":"wiki_search"'
-          echo "$OUT" | grep -q '"name":"timeline"'
           echo "$OUT" | grep -q '"name":"pitch_start"'
           # Regression test: the MCP server must expose only named, typed
           # tools — no generic API passthrough. Hard-fail the build if a
