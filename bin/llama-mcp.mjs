@@ -152,7 +152,7 @@ server.registerTool(
 server.registerTool(
   "agent_bootstrap",
   {
-    description: "Mandatory before Llama work: fetch the authenticated private Brain (Investment Framework V3 + complete Live Deal Page field vocabulary), runtime contract, and visible Llama OS skills.",
+    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain (Investment Framework V3 + Llama Command operating skill), the separate current Live Deal Page field contract, runtime contract, and visible Llama OS skills.",
     inputSchema: { limit: z.number().int().min(1).max(100).optional() },
   },
   async ({ limit } = {}) => {
@@ -361,7 +361,7 @@ server.registerTool(
 server.registerPrompt(
   "agent_briefing",
   {
-    description: "Mandatory before Llama work: fetch the authenticated private Brain (Investment Framework V3 + complete Live Deal Page field vocabulary) and current runtime contract; bundled text is only an offline fallback.",
+    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain, the separate current Live Deal Page field contract, and runtime contract; bundled text is only an offline fallback.",
   },
   async () => {
     const headers = await getAuthHeaders();

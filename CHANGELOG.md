@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.2] - 2026-08-31
+
+- Correct the authenticated runtime model: Brain has exactly two private
+  components, Investment Framework V3 and the Llama Command operating skill.
+- Load the complete Live Deal Page field prompts beside Brain as a separate
+  current CLI/MCP tool contract.
+- Keep all Brain and Page prompt bytes server-owned and out of the public npm
+  artifact.
+
 ## [2.0.1] - 2026-08-30
 
 - Ship the four-action Occam Deal surface from the audited cleanup commit.
@@ -32,8 +41,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ### Changed
 - Make the authenticated live bootstrap mandatory before Deal work and clarify
-  that it loads the server-owned private Brain: Investment Framework V3 plus
-  the Live Deal Page field contract. CLI remains only the tool/transport layer.
+  that it loads the server-owned two-part private Brain plus the separate Live
+  Deal Page field contract. CLI remains only the tool/transport layer.
 - Teach CLI and MCP Agents that Information never updates Page automatically,
   every Page content field is Agent-writable, and field authorship controls
   attribution rather than permission.

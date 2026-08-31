@@ -12,14 +12,15 @@ Before any Llama workflow, run:
 llama agent bootstrap
 ```
 
-The authenticated response contains the current private Llama Brain with two
-components: the approved Investment Framework V3 Markdown (how to examine a
-deal) and the complete Live Deal Page field vocabulary (what every visible slot
-means and how to verify a good write). The public CLI intentionally bundles
-neither private component; it only fetches them after authentication.
+The authenticated response contains the current private Llama Brain with
+exactly two components: the approved Investment Framework V3 Markdown (how to
+think) and the Llama Command operating skill (how to work). Beside Brain it
+contains the separate current Live Deal Page field contract (what every visible
+slot means and how to verify a good write). The public CLI intentionally bundles
+none of this private content; it only fetches it after authentication.
 
 CLI is the Agent's tool, not Brain. Do not substitute a private skill wrapper
-for the server-delivered Investment Framework V3 document.
+for either canonical Brain component.
 
 Do not assume the Page is only `description` plus `notes`, and do not infer its
 schema from a previous session. If bootstrap fails, repair authentication or

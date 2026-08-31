@@ -72,8 +72,9 @@ Exactly four actions:
 Before any Page write:
   llama agent bootstrap
 
-The authenticated bootstrap contains the private Llama Brain: Investment
-Framework V3 plus the complete 61-field Page contract. CLI is the tool, not
+The authenticated bootstrap contains the two-part private Llama Brain:
+Investment Framework V3 plus the Llama Command operating skill. It also
+contains the separate current 61-field Page contract. CLI is the tool, not
 Brain. Information never updates Page automatically. page.patch is JSON
 Merge Patch: objects merge, null deletes, and arrays replace whole arrays, so
 read-modify-write complete Page arrays and preserve sibling slots.
