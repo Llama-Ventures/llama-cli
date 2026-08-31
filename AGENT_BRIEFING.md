@@ -12,10 +12,14 @@ Before any Llama workflow, run:
 llama agent bootstrap
 ```
 
-The authenticated response is the current private runtime contract. It includes
-the complete Live Deal Page field vocabulary: what every visible slot means,
-where it is stored, what must and must not be written, and how to verify it.
-The public CLI intentionally does not bundle those private field prompts.
+The authenticated response contains the current private Llama Brain with two
+components: the approved Investment Framework V3 Markdown (how to examine a
+deal) and the complete Live Deal Page field vocabulary (what every visible slot
+means and how to verify a good write). The public CLI intentionally bundles
+neither private component; it only fetches them after authentication.
+
+CLI is the Agent's tool, not Brain. Do not substitute a private skill wrapper
+for the server-delivered Investment Framework V3 document.
 
 Do not assume the Page is only `description` plus `notes`, and do not infer its
 schema from a previous session. If bootstrap fails, repair authentication or
