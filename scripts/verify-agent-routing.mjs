@@ -162,6 +162,11 @@ try {
   }
 
   const countBeforeInvalid = calls.length;
+  const retiredBrief = await runCli(["brief", "add-text", "x"], baseUrl, homeDir);
+  assert.equal(retiredBrief.code, 1);
+  assert.match(retiredBrief.stderr, /`llama brief` was retired in CLI 2\.0/);
+  assert.match(retiredBrief.stderr, /operation: page\.patch/);
+  assert.match(retiredBrief.stderr, /llama agent bootstrap/);
   for (const args of [
     ["deal", "unsupported", "x"],
     ["unsupported", "command"],

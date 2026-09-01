@@ -134,6 +134,14 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.match(invalidWrite.stderr, /\$: Unrecognized key: "source"/);
 
   const requestsBeforeInvalidChecks = seen.length;
+  const retiredBrief = await runCli(baseUrl, ["brief", "add-text", "deal-1"]);
+  assert.equal(retiredBrief.code, 1);
+  assert.match(retiredBrief.stderr, /`llama brief` was retired in CLI 2\.0/);
+  assert.match(
+    retiredBrief.stderr,
+    /Use: llama deal write --json  \(operation: page\.patch\)/,
+  );
+  assert.match(retiredBrief.stderr, /Contract: llama agent bootstrap/);
   for (const args of [
     ["deal", "unsupported", "deal-1"],
     ["unsupported", "command"],

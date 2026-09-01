@@ -136,6 +136,28 @@ function assertDealAction(area, action) {
   }
 }
 
+const RETIRED_TOP_LEVEL_COMMANDS = Object.freeze({
+  brief: "llama deal write --json  (operation: page.patch)",
+  fact: "llama deal write --json  (operation: information.put)",
+  post: "llama deal write --json  (operation: input.submit)",
+  timeline: "llama deal read <dealId> --detail history",
+  html: "llama deal write --json  (operation: artifact.put)",
+  memo: "llama deal write --json  (operation: artifact.put)",
+  pipeline: "llama deal search|read|create|write",
+});
+
+function unknownCommandError(area, action) {
+  const replacement = RETIRED_TOP_LEVEL_COMMANDS[area];
+  if (replacement) {
+    return new Error(
+      `\`llama ${area}\` was retired in CLI 2.0.\n` +
+      `  → Use: ${replacement}\n` +
+      "  → Contract: llama agent bootstrap",
+    );
+  }
+  return new Error(`Unknown command: llama ${[area, action].filter(Boolean).join(" ")}`);
+}
+
 function onboardingNoAuth() {
   return `Llama team onboarding requires credentials.
 
@@ -576,7 +598,7 @@ async function main() {
     return;
   }
 
-  throw new Error(`Unknown command: llama ${[area, action].filter(Boolean).join(" ")}`);
+  throw unknownCommandError(area, action);
 }
 
 main()

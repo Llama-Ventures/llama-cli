@@ -12,6 +12,9 @@
   a second, drifting public-CLI field whitelist.
 - Return a compact `page.patch` revision receipt with exact read-back fields
   instead of echoing the full Live Deal Page after every write.
+- Turn retired top-level commands such as `llama brief`, `fact`, `post`,
+  `timeline`, `html`, `memo`, and `pipeline` into self-correcting errors that
+  name the CLI 2 replacement and live contract entrypoint.
 
 ## [2.0.2] - 2026-08-31
 
