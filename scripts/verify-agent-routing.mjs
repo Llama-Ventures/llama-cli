@@ -13,7 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 const coreApiContract = JSON.parse(readFileSync(path.join(repoRoot, "contracts/core-api.json"), "utf8"));
 
-assert.equal(packageJson.version, "2.0.2");
+assert.equal(packageJson.version, "2.0.3");
 assert.equal(
   packageJson.scripts?.["verify:release"],
   "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
@@ -155,13 +155,18 @@ try {
 
   const business = calls.filter((call) => call.path !== "/api/agent/client-events");
   for (const call of business) {
-    assert.equal(call.headers.version, "2.0.2");
+    assert.equal(call.headers.version, "2.0.3");
     assert.equal(call.headers.capabilities, "core.read.v1,occam.deal.v1");
     assert.equal(call.headers.apiVersion, coreApiContract.apiVersion);
     assert.equal(call.headers.apiDigest, coreApiContract.sha256);
   }
 
   const countBeforeInvalid = calls.length;
+  const retiredBrief = await runCli(["brief", "add-text", "x"], baseUrl, homeDir);
+  assert.equal(retiredBrief.code, 1);
+  assert.match(retiredBrief.stderr, /`llama brief` was retired in CLI 2\.0/);
+  assert.match(retiredBrief.stderr, /operation: page\.patch/);
+  assert.match(retiredBrief.stderr, /llama agent bootstrap/);
   for (const args of [
     ["deal", "unsupported", "x"],
     ["unsupported", "command"],

@@ -90,8 +90,9 @@ When Page prose is human-visible, write one bilingual field value as
 `{"en":"natural English","zh":"自然中文"}`. The Web language switch selects
 the reader's version from the same Page revision. Keep language-neutral names,
 enums, URLs, numbers, dates, and source IDs scalar. Information and raw Input
-stay in their original language with provenance. The CLI rejects new scalar
-Page prose and incomplete language pairs before they reach Core; historical
+stay in their original language with provenance. Core rejects new scalar Page
+prose according to its private Page contract; the public CLI catches malformed
+half-localized pairs without maintaining a second field whitelist. Historical
 scalar prose remains readable.
 
 Raw user input example:

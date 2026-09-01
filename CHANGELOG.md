@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.3] - 2026-08-31
+
+- Show Core validation codes and field paths instead of collapsing malformed
+  Deal writes into `Invalid Occam command`.
+- Publish `write_deal` as four operation-specific MCP command shapes while
+  retaining one mutation tool.
+- Add copyable write examples to `llama help deal` and omit the duplicate
+  rendered briefing from structured bootstrap output.
+- Let Core's private Page contract classify prose and enums instead of keeping
+  a second, drifting public-CLI field whitelist.
+- Return a compact `page.patch` revision receipt with exact read-back fields
+  instead of echoing the full Live Deal Page after every write.
+- Turn retired top-level commands such as `llama brief`, `fact`, `post`,
+  `timeline`, `html`, `memo`, and `pipeline` into self-correcting errors that
+  name the CLI 2 replacement and live contract entrypoint.
+
 ## [2.0.2] - 2026-08-31
 
 - Correct the authenticated runtime model: Brain has exactly two private

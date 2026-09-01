@@ -30,7 +30,7 @@ function listMcpTools() {
         if (message.id === 2) {
           clearTimeout(timer);
           child.kill();
-          resolve(message.result.tools.map((tool) => tool.name));
+          resolve(message.result.tools);
         }
       }
     });
@@ -49,9 +49,33 @@ function listMcpTools() {
 }
 
 test("MCP publishes exactly four Deal tools", async () => {
-  const names = await listMcpTools();
+  const names = (await listMcpTools()).map((tool) => tool.name);
   const dealTools = names.filter((name) =>
     ["search_deals", "read_deal", "create_deal", "write_deal"].includes(name),
   );
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
+});
+
+test("MCP write_deal exposes four operation-specific payloads", async () => {
+  const tools = await listMcpTools();
+  const writeDeal = tools.find((tool) => tool.name === "write_deal");
+  assert.ok(writeDeal, "write_deal must be published");
+  const commandSchema = writeDeal.inputSchema.properties.command;
+  const choices = commandSchema.oneOf || commandSchema.anyOf;
+  assert.equal(choices?.length, 4, JSON.stringify(writeDeal.inputSchema));
+
+  const byOperation = new Map(
+    choices.map((choice) => [choice.properties.operation.const, choice]),
+  );
+  assert.deepEqual([...byOperation.keys()].sort(), [
+    "artifact.put",
+    "information.put",
+    "input.submit",
+    "page.patch",
+  ]);
+  assert.equal("source" in byOperation.get("information.put").properties, false);
+  assert.equal("source" in byOperation.get("input.submit").properties, true);
+  assert.equal("title" in byOperation.get("input.submit").properties, false);
+  assert.equal("title" in byOperation.get("artifact.put").properties, true);
+  assert.equal("storageKey" in byOperation.get("artifact.put").properties, true);
 });
