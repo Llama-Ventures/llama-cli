@@ -22,6 +22,7 @@ import {
 import {
   buildDealReadPath,
   buildDealSearchPath,
+  compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
 
@@ -38,9 +39,9 @@ function textResult(text, isError = false) {
   };
 }
 
-async function callApi(method, path, body) {
+async function callApi(method, path, body, transform = (value) => value) {
   try {
-    const result = await request(method, path, body);
+    const result = transform(await request(method, path, body));
     return textResult(typeof result === "string" ? result : JSON.stringify(result, null, 2));
   } catch (error) {
     return textResult(formatErrorForDisplay(error), true);
@@ -159,6 +160,7 @@ server.registerTool(
     "POST",
     "/api/occam/deals/commands",
     prepareDealCommand("write", command),
+    (result) => compactDealWriteResult(command, result),
   ),
 );
 

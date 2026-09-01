@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildDealReadPath,
   buildDealSearchPath,
+  compactDealWriteResult,
   ensureIdempotencyKey,
   prepareDealCommand,
   validateCommandOrigin,
@@ -63,19 +64,20 @@ test("rejects half-localized Page content before it reaches Core", () => {
   );
 });
 
-test("requires future Agent-authored Page prose to be bilingual", () => {
+test("leaves private Page field semantics to Core while rejecting broken localized pairs", () => {
   const base = {
     operation: "page.patch",
     dealId: "11111111-1111-4111-8111-111111111111",
     origin: { kind: "agent" },
   };
-  assert.throws(
-    () => prepareDealCommand("write", {
-      ...base,
-      patch: { description: "English only" },
-    }),
-    /agent-authored prose must be one value with non-empty en and zh/,
-  );
+  assert.doesNotThrow(() => prepareDealCommand("write", {
+    ...base,
+    patch: {
+      businessRead: {
+        experience: { testedBy: "Gavin", judgmentChanged: "untested" },
+      },
+    },
+  }));
   assert.doesNotThrow(() => prepareDealCommand("write", {
     ...base,
     patch: {
@@ -86,4 +88,40 @@ test("requires future Agent-authored Page prose to be bilingual", () => {
       manualTags: ["seed", "workflow"],
     },
   }));
+});
+
+test("compacts page.patch success into a revision receipt plus targeted read-back", () => {
+  const command = {
+    operation: "page.patch",
+    dealId: "11111111-1111-4111-8111-111111111111",
+    patch: { description: { en: "Field workflow", zh: "现场工作流" }, businessRead: {} },
+  };
+  const response = {
+    ok: true,
+    result: {
+      idempotent: false,
+      page: {
+        id: command.dealId,
+        revision: 7,
+        updatedAt: "2026-08-31T20:00:00.000Z",
+        page: { notes: "a very large Page body" },
+      },
+    },
+  };
+  assert.deepEqual(compactDealWriteResult(command, response), {
+    ok: true,
+    result: {
+      idempotent: false,
+      page: {
+        id: command.dealId,
+        revision: 7,
+        updatedAt: "2026-08-31T20:00:00.000Z",
+      },
+      verify: {
+        dealId: command.dealId,
+        fields: ["description", "businessRead"],
+        command: `llama deal read ${command.dealId}`,
+      },
+    },
+  });
 });

@@ -8,6 +8,10 @@
   retaining one mutation tool.
 - Add copyable write examples to `llama help deal` and omit the duplicate
   rendered briefing from structured bootstrap output.
+- Let Core's private Page contract classify prose and enums instead of keeping
+  a second, drifting public-CLI field whitelist.
+- Return a compact `page.patch` revision receipt with exact read-back fields
+  instead of echoing the full Live Deal Page after every write.
 
 ## [2.0.2] - 2026-08-31
 

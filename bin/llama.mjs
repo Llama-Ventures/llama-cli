@@ -35,6 +35,7 @@ import {
   DEAL_ACTIONS,
   buildDealReadPath,
   buildDealSearchPath,
+  compactDealWriteResult,
   prepareDealCommand,
   readJsonInput,
 } from "../lib/deal-actions.mjs";
@@ -547,7 +548,9 @@ async function main() {
   if (area === "deal" && ["create", "write"].includes(action)) {
     const { flags } = parseFlags(rest, ["json"]);
     const input = await readJsonInput(flags.json);
-    print(await request("POST", "/api/occam/deals/commands", prepareDealCommand(action, input)));
+    const command = prepareDealCommand(action, input);
+    const response = await request("POST", "/api/occam/deals/commands", command);
+    print(compactDealWriteResult(command, response));
     return;
   }
 
