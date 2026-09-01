@@ -125,3 +125,18 @@ test("compacts page.patch success into a revision receipt plus targeted read-bac
     },
   });
 });
+
+test("windows a Deal read so long histories stay reachable", () => {
+  assert.equal(
+    buildDealReadPath("deal-id", "history", { limit: 100 }),
+    "/api/occam/deals/deal-id?expand=feed&limit=100",
+  );
+  assert.equal(
+    buildDealReadPath("deal-id", "history", { limit: 100, before: "250" }),
+    "/api/occam/deals/deal-id?expand=feed&limit=100&before=250",
+  );
+  // Omitting the window must leave the long-standing path untouched.
+  assert.equal(buildDealReadPath("deal-id", "history"), "/api/occam/deals/deal-id?expand=feed");
+  assert.throws(() => buildDealReadPath("deal-id", "history", { limit: 0 }), /positive integer/);
+  assert.throws(() => buildDealReadPath("deal-id", "history", { before: "abc" }), /event_seq/);
+});
