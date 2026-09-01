@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import readline from "node:readline";
 import {
+  formatErrorForDisplay,
   getAuthHeaders,
   getBaseUrl,
   getToken,
@@ -12,6 +13,7 @@ import {
   readCanonicalToken,
   readLegacyConfig,
   request,
+  structuredBootstrapManifest,
   tryGcloudIdentityToken,
   writeCanonicalToken,
   writeLegacyConfig,
@@ -82,8 +84,14 @@ read-modify-write complete Page arrays and preserve sibling slots.
 create JSON:
   {"companyName":"Acme","page":{},"information":[],"origin":{"kind":"user","originalUserUtterance":"..."}}
 
-write operation:
-  input.submit | information.put | page.patch | artifact.put
+write JSON (CLI derives idempotencyKey when omitted):
+  input.submit:    {"operation":"input.submit","dealId":"<uuid>","content":"<original input>","format":"text","source":{},"origin":{"kind":"user","originalUserUtterance":"..."}}
+  information.put:{"operation":"information.put","dealId":"<uuid>","type":"founder_claim","labels":["founder-stated"],"subject":{"topic":"traction"},"value":{"content":"...","source":{"kind":"first_meeting_transcript"}},"origin":{"kind":"user","originalUserUtterance":"..."}}
+  page.patch:      {"operation":"page.patch","dealId":"<uuid>","patch":{"description":{"en":"...","zh":"..."}},"origin":{"kind":"agent"}}
+  artifact.put:    {"operation":"artifact.put","dealId":"<uuid>","kind":"deck","title":"deck.pdf","mimeType":"application/pdf","storageKey":"<drive-file-id>","storageUrl":"https://drive.google.com/...","byteSize":123,"sha256":"<64 hex>","origin":{"kind":"user","originalUserUtterance":"..."}}
+
+For Information, origin records who caused the write and preserves user words;
+value.source records where the evidence came from.
 
 Core owns Chat Records, append-only Deal Events, Drive provisioning, audit,
 and idempotency. User-originated work must preserve exact wording in
@@ -441,7 +449,7 @@ async function main() {
     const params = new URLSearchParams({ clientVersion: PKG_VERSION });
     if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
     const manifest = await request("GET", `/api/agent/manifest?${params}`);
-    if (flags.json) print(manifest);
+    if (flags.json) print(structuredBootstrapManifest(manifest));
     else process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
     return;
   }
@@ -571,6 +579,6 @@ async function main() {
 main()
   .then(() => maybeNudgeUpdate())
   .catch((error) => {
-    console.error(`Error: ${error.message}`);
+    console.error(formatErrorForDisplay(error));
     process.exit(1);
   });

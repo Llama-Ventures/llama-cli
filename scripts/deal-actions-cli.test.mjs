@@ -41,6 +41,27 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
       res.end(JSON.stringify({
         ok: true,
         briefing: "PRIVATE LIVE CONTRACT\nInformation never updates Page automatically.\nallFieldsAgentWritable=true",
+        brain: { version: "test-brain" },
+        live_deal_page: { version: "test-page-contract" },
+      }));
+      return;
+    }
+    if (
+      req.url === "/api/occam/deals/commands" &&
+      body?.operation === "information.put" &&
+      body?.type === "invalid-contract-test"
+    ) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({
+        error: "Invalid Occam command",
+        code: "OCCAM_INVALID",
+        issues: [
+          {
+            code: "unrecognized_keys",
+            path: [],
+            message: 'Unrecognized key: "source"',
+          },
+        ],
       }));
       return;
     }
@@ -60,6 +81,13 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.match(bootstrap.stdout, /PRIVATE LIVE CONTRACT/);
   assert.match(bootstrap.stdout, /Information never updates Page automatically/);
   assert.match(bootstrap.stdout, /allFieldsAgentWritable=true/);
+
+  const bootstrapJson = await runCli(baseUrl, ["agent", "bootstrap", "--json"]);
+  assert.equal(bootstrapJson.code, 0, bootstrapJson.stderr);
+  const structuredBootstrap = JSON.parse(bootstrapJson.stdout);
+  assert.equal(structuredBootstrap.briefing, undefined);
+  assert.equal(structuredBootstrap.brain.version, "test-brain");
+  assert.equal(structuredBootstrap.live_deal_page.version, "test-page-contract");
 
   const read = await runCli(baseUrl, ["deal", "read", "deal-1", "--detail", "memory"]);
   assert.equal(read.code, 0, read.stderr);
@@ -87,6 +115,23 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.equal(writeBody.operation, "input.submit");
   assert.equal(writeBody.origin.originalUserUtterance, "The exact input.");
   assert.ok(seen.some((entry) => entry.method === "POST" && entry.url === "/api/occam/deals/commands"));
+
+  const invalidWriteInput = JSON.stringify({
+    operation: "information.put",
+    dealId: "11111111-1111-4111-8111-111111111111",
+    type: "invalid-contract-test",
+    value: { content: "A claim." },
+    source: { kind: "transcript" },
+    origin: { kind: "agent" },
+  });
+  const invalidWrite = await runCli(
+    baseUrl,
+    ["deal", "write", "--json", "-"],
+    invalidWriteInput,
+  );
+  assert.equal(invalidWrite.code, 1);
+  assert.match(invalidWrite.stderr, /Error\[OCCAM_INVALID\]: Invalid Occam command/);
+  assert.match(invalidWrite.stderr, /\$: Unrecognized key: "source"/);
 
   const requestsBeforeInvalidChecks = seen.length;
   for (const args of [

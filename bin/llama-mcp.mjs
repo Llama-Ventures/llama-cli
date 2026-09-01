@@ -5,10 +5,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import {
+  formatErrorForDisplay,
   getAuthHeaders,
   readBriefing,
   request,
   setClientRuntime,
+  structuredBootstrapManifest,
 } from "../lib/client.mjs";
 import {
   clearExternalSession,
@@ -41,7 +43,7 @@ async function callApi(method, path, body) {
     const result = await request(method, path, body);
     return textResult(typeof result === "string" ? result : JSON.stringify(result, null, 2));
   } catch (error) {
-    return textResult(`Error: ${error?.message ?? String(error)}`, true);
+    return textResult(formatErrorForDisplay(error), true);
   }
 }
 
@@ -50,6 +52,54 @@ const originSchema = z.object({
   originalUserUtterance: z.string().min(1).optional(),
   originatingChatRecordId: z.string().uuid().optional(),
 });
+
+const writeDealCommandSchema = z.discriminatedUnion("operation", [
+  z.object({
+    operation: z.literal("input.submit"),
+    dealId: z.string().uuid(),
+    format: z.string().min(1).max(120).optional(),
+    content: z.any(),
+    source: z.record(z.string(), z.any()).optional(),
+    origin: originSchema,
+    idempotencyKey: z.string().min(1).max(240).optional(),
+  }).strict(),
+  z.object({
+    operation: z.literal("information.put"),
+    dealId: z.string().uuid(),
+    informationId: z.string().uuid().optional(),
+    type: z.string().min(1).max(120),
+    labels: z.array(z.string()).optional(),
+    subject: z.record(z.string(), z.any()).optional(),
+    value: z.any(),
+    expectedVersion: z.number().int().positive().optional(),
+    origin: originSchema,
+    idempotencyKey: z.string().min(1).max(240).optional(),
+  }).strict(),
+  z.object({
+    operation: z.literal("page.patch"),
+    dealId: z.string().uuid(),
+    patch: z.record(z.string(), z.any()),
+    expectedRevision: z.number().int().nonnegative().optional(),
+    origin: originSchema,
+    idempotencyKey: z.string().min(1).max(240).optional(),
+  }).strict(),
+  z.object({
+    operation: z.literal("artifact.put"),
+    dealId: z.string().uuid(),
+    artifactId: z.string().uuid().optional(),
+    kind: z.string().min(1).max(120),
+    title: z.string().min(1).max(500),
+    mimeType: z.string().min(1).max(240),
+    contentBase64: z.string().min(1).optional(),
+    storageKey: z.string().min(1).optional(),
+    storageUrl: z.string().url().optional(),
+    byteSize: z.number().int().nonnegative().optional(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
+    origin: originSchema,
+    idempotencyKey: z.string().min(1).max(240).optional(),
+  }).strict(),
+]);
 
 // Deal is deliberately a closed four-tool surface. Do not add split resource
 // tools here: one more tool is one more branch every agent must reason about.
@@ -70,7 +120,7 @@ server.registerTool(
 server.registerTool(
   "read_deal",
   {
-    description: "Read one Deal. Live Page and its current private field contract are always returned; Information is memory and never updates Page automatically.",
+    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Page field semantics come from agent_bootstrap, not every Deal read.",
     inputSchema: {
       dealId: z.string().min(1),
       detail: z.enum(["overview", "memory", "files", "conversation", "history", "all"]).optional(),
@@ -99,36 +149,17 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Use the read/bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
-    inputSchema: {
-      operation: z.enum(["input.submit", "information.put", "page.patch", "artifact.put"]),
-      dealId: z.string().uuid(),
-      patch: z.record(z.string(), z.any()).optional(),
-      expectedRevision: z.number().int().nonnegative().optional(),
-      informationId: z.string().uuid().optional(),
-      type: z.string().min(1).max(120).optional(),
-      labels: z.array(z.string()).optional(),
-      subject: z.record(z.string(), z.any()).optional(),
-      value: z.any().optional(),
-      expectedVersion: z.number().int().positive().optional(),
-      format: z.string().min(1).max(120).optional(),
-      content: z.any().optional(),
-      source: z.record(z.string(), z.any()).optional(),
-      artifactId: z.string().uuid().optional(),
-      kind: z.string().min(1).max(120).optional(),
-      title: z.string().min(1).max(500).optional(),
-      mimeType: z.string().min(1).max(240).optional(),
-      contentBase64: z.string().min(1).optional(),
-      storageKey: z.string().min(1).optional(),
-      storageUrl: z.string().url().optional(),
-      byteSize: z.number().int().nonnegative().optional(),
-      sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
-      metadata: z.record(z.string(), z.any()).optional(),
-      origin: originSchema,
-      idempotencyKey: z.string().min(1).max(240).optional(),
-    },
+    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Use the bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
+    // MCP SDK 1.30 only publishes object schemas at the tool root. Nesting one
+    // command preserves the real discriminated union instead of flattening four
+    // incompatible operations into false affordances.
+    inputSchema: { command: writeDealCommandSchema },
   },
-  async (input) => callApi("POST", "/api/occam/deals/commands", prepareDealCommand("write", input)),
+  async ({ command }) => callApi(
+    "POST",
+    "/api/occam/deals/commands",
+    prepareDealCommand("write", command),
+  ),
 );
 
 server.registerTool(
@@ -158,7 +189,12 @@ server.registerTool(
   async ({ limit } = {}) => {
     const params = new URLSearchParams({ clientVersion: PKG_VERSION });
     if (limit) params.set("limit", String(limit));
-    return callApi("GET", `/api/agent/manifest?${params}`);
+    try {
+      const result = await request("GET", `/api/agent/manifest?${params}`);
+      return textResult(JSON.stringify(structuredBootstrapManifest(result), null, 2));
+    } catch (error) {
+      return textResult(formatErrorForDisplay(error), true);
+    }
   },
 );
 

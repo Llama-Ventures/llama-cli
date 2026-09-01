@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.3] - 2026-08-31
+
+- Show Core validation codes and field paths instead of collapsing malformed
+  Deal writes into `Invalid Occam command`.
+- Publish `write_deal` as four operation-specific MCP command shapes while
+  retaining one mutation tool.
+- Add copyable write examples to `llama help deal` and omit the duplicate
+  rendered briefing from structured bootstrap output.
+
 ## [2.0.2] - 2026-08-31
 
 - Correct the authenticated runtime model: Brain has exactly two private
