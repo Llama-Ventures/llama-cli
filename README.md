@@ -122,6 +122,27 @@ For user-originated work, preserve the exact words in
 Chat and Event are system-owned. There is no caller-controlled Event append or
 general Chat-forging operation.
 
+## Deal Memory sidecar
+
+Deal Memory is a separate domain alongside the five-resource Deal model. Each
+deal can have one canonical, human-readable Markdown Deal Story:
+
+```bash
+llama memory read <dealId>
+llama memory read <dealId> --raw
+llama memory write <dealId> --markdown deal-story.md
+llama memory write <dealId> --markdown deal-story.md --expected-version '"etag-from-read"'
+```
+
+The first write omits `--expected-version`. Updating an existing story requires
+the opaque `version` returned by `read`; a stale value fails instead of losing a
+concurrent edit. This uses the same `llama auth login` identity. CLI calls the
+authenticated Command Core adapter only—it has no sidecar URL, service token,
+S3 credentials, or direct database access.
+
+`llama deal read --detail memory` still means structured Deal Information.
+`llama memory read` means the separate accumulated Markdown Deal Story.
+
 ## Five Deal resources
 
 1. Live Deal Page — current human-visible state.
@@ -149,7 +170,9 @@ Its Deal surface is also exactly four tools:
 - `write_deal`
 
 Authentication, skill discovery, Wiki, admin audit, preferences, and external
-pitch remain separate non-Deal domains.
+pitch remain separate non-Deal domains. Deal Memory likewise has two separate
+MCP tools, `get_deal_memory` and `update_deal_memory`; it does not add a fifth
+Occam Deal tool.
 
 ## Agent bootstrap
 

@@ -116,6 +116,26 @@ llama deal write --json write.json
 Chat 和 Event 由系统拥有。Agent 不能自行伪造 Event 类型、顺序、作者、
 时间，也没有通用的 Chat 写入工具。
 
+## Deal Memory sidecar
+
+Deal Memory 是与五资源 Deal 模型并行、完全解耦的领域。每个 Deal 可以有一个
+人和 Agent 都能直接阅读的 Markdown Deal Story：
+
+```bash
+llama memory read <dealId>
+llama memory read <dealId> --raw
+llama memory write <dealId> --markdown deal-story.md
+llama memory write <dealId> --markdown deal-story.md --expected-version '"read 返回的 etag"'
+```
+
+第一次创建时不传 `--expected-version`；以后更新必须使用前一次 `read` 返回的
+不透明 `version`，旧版本会安全失败，不会覆盖他人的新内容。它复用同一个
+`llama auth login` 身份。CLI 只调用经过认证的 Command Core adapter，不持有
+sidecar URL、service token、S3 凭证，也不直接访问数据库。
+
+`llama deal read --detail memory` 仍表示结构化 Deal Information；
+`llama memory read` 表示独立的 Markdown Deal Story。
+
 ## Deal 只有五种业务资源
 
 1. Live Deal Page：人类看到的当前状态；
@@ -141,7 +161,9 @@ MCP 的 Deal 工具同样恰好四个：
 - `write_deal`
 
 认证、skill discovery、Wiki、admin audit、preferences 和 external pitch
-属于其他独立领域，不会扩大 Deal action space。
+属于其他独立领域，不会扩大 Deal action space。Deal Memory 同样是独立领域，
+对应 `get_deal_memory` 和 `update_deal_memory` 两个 MCP 工具，并不增加第五个
+Occam Deal 工具。
 
 ## Agent 启动
 

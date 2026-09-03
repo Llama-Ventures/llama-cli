@@ -25,6 +25,7 @@ import {
   compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
+import { buildDealMemoryPath } from "../lib/deal-memory-actions.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -161,6 +162,36 @@ server.registerTool(
     "/api/occam/deals/commands",
     prepareDealCommand("write", command),
     (result) => compactDealWriteResult(command, result),
+  ),
+);
+
+// Deal Memory is a separate sidecar domain. These do not add an Occam Deal
+// business resource or widen the deliberately closed four-tool Deal surface.
+server.registerTool(
+  "get_deal_memory",
+  {
+    description: "Read the complete canonical Markdown Deal Story and its opaque concurrency version.",
+    inputSchema: { dealId: z.string().uuid() },
+  },
+  // @core-api-operation GET /api/deal-memory/{dealId}/story
+  async ({ dealId }) => callApi("GET", buildDealMemoryPath(dealId)),
+);
+
+server.registerTool(
+  "update_deal_memory",
+  {
+    description: "Create or replace the complete Markdown Deal Story. Existing stories require the version returned by get_deal_memory; stale writes fail safely.",
+    inputSchema: {
+      dealId: z.string().uuid(),
+      markdown: z.string().min(1).max(1_048_576),
+      expected_version: z.string().min(1).optional(),
+    },
+  },
+  // @core-api-operation PUT /api/deal-memory/{dealId}/story
+  async ({ dealId, markdown, expected_version }) => callApi(
+    "PUT",
+    buildDealMemoryPath(dealId),
+    { markdown, ...(expected_version ? { expected_version } : {}) },
   ),
 );
 

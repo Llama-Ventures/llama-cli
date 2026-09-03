@@ -56,6 +56,21 @@ test("MCP publishes exactly four Deal tools", async () => {
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
 });
 
+test("MCP publishes Deal Memory as a separate two-tool domain", async () => {
+  const tools = await listMcpTools();
+  const memoryTools = tools.filter((tool) =>
+    ["get_deal_memory", "update_deal_memory"].includes(tool.name),
+  );
+  assert.deepEqual(memoryTools.map((tool) => tool.name), [
+    "get_deal_memory",
+    "update_deal_memory",
+  ]);
+  const update = memoryTools[1];
+  assert.deepEqual(update.inputSchema.required.sort(), ["dealId", "markdown"]);
+  assert.equal(update.inputSchema.properties.expected_version.type, "string");
+  assert.equal(update.inputSchema.properties.markdown.maxLength, 1_048_576);
+});
+
 test("MCP write_deal exposes four operation-specific payloads", async () => {
   const tools = await listMcpTools();
   const writeDeal = tools.find((tool) => tool.name === "write_deal");
