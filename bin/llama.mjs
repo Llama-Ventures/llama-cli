@@ -85,8 +85,9 @@ Before any Page write:
 
 The authenticated bootstrap contains the two-part private Llama Brain:
 Investment Framework V3 plus the Llama Command operating skill. It also
-contains the separate current 61-field Page contract. CLI is the tool, not
-Brain. Information never updates Page automatically. page.patch is JSON
+contains the separate current Page field contract; its field count is live,
+so read it there. CLI is the tool, not Brain. Information never updates
+Page automatically. page.patch is JSON
 Merge Patch: objects merge, null deletes, and arrays replace whole arrays, so
 read-modify-write complete Page arrays and preserve sibling slots.
 
@@ -97,7 +98,13 @@ write JSON (CLI derives idempotencyKey when omitted):
   input.submit:    {"operation":"input.submit","dealId":"<uuid>","content":"<original input>","format":"text","source":{},"origin":{"kind":"user","originalUserUtterance":"..."}}
   information.put:{"operation":"information.put","dealId":"<uuid>","type":"founder_claim","labels":["founder-stated"],"subject":{"topic":"traction"},"value":{"content":"...","source":{"kind":"first_meeting_transcript"}},"origin":{"kind":"user","originalUserUtterance":"..."}}
   page.patch:      {"operation":"page.patch","dealId":"<uuid>","patch":{"description":{"en":"...","zh":"..."}},"origin":{"kind":"agent"}}
-  artifact.put:    {"operation":"artifact.put","dealId":"<uuid>","kind":"deck","title":"deck.pdf","mimeType":"application/pdf","storageKey":"<drive-file-id>","storageUrl":"https://drive.google.com/...","byteSize":123,"sha256":"<64 hex>","origin":{"kind":"user","originalUserUtterance":"..."}}
+  artifact.put:    {"operation":"artifact.put","dealId":"<uuid>","kind":"deck","title":"deck.pdf","mimeType":"application/pdf","contentBase64":"<file bytes, base64>","origin":{"kind":"user","originalUserUtterance":"..."}}
+
+artifact.put sends the bytes as contentBase64; Core stores them in the Deal's
+own Drive folder and derives byteSize and sha256 itself. Do not supply a
+folder, storage key or URL for a file you hold. Write the JSON to a file and
+pass its path. Only an artifact that already lives elsewhere is referenced
+with storageKey (+ optional storageUrl) plus byteSize and sha256 instead.
 
 For Information, origin records who caused the write and preserves user words;
 value.source records where the evidence came from.
