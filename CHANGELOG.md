@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-09-03
+
 ### Changed
 - `llama help deal` no longer hardcodes the Page field count; the count is
   live in `llama agent bootstrap`.
