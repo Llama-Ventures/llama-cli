@@ -44,6 +44,14 @@ working memory; it never becomes Page automatically. Page is the bounded,
 human-visible current projection, so patch the exact semantic fields described
 by the live contract instead of hiding structured analysis in `notes`.
 
+The Markdown Deal Story is a separate sidecar domain, not a sixth Occam
+resource. Use `get_deal_memory` / `llama memory read` for accumulated narrative
+understanding, and `update_deal_memory` / `llama memory write` to replace its
+complete Markdown. Read first and pass the returned opaque version on every
+update; a conflict means read again and reconcile. These calls still go only
+through authenticated Core. Never request AWS credentials or call S3 or the
+sidecar directly.
+
 Every Page content field is Agent-writable. A field's `author` or
 `semanticOwner` describes attribution, not permission. Preserve a real human
 judgment with its author; otherwise label the value as an Agent proposal / 待人确认.
@@ -207,4 +215,5 @@ artifact, then decide whether its content deserves Information or a Page patch.
   `DEAL_COMMAND_RETIRED`. Upgrade the CLI and retry the intended four-action
   command.
 - Wiki, admin audit, external pitch, authentication, and skill discovery are
-  separate domains. They do not expand the Deal action space.
+  separate domains. Deal Memory is also separate. None expands the four-action
+  Occam Deal space.

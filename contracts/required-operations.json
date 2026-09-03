@@ -12,6 +12,7 @@
     { "method": "GET", "path": "/api/agent/preferences" },
     { "method": "GET", "path": "/api/agent/skills" },
     { "method": "GET", "path": "/api/agent/skills/{slug}" },
+    { "method": "GET", "path": "/api/deal-memory/{dealId}/story" },
     { "method": "GET", "path": "/api/me" },
     { "method": "GET", "path": "/api/oauth/authorize" },
     { "method": "GET", "path": "/api/occam/deals" },
@@ -28,6 +29,7 @@
     { "method": "POST", "path": "/api/oauth/token" },
     { "method": "POST", "path": "/api/occam/deals/commands" },
     { "method": "POST", "path": "/api/wiki/{slug}/restore" },
-    { "method": "POST", "path": "/api/wiki/save" }
+    { "method": "POST", "path": "/api/wiki/save" },
+    { "method": "PUT", "path": "/api/deal-memory/{dealId}/story" }
   ]
 }

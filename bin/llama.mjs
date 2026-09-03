@@ -39,6 +39,10 @@ import {
   prepareDealCommand,
   readJsonInput,
 } from "../lib/deal-actions.mjs";
+import {
+  buildDealMemoryPath,
+  readMarkdownInput,
+} from "../lib/deal-memory-actions.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -50,6 +54,10 @@ Deal has exactly four actions:
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
+
+Deal Memory is a separate sidecar domain through the same login:
+  llama memory read <dealId> [--raw]
+  llama memory write <dealId> --markdown <file|-> [--expected-version <version>]
 
 Separate preserved domains:
   llama auth status|login|logout
@@ -98,6 +106,19 @@ Core owns Chat Records, append-only Deal Events, Drive provisioning, audit,
 and idempotency. User-originated work must preserve exact wording in
 origin.originalUserUtterance or reference origin.originatingChatRecordId.`;
 
+const HELP_MEMORY = `Llama Deal Memory — one canonical Markdown Deal Story
+
+  llama memory read <dealId> [--raw]
+  llama memory write <dealId> --markdown <file|-> [--expected-version <version>]
+
+Read returns the full JSON record, including its opaque version. --raw prints
+only the exact Markdown. A first write creates the story without a version.
+Every later write must pass the version from the preceding read; stale writes
+fail instead of overwriting newer understanding.
+
+This uses your existing Llama authentication. The CLI talks only to Command
+Core and never receives Deal Memory service credentials or AWS access.`;
+
 function parseFlags(args, allowed = null) {
   const flags = {};
   const positional = [];
@@ -124,7 +145,7 @@ function parseFlags(args, allowed = null) {
 }
 
 function usage(area) {
-  console.log(area === "deal" ? HELP_DEAL : HELP_ROOT);
+  console.log(area === "deal" ? HELP_DEAL : area === "memory" ? HELP_MEMORY : HELP_ROOT);
 }
 
 function assertDealAction(area, action) {
@@ -574,6 +595,32 @@ async function main() {
     const response = await request("POST", "/api/occam/deals/commands", command);
     print(compactDealWriteResult(command, response));
     return;
+  }
+
+  if (area === "memory" && action === "read") {
+    const { flags, positional } = parseFlags(rest, ["raw"]);
+    const path = buildDealMemoryPath(positional[0]);
+    // @core-api-operation GET /api/deal-memory/{dealId}/story
+    const result = await request("GET", path);
+    if (flags.raw) process.stdout.write(result.markdown);
+    else print(result);
+    return;
+  }
+  if (area === "memory" && action === "write") {
+    const { flags, positional } = parseFlags(rest, ["markdown", "expected-version"]);
+    const path = buildDealMemoryPath(positional[0]);
+    const markdown = await readMarkdownInput(flags.markdown);
+    // @core-api-operation PUT /api/deal-memory/{dealId}/story
+    print(await request("PUT", path, {
+      markdown,
+      ...(typeof flags["expected-version"] === "string"
+        ? { expected_version: flags["expected-version"] }
+        : {}),
+    }));
+    return;
+  }
+  if (area === "memory") {
+    throw new Error("Memory actions: read, write.");
   }
 
   if (area === "wiki") {
