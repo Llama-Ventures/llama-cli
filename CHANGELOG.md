@@ -1,5 +1,28 @@
 # Changelog
 
+All notable changes to `@llamaventures/cli` are documented here.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
+this project adheres to [Semantic Versioning](https://semver.org).
+
+## [Unreleased]
+
+## [2.1.0] - 2026-09-03
+
+### Added
+- Add `llama memory read|write` and matching `get_deal_memory` /
+  `update_deal_memory` MCP tools for one canonical Markdown Deal Story, using
+  the existing Llama login through Core's authenticated sidecar adapter.
+
+### Changed
+- Make the authenticated live bootstrap mandatory before Deal work and clarify
+  that it loads the server-owned two-part private Brain plus the separate Live
+  Deal Page field contract. CLI remains only the tool/transport layer.
+- Teach CLI and MCP Agents that Information never updates Page automatically,
+  every Page content field is Agent-writable, and field authorship controls
+  attribution rather than permission.
+- Pin the additive Deal Memory operations to Core API 5.1.0 while preserving
+  exactly four Occam Deal actions and five Occam resources.
+
 ## [2.0.3] - 2026-08-31
 
 - Show Core validation codes and field paths instead of collapsing malformed
@@ -48,27 +71,6 @@
   system-owned.
 - Keep Wiki, admin audit, external pitch, authentication, preferences, and
   progressive skill discovery as separate non-Deal domains.
-
-All notable changes to `@llamaventures/cli` are documented here.
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
-this project adheres to [Semantic Versioning](https://semver.org).
-
-## [Unreleased]
-
-### Added
-- Add `llama memory read|write` and matching `get_deal_memory` /
-  `update_deal_memory` MCP tools for one canonical Markdown Deal Story, using
-  the existing Llama login through Core's authenticated sidecar adapter.
-
-### Changed
-- Make the authenticated live bootstrap mandatory before Deal work and clarify
-  that it loads the server-owned two-part private Brain plus the separate Live
-  Deal Page field contract. CLI remains only the tool/transport layer.
-- Teach CLI and MCP Agents that Information never updates Page automatically,
-  every Page content field is Agent-writable, and field authorship controls
-  attribution rather than permission.
-- Pin the additive Deal Memory operations to Core API 5.1.0 while preserving
-  exactly four Occam Deal actions and five Occam resources.
 
 ## [1.26.0] - 2026-08-11
 
