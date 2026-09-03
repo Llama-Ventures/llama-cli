@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+- `llama help deal` no longer hardcodes the Page field count; the count is
+  live in `llama agent bootstrap`.
+- Show `contentBase64` as the primary `artifact.put` example. Core stores the
+  bytes in the Deal's Drive folder and derives `byteSize` / `sha256` itself;
+  `storageKey` remains only for artifacts that already live elsewhere.
+
 ## [2.1.0] - 2026-09-03
 
 ### Added
