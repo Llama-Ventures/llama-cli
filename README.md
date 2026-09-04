@@ -134,11 +134,19 @@ llama memory write <dealId> --markdown deal-story.md
 llama memory write <dealId> --markdown deal-story.md --expected-version '"etag-from-read"'
 ```
 
-The first write omits `--expected-version`. Updating an existing story requires
-the opaque `version` returned by `read`; a stale value fails instead of losing a
-concurrent edit. This uses the same `llama auth login` identity. CLI calls the
-authenticated Command Core adapter only—it has no sidecar URL, service token,
-S3 credentials, or direct database access.
+Always read before writing. If `read` returns any Story, including an empty
+placeholder, pass its opaque `version`; only a `404` means creation may omit
+`--expected-version`. A stale value fails instead of losing a concurrent edit.
+Rewrite the complete document as one coherent current understanding rather than
+appending an update log. Do not restate Live Deal Page or Deal Information
+fields, and do not write when the understanding would not materially improve.
+
+The Markdown needs a non-empty body and YAML frontmatter with `deal_id`, `uuid`,
+`created`, and `updated`. The first three values never change; `updated` must be
+an ISO 8601 timestamp with an offset and strictly advance on every write. This
+uses the same `llama auth login` identity. CLI calls the authenticated Command
+Core adapter only—it has no sidecar URL, service token, S3 credentials, or
+direct database access.
 
 `llama deal read --detail memory` still means structured Deal Information.
 `llama memory read` means the separate accumulated Markdown Deal Story.

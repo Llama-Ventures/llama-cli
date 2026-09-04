@@ -66,6 +66,12 @@ test("MCP publishes Deal Memory as a separate two-tool domain", async () => {
     "update_deal_memory",
   ]);
   const update = memoryTools[1];
+  assert.match(memoryTools[0].description, /only 404 means no Story exists/);
+  assert.match(update.description, /never append an update log/);
+  assert.match(update.description, /would not materially improve/);
+  assert.match(update.description, /stable uuid and created/);
+  assert.match(update.description, /updated must strictly advance/);
+  assert.match(update.description, /including a placeholder/);
   assert.deepEqual(update.inputSchema.required.sort(), ["dealId", "markdown"]);
   assert.equal(update.inputSchema.properties.expected_version.type, "string");
   assert.equal(update.inputSchema.properties.markdown.maxLength, 1_048_576);

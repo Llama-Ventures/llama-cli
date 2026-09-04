@@ -114,3 +114,17 @@ test("invalid memory commands fail before HTTP", async () => {
   assert.equal(result.code, 1);
   assert.match(result.stderr, /valid deal UUID/);
 });
+
+test("memory help publishes the complete minimal writing contract", async () => {
+  const result = await runCli("http://127.0.0.1:1", ["help", "memory"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /including an empty placeholder/);
+  assert.match(result.stdout, /Only\s+a 404 means creation may omit the version/);
+  assert.match(result.stdout, /replace the complete document instead of\s+appending an update log/);
+  assert.match(result.stdout, /would not materially improve, do not write/);
+  assert.match(result.stdout, /deal_id: the route Deal UUID; never changes/);
+  assert.match(result.stdout, /uuid:\s+the Story UUID; never changes/);
+  assert.match(result.stdout, /created:\s+ISO 8601 with offset; never changes/);
+  assert.match(result.stdout, /updated:\s+ISO 8601 with offset; must strictly advance/);
+  assert.match(result.stdout, /--detail memory reads structured Deal Information/);
+});
