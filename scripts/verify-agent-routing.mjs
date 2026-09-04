@@ -162,7 +162,7 @@ try {
 
   const business = calls.filter((call) => call.path !== "/api/agent/client-events");
   for (const call of business) {
-    assert.equal(call.headers.version, "2.1.3");
+    assert.equal(call.headers.version, "2.2.0");
     assert.equal(call.headers.capabilities, "core.read.v1,occam.deal.v1");
     assert.equal(call.headers.apiVersion, coreApiContract.apiVersion);
     assert.equal(call.headers.apiDigest, coreApiContract.sha256);
