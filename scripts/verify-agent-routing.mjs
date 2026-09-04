@@ -13,7 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 const coreApiContract = JSON.parse(readFileSync(path.join(repoRoot, "contracts/core-api.json"), "utf8"));
 
-assert.equal(packageJson.version, "2.1.3");
+assert.equal(packageJson.version, "2.2.0");
 assert.equal(
   packageJson.scripts?.["verify:release"],
   "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
