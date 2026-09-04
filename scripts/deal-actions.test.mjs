@@ -8,7 +8,55 @@ import {
   ensureIdempotencyKey,
   prepareDealCommand,
   validateCommandOrigin,
+  validateHumanSubjectiveView,
 } from "../lib/deal-actions.mjs";
+
+test("accepts a human subjective view only when it names the user and quotes them verbatim", () => {
+  const origin = { kind: "user", originalUserUtterance: "Save this:  I think the founder has\nstrong product taste." };
+  const valid = {
+    operation: "information.put",
+    dealId: "d",
+    type: "human_subjective_view.people",
+    value: { speaker: "Ada", rawText: "I think the founder has strong product taste." },
+    origin,
+  };
+  assert.doesNotThrow(() => prepareDealCommand("write", valid));
+  assert.throws(() => prepareDealCommand("write", { ...valid, value: { rawText: valid.value.rawText } }), /value\.speaker/);
+  assert.throws(() => prepareDealCommand("write", { ...valid, value: { speaker: "Ada" } }), /value\.rawText/);
+  assert.throws(
+    () => prepareDealCommand("write", { ...valid, value: { speaker: "Ada", rawText: "Founder has great taste." } }),
+    /verbatim/,
+  );
+  assert.throws(() => prepareDealCommand("write", { ...valid, origin: { kind: "agent" } }), /originate from a user/);
+  assert.throws(() => prepareDealCommand("write", { ...valid, type: "human_subjective_view" }), /exactly/);
+  assert.throws(() => prepareDealCommand("write", { ...valid, type: "Human_Subjective_View.People" }), /exactly/);
+});
+
+test("refuses retired human view aliases and names the replacement", () => {
+  for (const type of ["human_view", "human_view.people", "partner_view", "human_opinion", "Human_Statement"]) {
+    assert.throws(
+      () => validateHumanSubjectiveView({ type, value: {} }, { kind: "agent" }),
+      /human_subjective_view\.people or human_subjective_view\.business/,
+    );
+  }
+  assert.doesNotThrow(() => validateHumanSubjectiveView({ type: "founder_claim", value: { content: "x" } }, { kind: "agent" }));
+});
+
+test("applies the human subjective view rule to initial Information on create", () => {
+  const origin = { kind: "user", originalUserUtterance: "The team feels strong." };
+  const base = { companyName: "Example Co", origin };
+  assert.throws(
+    () => prepareDealCommand("create", {
+      ...base,
+      information: [{ type: "human_subjective_view.business", value: { speaker: "Ada", rawText: "The team is strong." } }],
+    }),
+    /verbatim/,
+  );
+  assert.doesNotThrow(() => prepareDealCommand("create", {
+    ...base,
+    information: [{ type: "human_subjective_view.people", value: { speaker: "Ada", rawText: "The team feels strong." } }],
+  }));
+});
 
 test("builds progressive Deal read and search paths", () => {
   assert.equal(buildDealSearchPath("Acme AI", { state: "active", limit: 5 }), "/api/occam/deals?q=Acme+AI&state=active&limit=5");

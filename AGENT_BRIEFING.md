@@ -162,16 +162,27 @@ Always submit raw user information first when losing it would be unacceptable:
 }
 ```
 
-Then, when useful, write a structured Information unit:
+Then, when useful, write a structured Information unit. Before each one, ask a
+single question: is this a Llama user's own subjective judgment? Subjective
+means the truth depends on who judges: a value or comparative word with no
+stated benchmark, or a claim about someone's future behavior or inner state. If
+yes, the type is `human_subjective_view.people` (founders or team) or
+`human_subjective_view.business` (company, product, market or deal),
+`value.speaker` names that user, and `value.rawText` quotes the user verbatim
+from `origin.originalUserUtterance`. CLI and Core reject anything else. If no,
+choose any type that fits; founder words are `founder_claim`.
 
 ```json
 {
   "operation": "information.put",
   "dealId": "<uuid>",
-  "type": "founder.opinion",
-  "labels": ["human_view"],
+  "type": "human_subjective_view.people",
   "subject": {"person": "Founder name"},
-  "value": {"speaker": "user", "view": "strong product taste"},
+  "value": {
+    "speaker": "<Llama user>",
+    "rawText": "I think the founder has strong product taste.",
+    "summary": "Strong product taste, per the user."
+  },
   "origin": {
     "kind": "user",
     "originalUserUtterance": "I think the founder has strong product taste."

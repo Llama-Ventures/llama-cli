@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+- Define `human_subjective_view.people` and `human_subjective_view.business`
+  as the only Information types for a Llama user's own judgment. CLI and MCP
+  reject them locally unless `value.speaker` is set and `value.rawText`
+  appears verbatim inside `origin.originalUserUtterance`; retired aliases
+  (`human_view`, `human_statement`, `human_opinion`, `human_judgment`,
+  `partner_view`) are refused with the replacement named. Core enforces the
+  same rule server-side.
+
 ## [2.1.3] - 2026-09-03
 
 ### Added
