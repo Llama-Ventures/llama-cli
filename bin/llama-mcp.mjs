@@ -152,7 +152,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Before page.patch, use get_live_deal_page_schema for the exact fields being changed and write bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
+    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Before page.patch, use get_live_deal_page_schema for the exact fields being changed and write bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots. A Llama user's own judgment is human_subjective_view.people or human_subjective_view.business and must carry value.speaker plus value.rawText quoted verbatim from origin.originalUserUtterance; it is rejected otherwise.",
     // MCP SDK 1.30 only publishes object schemas at the tool root. Nesting one
     // command preserves the real discriminated union instead of flattening four
     // incompatible operations into false affordances.
