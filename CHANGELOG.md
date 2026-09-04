@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-09-03
+
 ### Added
 - Add `llama page-schema list|read|section` and the matching
   `get_live_deal_page_schema` MCP tool so Agents progressively load only the
