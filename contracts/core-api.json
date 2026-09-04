@@ -1,9 +1,9 @@
 {
   "format": "llama.core-api-contract.v1",
   "name": "llama-core-api",
-  "apiVersion": "5.1.0",
+  "apiVersion": "5.3.0",
   "openapiVersion": "3.0.3",
-  "sha256": "948a8d02ae833e8cfa2302bc3c615fc1d3c792ae774ebc25b16be81fd1b85fee",
-  "pathCount": 111,
-  "operationCount": 138
+  "sha256": "b793f67038b48cdfbfcc9141153132689c40e84adfbe087b0dbef3a409f5e5d5",
+  "pathCount": 113,
+  "operationCount": 140
 }

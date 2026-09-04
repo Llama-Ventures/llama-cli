@@ -34,7 +34,7 @@ printf '%s\n' \
   | node bin/llama-mcp.mjs | head -200
 ```
 
-You should see 52 named tools, including `deal_agent_run`, `deal_enrich`, the
+You should see 53 named tools, including `deal_agent_run`, `deal_enrich`, the
 5 `pitch_*`, and no generic API passthrough tool.
 
 ## Conventions

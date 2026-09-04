@@ -15,9 +15,12 @@ llama agent bootstrap
 The authenticated response contains the current private Llama Brain with
 exactly two components: the approved Investment Framework V3 Markdown (how to
 think) and the Llama Command operating skill (how to work). Beside Brain it
-contains the separate current Live Deal Page field contract (what every visible
-slot means and how to verify a good write). The public CLI intentionally bundles
-none of this private content; it only fetches it after authentication.
+contains a compact index of the current Live Deal Page fields. Before
+`page.patch`, progressively load only the exact fields being changed with
+`llama page-schema read <field> [field...]` or `get_live_deal_page_schema`.
+Load one section only when the write genuinely spans that section. The public
+CLI intentionally bundles none of this private content; it only fetches it
+after authentication.
 
 CLI is the Agent's tool, not Brain. Do not substitute a private skill wrapper
 for either canonical Brain component.
@@ -60,7 +63,7 @@ judgment with its author; otherwise label the value as an Agent proposal / å¾…äº
 replace the entire array. Before changing one `whatTheyDo`, `peopleSteps`,
 `foundersJson`, or `industryMaps` item, read the current Page, preserve every
 sibling item, and submit the complete updated array. The live field contract
-includes the exact payload path and write mode for all 61 semantic fields.
+read for those exact fields includes their payload paths and write modes.
 
 ## Exactly four Deal actions
 

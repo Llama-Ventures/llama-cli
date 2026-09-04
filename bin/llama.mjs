@@ -43,6 +43,7 @@ import {
   buildDealMemoryPath,
   readMarkdownInput,
 } from "../lib/deal-memory-actions.mjs";
+import { buildPageSchemaPath } from "../lib/page-schema.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -65,6 +66,7 @@ Separate preserved domains:
   llama auth status|login|logout
   llama token set|show
   llama agent bootstrap
+  llama page-schema list|read|section
   llama skills list|search|show
   llama pref list|add|approve|retire
   llama explain <url-or-object>
@@ -84,14 +86,16 @@ Exactly four actions:
 
 Before any Page write:
   llama agent bootstrap
+  llama page-schema read <field> [field...]
 
 The authenticated bootstrap contains the two-part private Llama Brain:
 Investment Framework V3 plus the Llama Command operating skill. It also
-contains the separate current Page field contract; its field count is live,
-so read it there. CLI is the tool, not Brain. Information never updates
-Page automatically. page.patch is JSON
-Merge Patch: objects merge, null deletes, and arrays replace whole arrays, so
-read-modify-write complete Page arrays and preserve sibling slots.
+contains a compact index of the current Page fields. Before page.patch, use
+the separate page-schema command to read only the exact fields being changed,
+or one section when necessary. CLI is the tool, not Brain. Information never
+updates Page automatically. page.patch is JSON Merge Patch: objects merge,
+null deletes, and arrays replace whole arrays, so read-modify-write complete
+Page arrays and preserve sibling slots.
 
 create JSON:
   {"companyName":"Acme","page":{},"information":[],"origin":{"kind":"user","originalUserUtterance":"..."}}
@@ -142,6 +146,16 @@ read this Story.
 This uses your existing Llama authentication. The CLI talks only to Command
 Core and never receives Deal Memory service credentials or AWS access.`;
 
+const HELP_PAGE_SCHEMA = `Llama Live Deal Page schema — progressive, read-only context
+
+  llama page-schema list
+  llama page-schema read <field> [field...]
+  llama page-schema section <section>
+
+Start with list. Before page.patch, read only the exact fields being changed;
+use a section read only when the write genuinely spans that section. This is a
+schema/field-prompt surface, not a fifth Deal action and not Page data.`;
+
 function parseFlags(args, allowed = null) {
   const flags = {};
   const positional = [];
@@ -168,7 +182,12 @@ function parseFlags(args, allowed = null) {
 }
 
 function usage(area) {
-  console.log(area === "deal" ? HELP_DEAL : area === "memory" ? HELP_MEMORY : HELP_ROOT);
+  console.log(
+    area === "deal" ? HELP_DEAL :
+    area === "memory" ? HELP_MEMORY :
+    area === "page-schema" ? HELP_PAGE_SCHEMA :
+    HELP_ROOT,
+  );
 }
 
 function assertDealAction(area, action) {
@@ -502,6 +521,7 @@ async function main() {
     }
     try {
       const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+      params.set("page_schema", "progressive");
       const response = await request("GET", `/api/agent/briefing?${params}`);
       process.stdout.write(response?.briefing || readBriefing());
     } catch (error) {
@@ -514,11 +534,34 @@ async function main() {
   if (area === "agent" && action === "bootstrap") {
     const { flags } = parseFlags(rest, ["json", "limit"]);
     const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+    params.set("page_schema", "progressive");
     if (flags.limit && flags.limit !== true) params.set("limit", String(flags.limit));
     const manifest = await request("GET", `/api/agent/manifest?${params}`);
     if (flags.json) print(structuredBootstrapManifest(manifest));
     else process.stdout.write(`${manifest.briefing || JSON.stringify(manifest, null, 2)}\n`);
     return;
+  }
+
+  if (area === "page-schema") {
+    if (!action || action === "list") {
+      if (rest.length) throw new Error("Usage: llama page-schema list");
+      // @core-api-operation GET /api/agent/page-schema
+      print(await request("GET", buildPageSchemaPath()));
+      return;
+    }
+    if (action === "read") {
+      if (!rest.length) throw new Error("Usage: llama page-schema read <field> [field...]");
+      // @core-api-operation GET /api/agent/page-schema
+      print(await request("GET", buildPageSchemaPath({ fields: rest })));
+      return;
+    }
+    if (action === "section") {
+      if (rest.length !== 1) throw new Error("Usage: llama page-schema section <section>");
+      // @core-api-operation GET /api/agent/page-schema
+      print(await request("GET", buildPageSchemaPath({ section: rest[0] })));
+      return;
+    }
+    throw new Error("Page schema actions: list, read, section.");
   }
 
   if (area === "skills" || (area === "agent" && action === "skills")) {

@@ -26,6 +26,7 @@ import {
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
 import { buildDealMemoryPath } from "../lib/deal-memory-actions.mjs";
+import { buildPageSchemaPath, MAX_PAGE_SCHEMA_FIELDS } from "../lib/page-schema.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
 const { version: PKG_VERSION } = requireFromHere("../package.json");
@@ -151,7 +152,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Use the bootstrap field contract and bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
+    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Before page.patch, use get_live_deal_page_schema for the exact fields being changed and write bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots.",
     // MCP SDK 1.30 only publishes object schemas at the tool root. Nesting one
     // command preserves the real discriminated union instead of flattening four
     // incompatible operations into false affordances.
@@ -216,15 +217,35 @@ server.registerTool(
 server.registerTool(
   "agent_bootstrap",
   {
-    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain (Investment Framework V3 + Llama Command operating skill), the separate current Live Deal Page field contract, runtime contract, and visible Llama OS skills.",
+    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain (Investment Framework V3 + Llama Command operating skill), a compact Live Deal Page schema index, runtime contract, and visible Llama OS skills. Read exact Page fields separately with get_live_deal_page_schema.",
     inputSchema: { limit: z.number().int().min(1).max(100).optional() },
   },
   async ({ limit } = {}) => {
     const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+    params.set("page_schema", "progressive");
     if (limit) params.set("limit", String(limit));
     try {
       const result = await request("GET", `/api/agent/manifest?${params}`);
       return textResult(JSON.stringify(structuredBootstrapManifest(result), null, 2));
+    } catch (error) {
+      return textResult(formatErrorForDisplay(error), true);
+    }
+  },
+);
+
+server.registerTool(
+  "get_live_deal_page_schema",
+  {
+    description: "Read the Live Deal Page schema progressively. Call with no selector for the compact index; before page.patch, request only exact fields or one section. This is read-only context, not a fifth Deal action.",
+    inputSchema: {
+      fields: z.array(z.string().min(1)).min(1).max(MAX_PAGE_SCHEMA_FIELDS).optional(),
+      section: z.string().min(1).optional(),
+    },
+  },
+  async ({ fields, section } = {}) => {
+    try {
+      // @core-api-operation GET /api/agent/page-schema
+      return await callApi("GET", buildPageSchemaPath({ fields, section }));
     } catch (error) {
       return textResult(formatErrorForDisplay(error), true);
     }
@@ -430,7 +451,7 @@ server.registerTool(
 server.registerPrompt(
   "agent_briefing",
   {
-    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain, the separate current Live Deal Page field contract, and runtime contract; bundled text is only an offline fallback.",
+    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain, compact Live Deal Page schema index, and runtime contract; read exact fields separately with get_live_deal_page_schema. Bundled text is only an offline fallback.",
   },
   async () => {
     const headers = await getAuthHeaders();
@@ -440,6 +461,7 @@ server.registerPrompt(
     } else {
       try {
         const params = new URLSearchParams({ clientVersion: PKG_VERSION });
+        params.set("page_schema", "progressive");
         const response = await request("GET", `/api/agent/briefing?${params}`);
         text = response?.briefing || readBriefing();
       } catch (error) {

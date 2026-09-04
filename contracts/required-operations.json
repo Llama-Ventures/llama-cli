@@ -9,6 +9,7 @@
     { "method": "GET", "path": "/api/agent/briefing" },
     { "method": "GET", "path": "/api/agent/explain" },
     { "method": "GET", "path": "/api/agent/manifest" },
+    { "method": "GET", "path": "/api/agent/page-schema" },
     { "method": "GET", "path": "/api/agent/preferences" },
     { "method": "GET", "path": "/api/agent/skills" },
     { "method": "GET", "path": "/api/agent/skills/{slug}" },

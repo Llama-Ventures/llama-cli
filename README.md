@@ -180,7 +180,9 @@ Its Deal surface is also exactly four tools:
 Authentication, skill discovery, Wiki, admin audit, preferences, and external
 pitch remain separate non-Deal domains. Deal Memory likewise has two separate
 MCP tools, `get_deal_memory` and `update_deal_memory`; it does not add a fifth
-Occam Deal tool.
+Occam Deal tool. `get_live_deal_page_schema` progressively reads the Page
+schema index, exact fields, or one section; it is read-only context rather than
+a fifth Deal action.
 
 ## Agent bootstrap
 
@@ -192,10 +194,12 @@ llama skills show <slug>
 
 Agents should run `llama agent bootstrap` before Deal work. The command loads
 the authenticated, server-owned private Brain: Investment Framework V3 for
-thinking plus the Llama Command operating skill for working. It also loads the
-separate current Live Deal Page field contract for writing. None of that private
-content is shipped in this public package; CLI is only the tool and authenticated
-transport.
+thinking plus the Llama Command operating skill for working. It also loads a
+compact index of the current Live Deal Page fields. Before `page.patch`, use
+`llama page-schema read <field> [field...]` to load only the exact field
+contracts being changed, or `llama page-schema section <section>` when the
+write genuinely spans a section. None of that private content is shipped in
+this public package; CLI is only the tool and authenticated transport.
 
 The live server briefing is authoritative. The bundled
 `AGENT_BRIEFING.md` is an offline fallback with the same four-action contract.
