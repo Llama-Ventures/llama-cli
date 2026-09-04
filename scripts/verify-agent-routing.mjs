@@ -13,7 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const packageJson = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
 const coreApiContract = JSON.parse(readFileSync(path.join(repoRoot, "contracts/core-api.json"), "utf8"));
 
-assert.equal(packageJson.version, "2.1.1");
+assert.equal(packageJson.version, "2.1.2");
 assert.equal(
   packageJson.scripts?.["verify:release"],
   "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
@@ -155,7 +155,7 @@ try {
 
   const business = calls.filter((call) => call.path !== "/api/agent/client-events");
   for (const call of business) {
-    assert.equal(call.headers.version, "2.1.1");
+    assert.equal(call.headers.version, "2.1.2");
     assert.equal(call.headers.capabilities, "core.read.v1,occam.deal.v1");
     assert.equal(call.headers.apiVersion, coreApiContract.apiVersion);
     assert.equal(call.headers.apiDigest, coreApiContract.sha256);
