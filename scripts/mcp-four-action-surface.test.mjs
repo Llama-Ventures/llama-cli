@@ -77,6 +77,18 @@ test("MCP publishes Deal Memory as a separate two-tool domain", async () => {
   assert.equal(update.inputSchema.properties.markdown.maxLength, 1_048_576);
 });
 
+test("MCP publishes progressive Page schema reads outside the Deal action surface", async () => {
+  const tools = await listMcpTools();
+  const pageSchema = tools.find((tool) => tool.name === "get_live_deal_page_schema");
+  assert.ok(pageSchema, "get_live_deal_page_schema must be published");
+  assert.match(pageSchema.description, /no selector for the compact index/);
+  assert.match(pageSchema.description, /exact fields or one section/);
+  assert.equal(pageSchema.inputSchema.properties.fields.type, "array");
+  assert.equal(pageSchema.inputSchema.properties.fields.maxItems, 20);
+  assert.equal(pageSchema.inputSchema.properties.section.type, "string");
+  assert.equal(pageSchema.inputSchema.required, undefined);
+});
+
 test("MCP write_deal exposes four operation-specific payloads", async () => {
   const tools = await listMcpTools();
   const writeDeal = tools.find((tool) => tool.name === "write_deal");

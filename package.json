@@ -6,7 +6,7 @@
   "scripts": {
     "test": "npm run test:agent-routing && npm run test:contract",
     "test:agent-routing": "node scripts/verify-agent-routing.mjs",
-    "test:contract": "node --test scripts/build-manifest.test.mjs scripts/core-api-call-sites.test.mjs scripts/deal-actions-cli.test.mjs scripts/deal-actions.test.mjs scripts/deal-memory-actions-cli.test.mjs scripts/deal-memory-actions.test.mjs scripts/mcp-four-action-surface.test.mjs scripts/server-compatibility.test.mjs scripts/verify-core-api-contract.test.mjs && node scripts/verify-core-api-contract.mjs",
+    "test:contract": "node --test scripts/build-manifest.test.mjs scripts/core-api-call-sites.test.mjs scripts/deal-actions-cli.test.mjs scripts/deal-actions.test.mjs scripts/deal-memory-actions-cli.test.mjs scripts/deal-memory-actions.test.mjs scripts/mcp-four-action-surface.test.mjs scripts/page-schema-cli.test.mjs scripts/page-schema.test.mjs scripts/server-compatibility.test.mjs scripts/verify-core-api-contract.test.mjs && node scripts/verify-core-api-contract.mjs",
     "verify:artifact": "node scripts/verify-release-artifact.mjs",
     "verify:release": "npm test && npm run verify:artifact && node scripts/verify-tarball-clean.mjs",
     "prepack": "node scripts/prepare-build-manifest.mjs",

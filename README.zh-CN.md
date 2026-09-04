@@ -170,12 +170,15 @@ MCP 的 Deal 工具同样恰好四个：
 认证、skill discovery、Wiki、admin audit、preferences 和 external pitch
 属于其他独立领域，不会扩大 Deal action space。Deal Memory 同样是独立领域，
 对应 `get_deal_memory` 和 `update_deal_memory` 两个 MCP 工具，并不增加第五个
-Occam Deal 工具。
+Occam Deal 工具。`get_live_deal_page_schema` 以渐进方式读取 Page schema 的
+索引、精确字段或一个 section；它是只读上下文，也不是第五个 Deal action。
 
 ## Agent 启动
 
 ```bash
 llama agent bootstrap
+llama page-schema list
+llama page-schema read <field> [field...]
 llama skills search "<任务>"
 llama skills show <slug>
 ```
@@ -183,8 +186,10 @@ llama skills show <slug>
 Agent 在处理 Deal 前应先运行 `llama agent bootstrap`。该命令会从鉴权后的
 Llama Command 服务端加载两部分私有 Brain：负责投资思考的 Investment
 Framework V3，以及负责如何在 Command 工作的 Llama Command operating skill；
-同时加载独立的、实时的 Live Deal Page 字段契约。所有私有内容都不会进入公开
-npm 包；CLI 只是 Agent 的工具和鉴权运输层。
+同时加载实时 Live Deal Page 字段的精简索引。执行 `page.patch` 前，通过
+`llama page-schema read <field> [field...]` 只加载本次修改所需的字段契约；
+只有当写入确实跨越一个 section 时才加载整个 section。所有私有内容都不会进入
+公开 npm 包；CLI 只是 Agent 的工具和鉴权运输层。
 
 服务端实时 briefing 是权威合同；包内 `AGENT_BRIEFING.md` 是相同四动作
 合同的离线兜底。

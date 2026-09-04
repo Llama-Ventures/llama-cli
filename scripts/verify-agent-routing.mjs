@@ -58,6 +58,9 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/api/agent/manifest") {
     return json(res, { ok: true, briefing: "runtime CLI 2 manifest", skills: [] });
   }
+  if (url.pathname === "/api/agent/page-schema") {
+    return json(res, { ok: true, mode: "selection", fields: [{ field: "description" }] });
+  }
   if (url.pathname === "/api/agent/skills") {
     return json(res, { ok: true, skills: [{ slug: "llama-command", description: "four actions" }] });
   }
@@ -119,6 +122,10 @@ try {
   assert.equal(bootstrap.code, 0, bootstrap.stderr);
   assert.match(bootstrap.stdout, /CLI 2 manifest/);
 
+  const pageSchema = await runCli(["page-schema", "read", "description"], baseUrl, homeDir);
+  assert.equal(pageSchema.code, 0, pageSchema.stderr);
+  assert.match(pageSchema.stdout, /description/);
+
   const skills = await runCli(["skills", "show", "llama-command"], baseUrl, homeDir);
   assert.equal(skills.code, 0, skills.stderr);
   assert.match(skills.stdout, /Four-action runtime skill/);
@@ -160,6 +167,14 @@ try {
     assert.equal(call.headers.apiVersion, coreApiContract.apiVersion);
     assert.equal(call.headers.apiDigest, coreApiContract.sha256);
   }
+  assert.equal(
+    business.find((call) => call.path === "/api/agent/briefing")?.query.page_schema,
+    "progressive",
+  );
+  assert.equal(
+    business.find((call) => call.path === "/api/agent/manifest")?.query.page_schema,
+    "progressive",
+  );
 
   const countBeforeInvalid = calls.length;
   const retiredBrief = await runCli(["brief", "add-text", "x"], baseUrl, homeDir);
@@ -181,6 +196,7 @@ try {
   assert.equal(help.code, 0);
   assert.match(help.stdout, /Exactly four actions/);
   assert.match(help.stdout, /agent bootstrap/);
+  assert.match(help.stdout, /page-schema read/);
   assert.match(help.stdout, /arrays replace whole arrays/);
   console.log("PASS CLI 2 routing: four Deal actions, capability headers, live briefing, and pre-HTTP invalid-command fences");
 } finally {
