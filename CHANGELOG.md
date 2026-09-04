@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+- Publish the minimal Deal Memory writing contract through CLI and MCP help:
+  coherent whole-file rewrites, required frontmatter, read-before-write
+  versioning (including placeholders), the no-material-improvement rule, and
+  the distinction from structured Deal Information.
+
 ## [2.1.1] - 2026-09-03
 
 ### Changed

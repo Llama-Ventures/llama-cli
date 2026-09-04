@@ -55,6 +55,8 @@ Deal has exactly four actions:
   llama deal create --json <file|->
   llama deal write --json <file|->
 
+Here --detail memory means structured Deal Information, not Deal Memory.
+
 Deal Memory is a separate sidecar domain through the same login:
   llama memory read <dealId> [--raw]
   llama memory write <dealId> --markdown <file|-> [--expected-version <version>]
@@ -119,9 +121,23 @@ const HELP_MEMORY = `Llama Deal Memory — one canonical Markdown Deal Story
   llama memory write <dealId> --markdown <file|-> [--expected-version <version>]
 
 Read returns the full JSON record, including its opaque version. --raw prints
-only the exact Markdown. A first write creates the story without a version.
-Every later write must pass the version from the preceding read; stale writes
-fail instead of overwriting newer understanding.
+only the exact Markdown. Always read before writing. If read returns a Story,
+including an empty placeholder, pass its version with --expected-version. Only
+a 404 means creation may omit the version; stale writes fail safely.
+
+Write one coherent current Story: replace the complete document instead of
+appending an update log. Do not restate Live Deal Page or Deal Information
+fields. If the understanding would not materially improve, do not write.
+
+The Markdown must have a non-empty body and YAML frontmatter containing:
+  deal_id: the route Deal UUID; never changes
+  uuid:     the Story UUID; never changes
+  created:  ISO 8601 with offset; never changes
+  updated:  ISO 8601 with offset; must strictly advance on every write
+
+Use authorized evidence, preserve uncertainty, and never invent information.
+llama deal read --detail memory reads structured Deal Information; it does not
+read this Story.
 
 This uses your existing Llama authentication. The CLI talks only to Command
 Core and never receives Deal Memory service credentials or AWS access.`;

@@ -128,10 +128,17 @@ llama memory write <dealId> --markdown deal-story.md
 llama memory write <dealId> --markdown deal-story.md --expected-version '"read 返回的 etag"'
 ```
 
-第一次创建时不传 `--expected-version`；以后更新必须使用前一次 `read` 返回的
-不透明 `version`，旧版本会安全失败，不会覆盖他人的新内容。它复用同一个
-`llama auth login` 身份。CLI 只调用经过认证的 Command Core adapter，不持有
-sidecar URL、service token、S3 凭证，也不直接访问数据库。
+每次写入前都先读取。如果 `read` 返回任何 Story（包括空 placeholder），写入时
+必须传回其不透明 `version`；只有 `404` 才表示创建时可以省略
+`--expected-version`。旧版本会安全失败，不会覆盖他人的新内容。每次写入都要
+重写一份连贯的当前理解，不要追加更新日志，不要重复 Live Deal Page 或 Deal
+Information 字段；如果理解没有实质改善，就不要写。
+
+Markdown 必须有非空正文和 YAML frontmatter，其中包含 `deal_id`、`uuid`、
+`created`、`updated`。前三项不可更改；`updated` 必须是带时区偏移的 ISO 8601
+时间，并在每次写入时严格递增。它复用同一个 `llama auth login` 身份。CLI
+只调用经过认证的 Command Core adapter，不持有 sidecar URL、service token、
+S3 凭证，也不直接访问数据库。
 
 `llama deal read --detail memory` 仍表示结构化 Deal Information；
 `llama memory read` 表示独立的 Markdown Deal Story。

@@ -170,7 +170,7 @@ server.registerTool(
 server.registerTool(
   "get_deal_memory",
   {
-    description: "Read the complete canonical Markdown Deal Story and its opaque concurrency version.",
+    description: "Read the complete canonical Markdown Deal Story and its opaque concurrency version. A returned placeholder is an existing Story whose version is required for a write; only 404 means no Story exists.",
     inputSchema: { dealId: z.string().uuid() },
   },
   // @core-api-operation GET /api/deal-memory/{dealId}/story
@@ -180,7 +180,7 @@ server.registerTool(
 server.registerTool(
   "update_deal_memory",
   {
-    description: "Create or replace the complete Markdown Deal Story. Existing stories require the version returned by get_deal_memory; stale writes fail safely.",
+    description: "Replace the complete Markdown Deal Story with one coherent current understanding; never append an update log, restate Live Deal Page/Deal Information fields, or write when understanding would not materially improve. Frontmatter must contain matching deal_id plus stable uuid and created timestamps; updated must strictly advance. Pass the version from get_deal_memory for every returned Story, including a placeholder; only 404 permits creation without expected_version.",
     inputSchema: {
       dealId: z.string().uuid(),
       markdown: z.string().min(1).max(1_048_576),
