@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-04
+
 ### Added
 - Define `human_subjective_view.people` and `human_subjective_view.business`
   as the only Information types for a Llama user's own judgment. CLI and MCP
