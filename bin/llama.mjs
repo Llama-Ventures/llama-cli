@@ -52,7 +52,7 @@ const HELP_ROOT = `Llama Command CLI 2 — small authenticated tools for agents.
 
 Deal has exactly four actions:
   llama deal search "<company or founder>" [--state active|archived|trashed] [--limit 10]
-  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
+  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all] [--limit N] [--before <event_seq>]
   llama deal create --json <file|->
   llama deal write --json <file|->
 
@@ -80,7 +80,7 @@ const HELP_DEAL = `Llama Command CLI 2 — Deal contract
 
 Exactly four actions:
   llama deal search [query] [--state active|archived|trashed] [--limit 10]
-  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
+  llama deal read <dealId> [--detail overview|memory|files|conversation|history|all] [--limit N] [--before <event_seq>]
   llama deal create --json <file|->
   llama deal write --json <file|->
 
@@ -657,9 +657,13 @@ async function main() {
   }
   if (area === "deal" && action === "read") {
     const dealId = rest[0];
-    const { flags } = parseFlags(rest.slice(1), ["detail"]);
+    const { flags } = parseFlags(rest.slice(1), ["detail", "limit", "before"]);
     // @core-api-operation GET /api/occam/deals/{dealId}
-    print(await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview")));
+    print(await request("GET", buildDealReadPath(
+      dealId,
+      flags.detail === true ? "overview" : flags.detail || "overview",
+      { limit: flags.limit === true ? undefined : flags.limit, before: flags.before === true ? undefined : flags.before },
+    )));
     return;
   }
   if (area === "deal" && ["create", "write"].includes(action)) {
