@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-04
+
 ### Changed
 - `human_subjective_view.people|business` now also requires `value.summary`,
   the agent's own restatement of the user's words, and rejects a summary that
