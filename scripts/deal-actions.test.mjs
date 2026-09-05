@@ -17,15 +17,24 @@ test("accepts a human subjective view only when it names the user and quotes the
     operation: "information.put",
     dealId: "d",
     type: "human_subjective_view.people",
-    value: { speaker: "Ada", rawText: "I think the founder has strong product taste." },
+    value: {
+      speaker: "Ada",
+      rawText: "I think the founder has strong product taste.",
+      summary: "Ada reads the founder as having strong product taste.",
+    },
     origin,
   };
   assert.doesNotThrow(() => prepareDealCommand("write", valid));
-  assert.throws(() => prepareDealCommand("write", { ...valid, value: { rawText: valid.value.rawText } }), /value\.speaker/);
-  assert.throws(() => prepareDealCommand("write", { ...valid, value: { speaker: "Ada" } }), /value\.rawText/);
+  assert.throws(() => prepareDealCommand("write", { ...valid, value: { ...valid.value, speaker: undefined } }), /value\.speaker/);
+  assert.throws(() => prepareDealCommand("write", { ...valid, value: { ...valid.value, rawText: undefined } }), /value\.rawText/);
   assert.throws(
-    () => prepareDealCommand("write", { ...valid, value: { speaker: "Ada", rawText: "Founder has great taste." } }),
+    () => prepareDealCommand("write", { ...valid, value: { ...valid.value, rawText: "Founder has great taste." } }),
     /verbatim/,
+  );
+  assert.throws(() => prepareDealCommand("write", { ...valid, value: { ...valid.value, summary: undefined } }), /value\.summary/);
+  assert.throws(
+    () => prepareDealCommand("write", { ...valid, value: { ...valid.value, summary: " I think the founder has strong  product taste. " } }),
+    /not repeat/,
   );
   assert.throws(() => prepareDealCommand("write", { ...valid, origin: { kind: "agent" } }), /originate from a user/);
   assert.throws(() => prepareDealCommand("write", { ...valid, type: "human_subjective_view" }), /exactly/);
@@ -48,13 +57,13 @@ test("applies the human subjective view rule to initial Information on create", 
   assert.throws(
     () => prepareDealCommand("create", {
       ...base,
-      information: [{ type: "human_subjective_view.business", value: { speaker: "Ada", rawText: "The team is strong." } }],
+      information: [{ type: "human_subjective_view.business", value: { speaker: "Ada", rawText: "The team is strong.", summary: "Ada: strong team." } }],
     }),
     /verbatim/,
   );
   assert.doesNotThrow(() => prepareDealCommand("create", {
     ...base,
-    information: [{ type: "human_subjective_view.people", value: { speaker: "Ada", rawText: "The team feels strong." } }],
+    information: [{ type: "human_subjective_view.people", value: { speaker: "Ada", rawText: "The team feels strong.", summary: "Ada: strong team." } }],
   }));
 });
 
