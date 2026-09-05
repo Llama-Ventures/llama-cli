@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Changed
+- `human_subjective_view.people|business` now also requires `value.summary`,
+  the agent's own restatement of the user's words, and rejects a summary that
+  merely repeats `value.rawText`. Core enforces the same rule; the Deal Page
+  shows both the summary and the verbatim text.
+
 ## [2.2.0] - 2026-09-04
 
 ### Added

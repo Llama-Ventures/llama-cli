@@ -168,9 +168,11 @@ means the truth depends on who judges: a value or comparative word with no
 stated benchmark, or a claim about someone's future behavior or inner state. If
 yes, the type is `human_subjective_view.people` (founders or team) or
 `human_subjective_view.business` (company, product, market or deal),
-`value.speaker` names that user, and `value.rawText` quotes the user verbatim
-from `origin.originalUserUtterance`. CLI and Core reject anything else. If no,
-choose any type that fits; founder words are `founder_claim`.
+`value.speaker` names that user, `value.rawText` quotes the user verbatim
+from `origin.originalUserUtterance`, and `value.summary` is your own
+restatement of those words (never a substitute for them). CLI and Core reject
+anything else. If no, choose any type that fits; founder words are
+`founder_claim`.
 
 ```json
 {

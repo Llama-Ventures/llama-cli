@@ -103,7 +103,7 @@ create JSON:
 write JSON (CLI derives idempotencyKey when omitted):
   input.submit:    {"operation":"input.submit","dealId":"<uuid>","content":"<original input>","format":"text","source":{},"origin":{"kind":"user","originalUserUtterance":"..."}}
   information.put:{"operation":"information.put","dealId":"<uuid>","type":"founder_claim","labels":["founder-stated"],"subject":{"topic":"traction"},"value":{"content":"...","source":{"kind":"first_meeting_transcript"}},"origin":{"kind":"user","originalUserUtterance":"..."}}
-  human judgment:  {"operation":"information.put","dealId":"<uuid>","type":"human_subjective_view.people","subject":{"topic":"founder_execution"},"value":{"speaker":"<Llama user>","rawText":"<the user's verbatim words>","summary":"<optional agent summary>"},"origin":{"kind":"user","originalUserUtterance":"<complete user input; must contain rawText>"}}
+  human judgment:  {"operation":"information.put","dealId":"<uuid>","type":"human_subjective_view.people","subject":{"topic":"founder_execution"},"value":{"speaker":"<Llama user>","rawText":"<the user's verbatim words>","summary":"<the agent's restatement>"},"origin":{"kind":"user","originalUserUtterance":"<complete user input; must contain rawText>"}}
   page.patch:      {"operation":"page.patch","dealId":"<uuid>","patch":{"description":{"en":"...","zh":"..."}},"origin":{"kind":"agent"}}
   artifact.put:    {"operation":"artifact.put","dealId":"<uuid>","kind":"deck","title":"deck.pdf","mimeType":"application/pdf","contentBase64":"<file bytes, base64>","origin":{"kind":"user","originalUserUtterance":"..."}}
 
@@ -119,8 +119,9 @@ value.source records where the evidence came from.
 human_subjective_view.people|business is a Llama user's own judgment about the
 team or the deal. Subjective = the truth depends on who judges: a value or
 comparative word with no benchmark, or a claim about someone's future behavior
-or inner state. It requires value.speaker and value.rawText quoted verbatim from
-origin.originalUserUtterance; CLI and Core reject anything else. Other types are free.
+or inner state. It requires value.speaker, value.rawText quoted verbatim from
+origin.originalUserUtterance, and value.summary, the agent's own restatement of
+those words; CLI and Core reject anything else. Other types are free.
 
 Core owns Chat Records, append-only Deal Events, Drive provisioning, audit,
 and idempotency. User-originated work must preserve exact wording in
