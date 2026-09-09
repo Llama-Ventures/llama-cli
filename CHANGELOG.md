@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Read Deal artifact text and original bytes through Core with version/hash provenance.
+- Read Wiki uploads and supported page references; paginate text with a pinned source hash.
+- Verify source downloads and refuse to overwrite local files.
+
+
 All notable changes to `@llamaventures/cli` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org).

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { buildArtifactReadPath, buildWikiReadPath, saveContentSource } from "../lib/content-read.mjs";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import readline from "node:readline";
@@ -70,6 +71,8 @@ Separate preserved domains:
   llama skills list|search|show
   llama pref list|add|approve|retire
   llama explain <url-or-object>
+  llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
+  llama wiki read <slug> --format text [--attachment <referenceId>] [--offset N --sha256 HASH] [--output <file>]
   llama wiki search|read|save|delete|restore
   llama admin auth-events|deal-events|agent-events
   llama pitch start|say|upload|status|finalize|end
@@ -83,6 +86,15 @@ Exactly four actions:
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
+
+Read original source content:
+  llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
+  llama wiki read <slug> --format text [--attachment <referenceId>] [--offset N --sha256 HASH] [--output <file>]
+
+Artifact reads return source hashes, text and page/paragraph anchors. Continue with
+--offset <nextOffset> --sha256 <source.sha256>. --output saves verified original
+bytes without overwriting existing files. Wiki --format text reads the original
+upload when present; --attachment follows a reference listed by the page.
 
 Before any Page write:
   llama agent bootstrap
@@ -461,7 +473,7 @@ async function handleWiki(action, rest) {
   if (action === "read") {
     if (!slug) throw new Error("Usage: llama wiki read <slug> [--lang en|zh]");
     // @core-api-operation GET /api/wiki/{slug}
-    print(await request("GET", `/api/wiki/${encodeURIComponent(slug)}?lang=${flags.lang === "zh" ? "zh" : "en"}`));
+    print(await saveContentSource(await request("GET", buildWikiReadPath(slug, flags)), flags.output));
     return;
   }
   if (action === "save") {
@@ -657,9 +669,17 @@ async function main() {
   }
   if (area === "deal" && action === "read") {
     const dealId = rest[0];
-    const { flags } = parseFlags(rest.slice(1), ["detail"]);
-    // @core-api-operation GET /api/occam/deals/{dealId}
-    print(await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview")));
+    const { flags } = parseFlags(rest.slice(1), ["detail", "artifact", "version", "format", "offset", "limit", "sha256", "output"]);
+    if (flags.artifact !== undefined) {
+      if (flags.detail !== undefined) throw new Error("Use --artifact or --detail, not both");
+      // @core-api-operation GET /api/occam/deals/{dealId}/artifacts/{artifactId}
+      const result = await request("GET", buildArtifactReadPath(dealId, flags.artifact, flags));
+      print(await saveContentSource(result, flags.output));
+    } else {
+      if (["version", "format", "offset", "limit", "sha256", "output"].some(key => flags[key] !== undefined)) throw new Error("Content options require --artifact");
+      // @core-api-operation GET /api/occam/deals/{dealId}
+      print(await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview")));
+    }
     return;
   }
   if (area === "deal" && ["create", "write"].includes(action)) {

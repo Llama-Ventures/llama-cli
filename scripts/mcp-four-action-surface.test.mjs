@@ -112,3 +112,14 @@ test("MCP write_deal exposes four operation-specific payloads", async () => {
   assert.equal("title" in byOperation.get("artifact.put").properties, true);
   assert.equal("storageKey" in byOperation.get("artifact.put").properties, true);
 });
+
+
+test("MCP adds content reading inside the existing Deal and Wiki read tools", async () => {
+  const tools = await listMcpTools();
+  const deal = tools.find(t => t.name === "read_deal");
+  const wiki = tools.find(t => t.name === "wiki_read");
+  assert.equal(deal.inputSchema.properties.artifactId.type, "string");
+  assert.equal(deal.inputSchema.properties.sha256.type, "string");
+  assert.equal(wiki.inputSchema.properties.attachment.type, "string");
+  assert.ok(!tools.some(t => t.name === "read_artifact"));
+});
