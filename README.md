@@ -214,3 +214,17 @@ npm run verify:release
 
 Release artifacts are source-SHA certified. Publishing to npm and changing the
 production server's minimum version are separate, explicit release operations.
+
+### Read original source content
+
+Use `llama deal read <dealId> --artifact <artifactId>` to read a listed file's text,
+source hash and page/paragraph anchors. Use `llama wiki read <slug> --format text`
+for a Wiki page or its original uploaded document. `--attachment <referenceId>`
+follows a supported reference listed by the Wiki read. Long reads return
+`nextOffset`; continue with `--offset N --sha256 HASH`. `--output <file>` downloads
+and hash-verifies the original bytes without overwriting a local file.
+
+These options require a Core version with source-content reads. Scanned PDFs
+may require OCR; no-text, missing files, unsupported formats and denied storage
+are explicit outcomes, not evidence that a memo has been read. MCP exposes the
+same text reads inside `read_deal` and `wiki_read`.

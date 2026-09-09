@@ -204,3 +204,14 @@ npm run verify:release
 
 发布包会绑定准确 source SHA。npm publish 与生产服务端强制最低版本是两个
 独立、需要明确授权的 release 动作。
+
+### 读取原始材料
+
+`llama deal read <dealId> --artifact <artifactId>` 读取文件正文、原文件哈希与页码／段落位置。
+`llama wiki read <slug> --format text` 读取 Wiki 正文或上传的原文件；
+`--attachment <referenceId>` 读取页面返回的受支持附件引用。
+长文用 `--offset <nextOffset> --sha256 <source.sha256>` 继续，文件变化时会拒绝拼接。
+`--output <文件路径>` 下载并核验原始字节，不覆盖已有文件。
+
+需要服务端支持正文读取。扫描 PDF 不自动 OCR；无文字、缺失文件、不支持的格式、
+权限不足都会明确报告。MCP 在原有 `read_deal` 和 `wiki_read` 中提供相同正文读取能力。

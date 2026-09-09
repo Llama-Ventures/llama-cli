@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { buildArtifactReadPath, buildWikiReadPath } from "../lib/content-read.mjs";
 import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -123,14 +124,27 @@ server.registerTool(
 server.registerTool(
   "read_deal",
   {
-    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Page field semantics come from agent_bootstrap, not every Deal read.",
+    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Use artifactId to read original source text with page/paragraph anchors. Continue with nextOffset and source.sha256. Page field semantics come from agent_bootstrap, not every Deal read.",
     inputSchema: {
       dealId: z.string().min(1),
       detail: z.enum(["overview", "memory", "files", "conversation", "history", "all"]).optional(),
+      artifactId: z.string().uuid().optional(),
+      version: z.number().int().min(1).optional(),
+      offset: z.number().int().min(0).optional(),
+      limit: z.number().int().min(1).max(50000).optional(),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     },
   },
-  // @core-api-operation GET /api/occam/deals/{dealId}
-  async ({ dealId, detail }) => callApi("GET", buildDealReadPath(dealId, detail || "overview")),
+  async ({ dealId, detail, artifactId, ...options }) => {
+    if (artifactId) {
+      if (detail) throw new Error("Use artifactId or detail, not both");
+      // @core-api-operation GET /api/occam/deals/{dealId}/artifacts/{artifactId}
+      return callApi("GET", buildArtifactReadPath(dealId, artifactId, options));
+    }
+    if (Object.values(options).some(value => value !== undefined)) throw new Error("Content options require artifactId");
+    // @core-api-operation GET /api/occam/deals/{dealId}
+    return callApi("GET", buildDealReadPath(dealId, detail || "overview"));
+  },
 );
 
 server.registerTool(
@@ -344,11 +358,16 @@ server.registerTool(
 server.registerTool(
   "wiki_read",
   {
-    description: "Read one Wiki article by exact slug.",
-    inputSchema: { slug: z.string().min(1), lang: z.enum(["en", "zh"]).optional() },
+    description: "Read one Wiki article. format=text extracts its original upload or page body. attachment follows an ID listed in attachments. Continuations require offset and sha256.",
+    inputSchema: {
+      slug: z.string().min(1), lang: z.enum(["en", "zh"]).optional(),
+      format: z.literal("text").optional(), attachment: z.string().optional(),
+      offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(50000).optional(),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    },
   },
-  async ({ slug, lang }) =>
-    callApi("GET", `/api/wiki/${encodeURIComponent(slug)}?lang=${lang === "zh" ? "zh" : "en"}`),
+  // @core-api-operation GET /api/wiki/{slug}
+  async ({ slug, ...options }) => callApi("GET", buildWikiReadPath(slug, options)),
 );
 
 server.registerTool(

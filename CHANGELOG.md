@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-09
+
+### Added
+
+- Read Deal artifact text and original bytes through Core with version/hash provenance.
+- Read Wiki uploads and supported page references; paginate text with a pinned source hash.
+- Verify source downloads and refuse to overwrite local files.
+
 ## [2.3.0] - 2026-09-04
 
 ### Changed
