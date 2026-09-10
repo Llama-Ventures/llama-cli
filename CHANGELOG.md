@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- Submit user/agent UX friction with `llama feedback submit` and MCP `feedback_submit`; read your receipt and resolution with `feedback show` / `feedback_show`.
+- Capture CLI/build and OS/Node versions, plus available coding-agent host identity/version with explicit provenance. Unknown versions stay absent.
+- Bounded authenticated submissions, retry IDs, credential redaction and no recursive feedback telemetry. New feedback commands require Core API 5.9.0; existing commands retain compatibility.
+
 ## [2.4.0] - 2026-09-09
 
 ### Added

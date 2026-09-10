@@ -44,6 +44,7 @@ import {
   buildDealMemoryPath,
   readMarkdownInput,
 } from "../lib/deal-memory-actions.mjs";
+import { submitFeedback, readFeedback, readFeedbackInput } from "../lib/feedback.mjs";
 import { buildPageSchemaPath } from "../lib/page-schema.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -74,6 +75,8 @@ Separate preserved domains:
   llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
   llama wiki read <slug> --format text [--attachment <referenceId>] [--offset N --sha256 HASH] [--output <file>]
   llama wiki search|read|save|delete|restore
+  llama feedback submit --title "..." --body "..." [--experienced-by user|agent|both]
+  llama feedback show <id>
   llama admin auth-events|deal-events|agent-events
   llama pitch start|say|upload|status|finalize|end
 
@@ -176,6 +179,23 @@ Start with list. Before page.patch, read only the exact fields being changed;
 use a section read only when the write genuinely spans that section. This is a
 schema/field-prompt surface, not a fifth Deal action and not Page data.`;
 
+const HELP_FEEDBACK = `Report concrete user or agent UX friction, even when the task succeeds.
+
+  llama feedback submit --title "..." --body "..." [--experienced-by user|agent|both]
+  llama feedback submit --file <feedback.json|->
+  llama feedback show <id>
+
+Optional flags: --expected, --steps, --impact, --workaround, --suggestion,
+--agent-name, --agent-version, --model, --command, --error-code, --request-id,
+--occurred-at (ISO timestamp), --submission-id (reuse for retries).
+
+CLI/build, OS/Node and available agent identity are added automatically. Unknown
+agent versions stay absent. LLAMA_AGENT_CLIENT, LLAMA_AGENT_VERSION and
+LLAMA_AGENT_MODEL are explicit declarations, not inferred installed versions.
+Only attach a request ID from this task. Do not include credentials, full
+transcripts, file contents or raw command arguments. Report once per obstacle;
+feedback failure must not block the task or trigger recursive feedback.`;
+
 function parseFlags(args, allowed = null) {
   const flags = {};
   const positional = [];
@@ -206,6 +226,7 @@ function usage(area) {
     area === "deal" ? HELP_DEAL :
     area === "memory" ? HELP_MEMORY :
     area === "page-schema" ? HELP_PAGE_SCHEMA :
+    area === "feedback" ? HELP_FEEDBACK :
     HELP_ROOT,
   );
 }
@@ -527,6 +548,26 @@ async function main() {
   if (["--help", "-h"].includes(action) || rest.some((value) => ["--help", "-h"].includes(value))) {
     usage(area);
     return;
+  }
+
+  if (area === "feedback") {
+    if (action === "show" && rest.length === 1) { print(await readFeedback(rest[0])); return; }
+    if (action !== "submit") throw new Error("Usage: llama feedback submit|show; see llama help feedback");
+    const allowed = ["file", "title", "body", "experienced-by", "expected", "steps", "impact", "workaround", "suggestion", "agent-name", "agent-version", "model", "command", "error-code", "request-id", "occurred-at", "submission-id"];
+    const { flags, positional } = parseFlags(rest, allowed);
+    if (positional.length || Object.values(flags).some(v => typeof v !== "string")) throw new Error("Feedback flags require values; see llama help feedback");
+    let input;
+    if (flags.file) {
+      if (Object.keys(flags).some(k => !["file", "submission-id"].includes(k))) throw new Error("Use --file or field flags, not both");
+      input = await readFeedbackInput(flags.file);
+      if (flags["submission-id"]) input.submission_id = flags["submission-id"];
+    } else {
+      input = { title: flags.title, body: flags.body, details: {}, environment: {} };
+      for (const key of ["experienced-by", "occurred-at", "submission-id"]) if (flags[key]) input[key.replaceAll("-", "_")] = flags[key];
+      for (const key of ["expected", "steps", "impact", "workaround", "suggestion"]) if (flags[key]) input.details[key] = flags[key];
+      for (const key of ["agent-name", "agent-version", "model", "command", "error-code", "request-id"]) if (flags[key]) input.environment[key.replaceAll("-", "_")] = flags[key];
+    }
+    print(await submitFeedback(input)); return;
   }
 
   assertDealAction(area, action);

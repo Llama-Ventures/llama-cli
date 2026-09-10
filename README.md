@@ -228,3 +228,36 @@ These options require a Core version with source-content reads. Scanned PDFs
 may require OCR; no-text, missing files, unsupported formats and denied storage
 are explicit outcomes, not evidence that a memo has been read. MCP exposes the
 same text reads inside `read_deal` and `wiki_read`.
+
+## UX friction feedback
+
+Report obstacles encountered by a user, agent or both, including tasks that
+succeeded after confusion or unnecessary steps. Two fields are enough:
+
+```bash
+llama feedback submit --title "Confusing empty response" --body "Expected source text, but the successful response was empty." --experienced-by agent
+llama feedback submit --file feedback.json
+llama feedback show <feedback-id>
+llama help feedback
+```
+
+`--file -` reads JSON from stdin. Optional `details` fields: expected, steps,
+impact, workaround, suggestion. `experienced_by` defaults to both. The CLI adds
+its version/build, OS/Node and available agent identity; MCP captures its
+initialized host name/version. `--agent-name`, `--agent-version`, `--model` (or
+`LLAMA_AGENT_CLIENT`, `LLAMA_AGENT_VERSION`, `LLAMA_AGENT_MODEL`) are explicit
+reports. Missing versions stay absent; installed programs are never executed
+to guess a running host version. Automatic metadata describes the submitting
+process; retrospective reports can explicitly supply historical environment
+and `occurred_at` through JSON.
+
+Keep the returned `submission_id` for identical retries (`--submission-id`).
+One report per obstacle per task. `--request-id` is optional and must refer to
+that task and reporter; no global last-command association is inferred. Do not
+include secrets, raw command arguments, environment dumps, full transcripts or
+file contents. Known credential patterns are redacted, not a guarantee that
+arbitrary text is secret-free. Submission failures are explicit and must not
+block the original task or trigger recursive feedback. Calls use a 15-second
+fetch budget and refuse redirects. Requires Core API 5.9.0, existing login and
+write scope; receipt reads require read scope and only return your own reports.
+MCP provides `feedback_submit` and `feedback_show` with the same behavior.
