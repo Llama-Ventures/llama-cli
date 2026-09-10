@@ -215,3 +215,25 @@ npm run verify:release
 
 需要服务端支持正文读取。扫描 PDF 不自动 OCR；无文字、缺失文件、不支持的格式、
 权限不足都会明确报告。MCP 在原有 `read_deal` 和 `wiki_read` 中提供相同正文读取能力。
+
+## 用户与 Agent 的 UX friction
+
+即使任务最终成功，困惑、多余步骤、反复尝试也值得反馈：
+
+```bash
+llama feedback submit --title "成功响应没有正文" --body "用户想总结附件，但读取成功后没有返回文本，任务无法继续。" --experienced-by agent
+llama feedback submit --file feedback.json
+llama feedback show <反馈ID>
+llama help feedback
+```
+
+标题和描述必填；`experienced_by` 为 user / agent / both，默认 both。
+CLI 自动附带版本、构建、OS/Node 和可确认的 Agent 身份；MCP 读取宿主声明的名称及版本。
+Agent 版本未知时不猜测。`--agent-name`、`--agent-version`、`--model` 可明确补充信息。
+较早发生的问题可通过 JSON 提供历史环境和 `occurred_at`，自动采集的环境属于当前提交进程。
+可选 details 字段为 expected、steps、impact、workaround、suggestion。
+同一次重试复用 submission_id；同一任务的同一障碍只报一次。
+不附完整对话、文件、命令参数或凭证，不自动关联全局最后一次调用。
+提交失败明确报错，不能声称成功，也不能触发递归反馈或阻塞原任务。
+新命令需要 Core API 5.9.0，沿用现有登录；用户只能读取自己的反馈。
+MCP 对应 feedback_submit / feedback_show。

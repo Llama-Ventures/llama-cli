@@ -233,3 +233,19 @@ artifact, then decide whether its content deserves Information or a Page patch.
 - Wiki, admin audit, external pitch, authentication, and skill discovery are
   separate domains. Deal Memory is also separate. None expands the four-action
   Occam Deal space.
+
+## Report UX friction
+
+When a user, agent or both encounter a concrete obstacle (including a task that
+eventually succeeds), use `llama feedback submit --title ... --body ...
+--experienced-by user|agent|both` or MCP `feedback_submit`. Two fields suffice;
+optional expected/steps/impact/workaround/suggestion explain the obstacle.
+Use `llama help feedback` for JSON input and diagnostics. Versions are captured
+when available; do not guess unknown host/model versions. Separate observation
+from hypothesis, report once per obstacle, and never attach credentials, full
+transcripts, file contents, raw arguments or arbitrary environment variables.
+Only explicitly correlate a request from this task; concurrent agents share
+local telemetry state. Retain submission_id for identical retries, read the
+receipt with `llama feedback show` / `feedback_show`, and never let reporting
+failure block the original task or produce recursive feedback. New tools need
+Core API 5.9.0; do not loop if the server has not added them yet.

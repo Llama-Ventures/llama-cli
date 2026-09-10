@@ -26,6 +26,7 @@ import {
   compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
+import { submitFeedback, readFeedback } from "../lib/feedback.mjs";
 import { buildDealMemoryPath } from "../lib/deal-memory-actions.mjs";
 import { buildPageSchemaPath, MAX_PAGE_SCHEMA_FIELDS } from "../lib/page-schema.mjs";
 
@@ -50,6 +51,28 @@ async function callApi(method, path, body, transform = (value) => value) {
     return textResult(formatErrorForDisplay(error), true);
   }
 }
+
+server.registerTool("feedback_submit", {
+  description: "Report concrete UX friction experienced by a user, agent or both, even if the task succeeded. Separate observations from guesses. One report per obstacle; never include secrets, transcripts, files or raw command arguments. Failures must not block the original task or trigger recursive reporting. Reuse submission_id for retries. Host identity/version is captured when available; unknown versions stay absent.",
+  inputSchema: {
+    title: z.string().min(1).max(200), body: z.string().min(1).max(8000),
+    experienced_by: z.enum(["user", "agent", "both"]).optional(), submission_id: z.string().uuid().optional(),
+    occurred_at: z.string().datetime({ offset: true }).optional(),
+    details: z.object({ expected: z.string().max(2000).optional(), steps: z.string().max(4000).optional(), impact: z.string().max(2000).optional(), workaround: z.string().max(2000).optional(), suggestion: z.string().max(2000).optional() }).strict().optional(),
+    environment: z.object({ agent_name: z.string().max(120).optional(), agent_version: z.string().max(120).optional(), model: z.string().max(120).optional(), command: z.string().max(160).optional(), error_code: z.string().max(120).optional(), request_id: z.string().max(128).optional() }).strict().optional(),
+  },
+}, async input => {
+  try { return textResult(JSON.stringify(await submitFeedback(input, server.server.getClientVersion()), null, 2)); }
+  catch (error) { return textResult(formatErrorForDisplay(error), true); }
+});
+server.registerTool("feedback_show", {
+  description: "Read your own submitted friction report and resolution using its feedback ID.",
+  inputSchema: { id: z.string().uuid() },
+  annotations: { readOnlyHint: true },
+}, async ({ id }) => {
+  try { return textResult(JSON.stringify(await readFeedback(id), null, 2)); }
+  catch (error) { return textResult(formatErrorForDisplay(error), true); }
+});
 
 const originSchema = z.object({
   kind: z.enum(["user", "agent", "system"]),
