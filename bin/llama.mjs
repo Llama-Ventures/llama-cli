@@ -122,6 +122,19 @@ write JSON (CLI derives idempotencyKey when omitted):
   page.patch:      {"operation":"page.patch","dealId":"<uuid>","patch":{"description":{"en":"...","zh":"..."}},"origin":{"kind":"agent"}}
   artifact.put:    {"operation":"artifact.put","dealId":"<uuid>","kind":"deck","title":"deck.pdf","mimeType":"application/pdf","contentBase64":"<file bytes, base64>","origin":{"kind":"user","originalUserUtterance":"..."}}
 
+Before artifact.put, read the Deal files and distinguish a revision from a new source.
+To revise a document, reuse its artifactId and send the complete new file, even
+if its title changes. This appends a version; page.patch does not edit files.
+For a new document, omit artifactId. A current same-kind/title collision returns
+409 OCCAM_CONFLICT: read the candidate files and choose the intended existing ID,
+or supply a fresh UUID as artifactId for a genuinely distinct same-name source.
+A title is only a candidate, not identity. Do not rename just to bypass a conflict.
+Preserve applicable metadata and old links. Verify the same artifactId and an
+increased version (or idempotent replay). Reuse an unchanged file's reference.
+
+Revision example:
+  {"operation":"artifact.put","dealId":"<uuid>","artifactId":"<existing artifact uuid>","kind":"memo","title":"Memo.html","mimeType":"text/html","contentBase64":"<complete revised file, base64>","origin":{"kind":"user","originalUserUtterance":"Revise the memo"}}
+
 artifact.put sends the bytes as contentBase64; Core stores them in the Deal's
 own Drive folder and derives byteSize and sha256 itself. Do not supply a
 folder, storage key or URL for a file you hold. Write the JSON to a file and

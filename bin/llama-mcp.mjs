@@ -113,7 +113,7 @@ const writeDealCommandSchema = z.discriminatedUnion("operation", [
   z.object({
     operation: z.literal("artifact.put"),
     dealId: z.string().uuid(),
-    artifactId: z.string().uuid().optional(),
+    artifactId: z.string().uuid().optional().describe("Reuse the existing ID to append a complete file version, including on rename. Omit for a new document without a title collision, or explicitly use a fresh UUID for a distinct same-name source."),
     kind: z.string().min(1).max(120),
     title: z.string().min(1).max(500),
     mimeType: z.string().min(1).max(240),
@@ -189,7 +189,7 @@ server.registerTool(
 server.registerTool(
   "write_deal",
   {
-    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. All Page content fields are Agent-writable; author controls attribution, not permission. Before page.patch, use get_live_deal_page_schema for the exact fields being changed and write bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots. A Llama user's own judgment is human_subjective_view.people or human_subjective_view.business and must carry value.speaker, value.rawText quoted verbatim from origin.originalUserUtterance, and value.summary (the agent's restatement); it is rejected otherwise.",
+    description: "The only Deal mutation tool. Pass one command: input.submit, information.put, page.patch, or artifact.put. Before artifact.put, read Deal files: reuse artifactId for a revision; a same-kind/title collision without an ID returns OCCAM_CONFLICT. Titles are candidates, not identity. Select the intended existing ID from the request/content, or explicitly generate a fresh UUID for a distinct same-name source. Send complete revised bytes, preserve applicable metadata, and verify the ID/version. page.patch does not edit file bytes. All Page content fields are Agent-writable; author controls attribution, not permission. Before page.patch, use get_live_deal_page_schema for the exact fields being changed and write bilingual Page prose. page.patch is JSON Merge Patch: arrays replace whole arrays, so read-modify-write and preserve sibling slots. A Llama user's own judgment is human_subjective_view.people or human_subjective_view.business and must carry value.speaker, value.rawText quoted verbatim from origin.originalUserUtterance, and value.summary (the agent's restatement); it is rejected otherwise.",
     // MCP SDK 1.30 only publishes object schemas at the tool root. Nesting one
     // command preserves the real discriminated union instead of flattening four
     // incompatible operations into false affordances.
