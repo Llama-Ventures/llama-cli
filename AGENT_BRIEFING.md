@@ -219,8 +219,17 @@ language is invalid. New scalar Page prose is also invalid; historical scalar
 prose is read-compatible only. Information and raw Input retain their original
 language and provenance; do not manufacture a second source quote.
 
-Artifacts use `artifact.put`. Treat them as immutable source material. Read the
-artifact, then decide whether its content deserves Information or a Page patch.
+Artifacts use `artifact.put`. Read the Deal files first. To revise an existing
+file, reuse its `artifactId` and send the complete revised file, preserving
+applicable metadata; this adds an immutable version even when the title changes.
+`page.patch` does not edit file bytes. Omit the ID for a new document without a
+title collision; use a fresh UUID explicitly for a distinct same-name source.
+On `409 OCCAM_CONFLICT`, read the candidate documents and select an existing ID
+or intentionally create a distinct source. Do not treat a title as identity or
+rename a file to bypass the check. Ask only when the intended target remains
+unclear after reading. Verify the returned ID and version; preserve old links.
+Reuse the reference when file and metadata are unchanged. Separately decide
+whether its content supports Information or a Page update.
 
 ## Verification and safety
 

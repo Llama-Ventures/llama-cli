@@ -84,7 +84,15 @@ the initial Live Page and Information, and appends Events atomically.
 - `input.submit` — preserve raw input in the Event Feed.
 - `information.put` — add or update one structured memory unit.
 - `page.patch` — update the human-visible Live Deal Page.
-- `artifact.put` — add an immutable memo/HTML/source artifact.
+- `artifact.put` — create a file or append an immutable version by reusing its `artifactId`.
+
+Read Deal files before uploading revisions. Reuse the existing `artifactId`
+even when renaming; send complete revised bytes and preserve applicable metadata.
+Omitting the ID creates a new file only when no current same-kind/title candidate
+exists. On `409 OCCAM_CONFLICT`, read the candidates and select the intended ID;
+for a genuinely distinct same-name source, explicitly supply a fresh UUID.
+Titles are not document identities. `page.patch` does not edit file bytes.
+Verify the intended ID/version and preserve old source links.
 
 When Page prose is human-visible, write one bilingual field value as
 `{"en":"natural English","zh":"自然中文"}`. The Web language switch selects

@@ -82,7 +82,13 @@ Core 会补上 `operation: deal.create`，创建或复用 Drive 文件夹，并�
 - `input.submit`：把完整原始输入保存在 Event Feed；
 - `information.put`：写入一个结构化工作记忆单元；
 - `page.patch`：更新人类直接看到的 Live Deal Page；
-- `artifact.put`：添加不可变的 memo、HTML 或源文件。
+- `artifact.put`：创建文件，或复用 `artifactId` 为已有文件追加不可变版本。
+
+修改文件前先读项目的文件列表；即使改名，也复用原来的 `artifactId`，
+上传完整的新文件并保留适用的 metadata。省略 ID 时，只有不存在当前同类型、
+同标题文件才会新建。遇到 `409 OCCAM_CONFLICT`，读取候选内容来确定目标 ID；
+确实是另一份同名材料时，明确生成新的 UUID 作为 `artifactId`。
+标题不是文件身份，`page.patch` 也不修改文件内容。回读核对 ID 和版本，保留旧链接。
 
 给人看的 Page 文字必须在写入时同时提供自然的中英文：
 `{"en":"natural English","zh":"自然中文"}`。Web 的语言开关从同一个
