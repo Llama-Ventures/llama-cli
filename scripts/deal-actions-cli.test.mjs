@@ -3,6 +3,8 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import test from "node:test";
 
+const guidance = "Server-provided test workflow guidance.";
+
 function runCli(baseUrl, args, stdin = "") {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["bin/llama.mjs", ...args], {
@@ -65,7 +67,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
       }));
       return;
     }
-    res.end(JSON.stringify({ ok: true, request: { method: req.method, url: req.url, body } }));
+    res.end(JSON.stringify({ workflow_guidance: guidance, ok: true, request: { method: req.method, url: req.url, body } }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());
@@ -74,6 +76,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
 
   const search = await runCli(baseUrl, ["deal", "search", "Example", "--limit", "3"]);
   assert.equal(search.code, 0, search.stderr);
+  assert.equal(JSON.parse(search.stdout).workflow_guidance, guidance);
   assert.equal(JSON.parse(search.stdout).request.url, "/api/occam/deals?q=Example&limit=3");
 
   const bootstrap = await runCli(baseUrl, ["agent", "bootstrap"]);
@@ -91,6 +94,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
 
   const read = await runCli(baseUrl, ["deal", "read", "deal-1", "--detail", "memory"]);
   assert.equal(read.code, 0, read.stderr);
+  assert.equal(JSON.parse(read.stdout).workflow_guidance, guidance);
   assert.equal(JSON.parse(read.stdout).request.url, "/api/occam/deals/deal-1?expand=information");
 
   const createInput = JSON.stringify({
@@ -99,6 +103,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   });
   const create = await runCli(baseUrl, ["deal", "create", "--json", "-"], createInput);
   assert.equal(create.code, 0, create.stderr);
+  assert.equal(JSON.parse(create.stdout).workflow_guidance, guidance);
   const createBody = JSON.parse(create.stdout).request.body;
   assert.equal(createBody.operation, "deal.create");
   assert.match(createBody.idempotencyKey, /^cli:[0-9a-f]{40}$/);
@@ -111,6 +116,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   });
   const write = await runCli(baseUrl, ["deal", "write", "--json", "-"], writeInput);
   assert.equal(write.code, 0, write.stderr);
+  assert.equal(JSON.parse(write.stdout).workflow_guidance, guidance);
   const writeBody = JSON.parse(write.stdout).request.body;
   assert.equal(writeBody.operation, "input.submit");
   assert.equal(writeBody.origin.originalUserUtterance, "The exact input.");

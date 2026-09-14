@@ -123,3 +123,53 @@ test("MCP adds content reading inside the existing Deal and Wiki read tools", as
   assert.equal(wiki.inputSchema.properties.attachment.type, "string");
   assert.ok(!tools.some(t => t.name === "read_artifact"));
 });
+
+test("MCP preserves server guidance for all four Deal actions, including compact Page receipts", async (t) => {
+  const { default: http } = await import("node:http");
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+  const guidance = "Server-provided test workflow guidance.";
+  const dealId = "11111111-1111-4111-8111-111111111111";
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({
+      ok: true,
+      workflow_guidance: guidance,
+      result: { page: { id: dealId, revision: 2, page: { notes: "large body" } } },
+    }));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const client = new Client({ name: "workflow-guidance-test", version: "1" });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: ["bin/llama-mcp.mjs"],
+    cwd: new URL("..", import.meta.url).pathname,
+    env: {
+      ...process.env,
+      LLAMA_API_URL: `http://127.0.0.1:${server.address().port}`,
+      LLAMA_TOKEN: "llc_local_contract_test_token",
+      LLAMA_NO_TELEMETRY: "1",
+    },
+    stderr: "pipe",
+  });
+  t.after(() => client.close());
+  await client.connect(transport);
+  for (const [name, args] of [
+    ["search_deals", { q: "Example" }],
+    ["read_deal", { dealId }],
+    ["create_deal", { companyName: "Example", origin: { kind: "agent" } }],
+    ["write_deal", { command: { operation: "page.patch", dealId, patch: { website: "https://example.test" }, origin: { kind: "agent" } } }],
+  ]) {
+    const result = await client.callTool({ name, arguments: args });
+    assert.ok(!result.isError, JSON.stringify(result));
+    const body = JSON.parse(result.content.find(block => block.type === "text").text);
+    assert.equal(body.workflow_guidance, guidance, name);
+    if (name === "write_deal") {
+      assert.equal(body.result.page.page, undefined, "large Page is compacted");
+      assert.equal(body.result.verify.dealId, dealId);
+    }
+  }
+});
