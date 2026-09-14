@@ -155,6 +155,7 @@ test("compacts page.patch success into a revision receipt plus targeted read-bac
   };
   const response = {
     ok: true,
+    workflow_guidance: "Server-provided test workflow guidance.",
     result: {
       idempotent: false,
       page: {
@@ -167,6 +168,7 @@ test("compacts page.patch success into a revision receipt plus targeted read-bac
   };
   assert.deepEqual(compactDealWriteResult(command, response), {
     ok: true,
+    workflow_guidance: "Server-provided test workflow guidance.",
     result: {
       idempotent: false,
       page: {
