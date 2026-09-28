@@ -231,6 +231,14 @@ unclear after reading. Verify the returned ID and version; preserve old links.
 Reuse the reference when file and metadata are unchanged. Separately decide
 whether its content supports Information or a Page update.
 
+Send complete bytes and the actual MIME type through `artifact.put`. Core hosts
+`text/html` in Command; never mirror it to Drive or require a Drive link for
+success. Other source files, including original transcripts and recordings, go
+to the Deal's Drive folder; the database retains metadata and references. Do
+not duplicate source-file bodies in Input, Information, Page or metadata. Save
+extracted facts and summaries with source references, preserve the user's
+request, and verify the exact Artifact version and hash through Command.
+
 ## Verification and safety
 
 - Read back the affected resource before saying it was saved.
