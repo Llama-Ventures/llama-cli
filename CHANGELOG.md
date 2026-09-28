@@ -6,9 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-09-28
+
 ### Fixed
 
 - Align CLI help and MCP guidance with Core storage routing: HTML is hosted in Command; non-HTML source files, including transcripts and recordings, live in Drive. Verify exact versions without requiring a Drive link for HTML.
+
+### Changed
+
+- Clarify when to append a version to an existing artifact versus create a distinct source, preserving document identity and old links.
+
+## [2.5.0] - 2026-09-10
 
 ### Added
 
