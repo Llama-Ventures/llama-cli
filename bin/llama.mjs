@@ -135,11 +135,16 @@ increased version (or idempotent replay). Reuse an unchanged file's reference.
 Revision example:
   {"operation":"artifact.put","dealId":"<uuid>","artifactId":"<existing artifact uuid>","kind":"memo","title":"Memo.html","mimeType":"text/html","contentBase64":"<complete revised file, base64>","origin":{"kind":"user","originalUserUtterance":"Revise the memo"}}
 
-artifact.put sends the bytes as contentBase64; Core stores them in the Deal's
-own Drive folder and derives byteSize and sha256 itself. Do not supply a
-folder, storage key or URL for a file you hold. Write the JSON to a file and
-pass its path. Only an artifact that already lives elsewhere is referenced
-with storageKey (+ optional storageUrl) plus byteSize and sha256 instead.
+artifact.put sends complete bytes as contentBase64 with the actual mimeType.
+Core hosts text/html in Command; do not upload or mirror HTML to Drive.
+Non-HTML files, including original transcripts and recordings, go to the Deal's
+Drive folder; the database keeps metadata and references, not the file bytes.
+Do not copy source-file contents into input.submit, Information, Page or metadata.
+Extract facts and summaries with source references; preserve the user's request.
+Core derives byteSize and sha256. Do not supply a folder, storage key or URL for
+a file you hold. Write the JSON to a file and pass its path. Existing non-HTML
+Drive files may use storageKey and storageUrl plus byteSize and sha256 instead.
+Verify the exact Artifact version and hash; hosted HTML needs no Drive link.
 
 For Information, origin records who caused the write and preserves user words;
 value.source records where the evidence came from.

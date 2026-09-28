@@ -6,6 +6,10 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Align CLI help and MCP guidance with Core storage routing: HTML is hosted in Command; non-HTML source files, including transcripts and recordings, live in Drive. Verify exact versions without requiring a Drive link for HTML.
+
 ### Added
 
 - Submit user/agent UX friction with `llama feedback submit` and MCP `feedback_submit`; read your receipt and resolution with `feedback show` / `feedback_show`.
