@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Fixed
+
+- Renew rejected OAuth access credentials even when the cached expiry is still
+  in the future; concurrent requests reuse one renewed credential.
+- Request browser sign-in when authorization expires or is revoked, and retain
+  the selected OAuth identity instead of falling back to another credential.
+- Validate callback state on denial and escape browser callback error text.
+- Document automatic renewal and the server's fixed 90-day authorization policy.
+
+
 ## [2.5.1] - 2026-09-28
 
 ### Fixed

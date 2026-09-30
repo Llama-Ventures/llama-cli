@@ -5,6 +5,11 @@
 CLI 2 不再保留分裂的 Deal 命令。Core 负责数据库写入、Google Drive
 文件夹、Event、provenance 和幂等；Agent 不直接操作 PostgreSQL。
 
+运行 `llama auth login`，在浏览器中确认授权。CLI 优先使用系统钥匙串保存凭证，
+并自动续期；新 CLI 浏览器授权最多持续 90 天，之后需要重新在浏览器登录。
+退出登录、管理员撤销或账号停用可提前终止访问。没有系统钥匙串时，凭证保存在
+仅当前用户可读的本地文件中。
+
 ## 安装或升级
 
 ```bash
