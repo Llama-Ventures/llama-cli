@@ -6,6 +6,13 @@ CLI 2 replaces the split Deal command surface with exactly four actions. Core
 owns database writes, Drive provisioning, audit Events, provenance, and
 idempotency. Agents never touch PostgreSQL directly.
 
+Sign in with `llama auth login`: approve access in your browser; the CLI stores
+credentials in the OS credential store when available and renews them automatically.
+New CLI browser authorizations last up to 90 days, then require another browser
+sign-in. Logout, administrator revocation, or account deactivation can end access
+sooner. On systems without a credential store, credentials are stored in a local
+file readable only by your user.
+
 ## Install or upgrade
 
 ```bash
