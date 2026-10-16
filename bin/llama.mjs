@@ -44,7 +44,7 @@ import {
   buildDealMemoryPath,
   readMarkdownInput,
 } from "../lib/deal-memory-actions.mjs";
-import { submitFeedback, readFeedback, readFeedbackInput } from "../lib/feedback.mjs";
+import { submitFeedback, readFeedback, readFeedbackInput, listAdminFeedback } from "../lib/feedback.mjs";
 import { buildPageSchemaPath } from "../lib/page-schema.mjs";
 
 const requireFromHere = createRequire(import.meta.url);
@@ -77,7 +77,7 @@ Separate preserved domains:
   llama wiki search|read|save|delete|restore
   llama feedback submit --title "..." --body "..." [--experienced-by user|agent|both]
   llama feedback show <id>
-  llama admin auth-events|deal-events|agent-events
+  llama admin auth-events|deal-events|agent-events|feedback
   llama pitch start|say|upload|status|finalize|end
 
 Run \`llama help deal\` for the mutation contract.`;
@@ -202,8 +202,14 @@ const HELP_FEEDBACK = `Report concrete user or agent UX friction, even when the 
   llama feedback submit --title "..." --body "..." [--experienced-by user|agent|both]
   llama feedback submit --file <feedback.json|->
   llama feedback show <id>
+  llama admin feedback [--status open|closed|all] [--offset N]
+    [--cli-version VERSION] [--agent-name NAME]
 
-Optional flags: --expected, --steps, --impact, --workaround, --suggestion,
+The admin inbox requires a real system administrator; OAuth needs admin scope.
+Returns up to 50 reports, newest first. Continue using next_offset until null.
+This command only reads reports. Closing feedback uses the web admin console.
+
+Optional submission flags: --expected, --steps, --impact, --workaround, --suggestion,
 --agent-name, --agent-version, --model, --command, --error-code, --request-id,
 --occurred-at (ISO timestamp), --submission-id (reuse for retries).
 
@@ -782,7 +788,16 @@ async function main() {
   }
 
   if (area === "admin") {
-    const allowed = ["auth-events", "deal-events", "agent-events"];
+    if (action === "feedback") {
+      const { flags, positional } = parseFlags(rest, ["status", "offset", "cli-version", "agent-name"]);
+      if (positional.length || Object.values(flags).some(v => typeof v !== "string")) {
+        throw new Error("Feedback filters require values; see llama help feedback");
+      }
+      print(await listAdminFeedback({ status: flags.status, offset: flags.offset,
+        cliVersion: flags["cli-version"], agentName: flags["agent-name"] }));
+      return;
+    }
+    const allowed = ["auth-events", "deal-events", "agent-events", "feedback"];
     if (!allowed.includes(action)) throw new Error(`Admin actions: ${allowed.join(", ")}.`);
     const { flags } = parseFlags(rest);
     const params = new URLSearchParams();

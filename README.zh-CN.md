@@ -248,3 +248,18 @@ Agent 版本未知时不猜测。`--agent-name`、`--agent-version`、`--model` 
 提交失败明确报错，不能声称成功，也不能触发递归反馈或阻塞原任务。
 新命令需要 Core API 5.9.0，沿用现有登录；用户只能读取自己的反馈。
 MCP 对应 feedback_submit / feedback_show。
+
+### 管理员反馈列表
+
+```bash
+llama admin feedback
+llama admin feedback --status all --cli-version 2.5.3 --agent-name codex
+llama admin feedback --offset 50
+```
+
+沿用现有管理员凭证，服务端校验真实用户的系统管理员身份，拒绝预览身份。
+OAuth 还需要 admin scope；仅有 read/write scope 的管理员需重新授权。
+普通用户无法通过指定 scope 获得管理员身份。需要 Core API 5.31.0。
+默认只列 open，支持 closed / all；每页最多 50 条，按最新提交排序。
+按返回的 next_offset 继续，直到 null，不能把一页当作全部反馈。
+列表包含描述、详情、环境和处理结论。命令只读；关闭反馈仍使用网页管理台。
