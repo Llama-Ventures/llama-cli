@@ -276,3 +276,20 @@ block the original task or trigger recursive feedback. Calls use a 15-second
 fetch budget and refuse redirects. Requires Core API 5.9.0, existing login and
 write scope; receipt reads require read scope and only return your own reports.
 MCP provides `feedback_submit` and `feedback_show` with the same behavior.
+
+### Administrator feedback inbox
+
+```bash
+llama admin feedback
+llama admin feedback --status all --cli-version 2.5.3 --agent-name codex
+llama admin feedback --offset 50
+```
+
+Read the team inbox with existing administrator credentials. Core requires the
+real user to be a system administrator, rejects preview identities, and requires
+admin scope for OAuth. A read/write-scoped OAuth login must be reauthorized with
+admin scope by an administrator; ordinary users cannot grant themselves this role.
+Requires Core API 5.31.0. The response contains up to 50 reports in newest-first
+order, including their body, details, environment and resolution. Follow
+`next_offset` until null; one page is not the complete inbox. Status defaults to
+open. This command is read-only; closure remains in the browser admin console.

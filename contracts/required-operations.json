@@ -20,6 +20,10 @@
     },
     {
       "method": "GET",
+      "path": "/api/admin/feedback"
+    },
+    {
+      "method": "GET",
       "path": "/api/agent/briefing"
     },
     {

@@ -37,8 +37,14 @@ async function fixture(t) {
     const body = raw ? JSON.parse(raw) : null;
     seen.push({ method: req.method, url: req.url, body, token: req.headers["x-llama-token"] });
     res.setHeader("Content-Type", "application/json");
+    if (mode === "admin-denied") { res.writeHead(403); res.end(JSON.stringify({ error: "System administrator required", code: "FORBIDDEN" })); return; }
     if (mode === "fail") { res.writeHead(503); res.end(JSON.stringify({ error: "Feedback unavailable" })); return; }
     if (mode === "redirect") { res.writeHead(307, { Location: "/unexpected" }); res.end(); return; }
+    if (req.url.startsWith("/api/admin/feedback")) {
+      const query = new URL(req.url, "http://localhost").searchParams;
+      const offset = Number(query.get("offset") || 0);
+      res.end(JSON.stringify({ feedback: [{ id, title: "Reported obstacle", body: "Full report", status: "open" }], next_offset: offset === 0 ? 50 : null })); return;
+    }
     res.writeHead(req.method === "POST" ? 201 : 200);
     res.end(JSON.stringify({ feedback: { id, status: "open", ...body }, ...(body ? { replayed: false } : {}) }));
   });
@@ -103,4 +109,43 @@ test("real MCP exposes typed feedback tools and captures initialized host versio
 test("feedback JSON input is bounded before parsing", async () => {
   await assert.rejects(readFeedbackInput("-", Readable.from(["x".repeat(32769)])), /32 KiB/);
   await assert.rejects(readFeedbackInput("-", Readable.from(["{invalid"])), /valid JSON/);
+});
+
+
+test("admin feedback uses authenticated GET with bounded filters and explicit pagination", async t => {
+  const f = await fixture(t);
+  const first = await f.cli(["admin", "feedback"]);
+  assert.equal(first.code, 0, first.stderr);
+  assert.equal(JSON.parse(first.stdout).feedback[0].body, "Full report");
+  assert.equal(JSON.parse(first.stdout).next_offset, 50);
+  assert.equal(f.seen[0].url, "/api/admin/feedback?status=open&offset=0");
+  const next = await f.cli(["admin", "feedback", "--status", "all", "--offset", "50", "--cli-version", "2.5.3", "--agent-name", "test agent"]);
+  assert.equal(next.code, 0, next.stderr);
+  assert.equal(JSON.parse(next.stdout).next_offset, null);
+  const params = new URL(f.seen[1].url, "http://localhost").searchParams;
+  assert.equal(params.get("status"), "all");
+  assert.equal(params.get("offset"), "50");
+  assert.equal(params.get("cli_version"), "2.5.3");
+  assert.equal(params.get("agent_name"), "test agent");
+  assert.ok(f.seen.every(r => r.method === "GET" && r.body === null && r.token === "llc_synthetic_feedback_test"));
+  const closed = await f.cli(["admin", "feedback", "--status", "closed"]);
+  assert.equal(closed.code, 0, closed.stderr);
+  const count = f.seen.length;
+  for (const rest of [["--status", "invalid"], ["--status"], ["--offset", "-1"], ["--offset", "1.5"], ["--offset", "100001"], ["--cli-version", ""], ["--agent-name", "a".repeat(121)], ["--limit", "100"], ["--close"], ["unexpected"]]) {
+    const bad = await f.cli(["admin", "feedback", ...rest]);
+    assert.equal(bad.code, 1, rest.join(" "));
+  }
+  assert.equal(f.seen.length, count, "invalid filters and attempted writes never send requests");
+});
+
+test("admin feedback reports authorization failures and refuses redirects", async t => {
+  const f = await fixture(t);
+  f.mode("admin-denied");
+  const denied = await f.cli(["admin", "feedback"]);
+  assert.equal(denied.code, 1); assert.equal(denied.stdout, "");
+  assert.match(denied.stderr, /System administrator required/);
+  f.mode("redirect");
+  const redirected = await f.cli(["admin", "feedback"]);
+  assert.equal(redirected.code, 1); assert.equal(redirected.stdout, "");
+  assert.equal(f.seen.length, 2, "read failure neither closes nor submits feedback");
 });

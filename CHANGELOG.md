@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+### Added
+
+- Read the team feedback inbox with `llama admin feedback`, including status,
+  CLI-version and coding-agent filters and explicit pagination. Requires an
+  administrator identity and Core API 5.31.0; feedback closure remains in the
+  browser console.
+
 ### Fixed
 
 - Renew rejected OAuth access credentials even when the cached expiry is still
