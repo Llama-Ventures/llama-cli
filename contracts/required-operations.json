@@ -88,6 +88,10 @@
     },
     {
       "method": "PATCH",
+      "path": "/api/admin/feedback/{id}"
+    },
+    {
+      "method": "PATCH",
       "path": "/api/agent/preferences/{id}"
     },
     {

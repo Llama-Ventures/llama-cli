@@ -8,13 +8,17 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- Resolve a feedback report with `llama feedback resolve <id> --note "..."`
+  or MCP `feedback_resolve`. Core API 5.34.0 enforces reviewer identity, write
+  permission, a required resolution note, and attributed retry-safe closure.
 - Read the team feedback inbox with `llama admin feedback`, including status,
-  CLI-version and coding-agent filters and explicit pagination. Requires an
-  administrator identity and Core API 5.31.0; feedback closure remains in the
-  browser console.
+  CLI-version and coding-agent filters and explicit pagination. Core API 5.33.0
+  supports reviewer access with ordinary read-scoped credentials.
 
 ### Fixed
 
+- Feedback help and agent guidance describe reviewer permissions and CLI
+  resolution without requiring global administrator scope.
 - Renew rejected OAuth access credentials even when the cached expiry is still
   in the future; concurrent requests reuse one renewed credential.
 - Request browser sign-in when authorization expires or is revoked, and retain
