@@ -31,15 +31,23 @@ test("feedback environment preserves provenance, redacts known secrets and rejec
 
 async function fixture(t) {
   const home = await mkdtemp(path.join(os.tmpdir(), "llama-feedback-"));
-  const seen = []; let mode = "ok";
+  const seen = []; let mode = "ok"; let resolution = null;
   const server = http.createServer(async (req, res) => {
     let raw = ""; for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : null;
     seen.push({ method: req.method, url: req.url, body, token: req.headers["x-llama-token"] });
     res.setHeader("Content-Type", "application/json");
-    if (mode === "admin-denied") { res.writeHead(403); res.end(JSON.stringify({ error: "System administrator required", code: "FORBIDDEN" })); return; }
+    if (mode === "admin-denied") { res.writeHead(403); res.end(JSON.stringify({ error: "Feedback reviewer required", code: "FORBIDDEN" })); return; }
     if (mode === "fail") { res.writeHead(503); res.end(JSON.stringify({ error: "Feedback unavailable" })); return; }
     if (mode === "redirect") { res.writeHead(307, { Location: "/unexpected" }); res.end(); return; }
+    if (req.method === "PATCH" && req.url === `/api/admin/feedback/${id}`) {
+      if (mode === "invalid-receipt") { res.end(JSON.stringify({ ok: true })); return; }
+      if (resolution && resolution.resolution_note !== body.resolution_note) {
+        res.writeHead(409); res.end(JSON.stringify({ error: "Feedback already closed", code: "FEEDBACK_ALREADY_CLOSED" })); return;
+      }
+      resolution ??= { id, status: "closed", closed_by: 9, closed_at: new Date().toISOString(), resolution_note: body.resolution_note };
+      res.end(JSON.stringify({ feedback: resolution })); return;
+    }
     if (req.url.startsWith("/api/admin/feedback")) {
       const query = new URL(req.url, "http://localhost").searchParams;
       const offset = Number(query.get("offset") || 0);
@@ -143,9 +151,72 @@ test("admin feedback reports authorization failures and refuses redirects", asyn
   f.mode("admin-denied");
   const denied = await f.cli(["admin", "feedback"]);
   assert.equal(denied.code, 1); assert.equal(denied.stdout, "");
-  assert.match(denied.stderr, /System administrator required/);
+  assert.match(denied.stderr, /Feedback reviewer required/);
   f.mode("redirect");
   const redirected = await f.cli(["admin", "feedback"]);
   assert.equal(redirected.code, 1); assert.equal(redirected.stdout, "");
   assert.equal(f.seen.length, 2, "read failure neither closes nor submits feedback");
+});
+
+test("CLI resolves with a required note, attributed receipt and identical retry", async t => {
+  const f = await fixture(t);
+  const args = ["feedback", "resolve", id, "--note", "Verified the synthetic fix"];
+  const first = await f.cli(args);
+  assert.equal(first.code, 0, first.stderr);
+  const receipt = JSON.parse(first.stdout).feedback;
+  assert.equal(receipt.status, "closed"); assert.equal(receipt.closed_by, 9); assert.ok(receipt.closed_at);
+  const retry = await f.cli(args);
+  assert.equal(retry.code, 0, retry.stderr); assert.deepEqual(JSON.parse(retry.stdout).feedback, receipt);
+  assert.equal(f.seen.length, 2);
+  assert.ok(f.seen.every(r => r.method === "PATCH" && r.url === `/api/admin/feedback/${id}`));
+  assert.deepEqual(f.seen[0].body, { resolution_note: "Verified the synthetic fix" });
+  const conflict = await f.cli(["feedback", "resolve", id, "--note", "Changed explanation"]);
+  assert.equal(conflict.code, 1); assert.match(conflict.stderr, /FEEDBACK_ALREADY_CLOSED/);
+});
+
+test("CLI resolution rejects invalid input before requesting and redacts notes", async t => {
+  const f = await fixture(t);
+  for (const rest of [[], [id], ["invalid", "--note", "Fixed"], [id, "--note"], [id, "--note", " "], [id, "--note", "x".repeat(2001)], [id, "--note", "sk-a ".repeat(400).trim()], [id, "extra", "--note", "Fixed"], [id, "--closed-by", "9", "--note", "Fixed"]]) {
+    const bad = await f.cli(["feedback", "resolve", ...rest]);
+    assert.equal(bad.code, 1, rest.join(" "));
+  }
+  assert.equal(f.seen.length, 0);
+  const redacted = await f.cli(["feedback", "resolve", id, "--note", "Verified. Bearer synthetic-private-value"]);
+  assert.equal(redacted.code, 0, redacted.stderr);
+  assert.doesNotMatch(JSON.stringify(f.seen), /synthetic-private-value/);
+  assert.match(f.seen[0].body.resolution_note, /\[redacted\]/);
+});
+
+test("CLI resolution preserves denials and never claims uncertain writes succeeded", async t => {
+  const f = await fixture(t);
+  const args = ["feedback", "resolve", id, "--note", "Verified the fix"];
+  f.mode("admin-denied"); const denied = await f.cli(args);
+  assert.equal(denied.code, 1); assert.equal(denied.stdout, ""); assert.match(denied.stderr, /FORBIDDEN/);
+  for (const mode of ["fail", "redirect", "invalid-receipt"]) {
+    f.mode(mode); const failed = await f.cli(args);
+    assert.equal(failed.code, 1); assert.equal(failed.stdout, "");
+    assert.match(failed.stderr, /FEEDBACK_RESOLUTION_NOT_CONFIRMED/);
+    assert.match(failed.stderr, /same note/);
+  }
+  assert.equal(f.seen.length, 4, "no redirected request, telemetry or recursive feedback");
+});
+
+test("MCP exposes bounded resolution and uses the same attributed endpoint", async t => {
+  const f = await fixture(t);
+  const transport = new StdioClientTransport({ command: process.execPath, args: ["bin/llama-mcp.mjs"], cwd: new URL("..", import.meta.url).pathname, env: f.env, stderr: "pipe" });
+  const client = new Client({ name: "synthetic-reviewer", version: "1.0.0" });
+  await client.connect(transport); t.after(() => client.close());
+  const tools = await client.listTools();
+  const tool = tools.tools.find(t => t.name === "feedback_resolve");
+  assert.deepEqual(tool.inputSchema.required, ["id", "resolution_note"]);
+  assert.equal(tool.inputSchema.properties.resolution_note.maxLength, 2000);
+  assert.equal(tool.annotations.readOnlyHint, false); assert.equal(tool.annotations.idempotentHint, true);
+  const result = await client.callTool({ name: "feedback_resolve", arguments: { id, resolution_note: "Verified the fix" } });
+  assert.notEqual(result.isError, true, JSON.stringify(result));
+  assert.equal(JSON.parse(result.content[0].text).feedback.status, "closed");
+  assert.equal(f.seen[0].method, "PATCH"); assert.equal(f.seen[0].url, `/api/admin/feedback/${id}`);
+  const invalid = await client.callTool({ name: "feedback_resolve", arguments: { id, resolution_note: " " } });
+  assert.equal(invalid.isError, true); assert.equal(f.seen.length, 1);
+  f.mode("admin-denied"); const denied = await client.callTool({ name: "feedback_resolve", arguments: { id, resolution_note: "Verified the fix" } });
+  assert.equal(denied.isError, true); assert.match(denied.content[0].text, /FORBIDDEN/);
 });
