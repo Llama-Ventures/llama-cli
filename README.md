@@ -53,6 +53,33 @@ llama deal read <dealId> --detail all
 
 The Live Deal Page is always returned. Expand only what the task needs.
 
+### Search by topic or sector
+
+With Core API 5.41.0 or newer, query text matches current company names/keys,
+descriptions, sectors/subsectors and founder names, in either stored language.
+Matching uses case-insensitive literal substrings; it does not infer synonyms.
+Exact company-name matches rank first, then partial names, then topic hits.
+All filters run on Core before the limit:
+
+```bash
+llama deal search "embodied" --limit 20
+llama deal search --sector "robotics" --limit 20
+llama deal search "humanoid" --sector "robotics" --state active
+```
+
+`--sector` searches sector and subsector and can be used without a query.
+MCP `search_deals` accepts the same optional `q`, `sector`, `state` and `limit`.
+If Core does not confirm the sector filter in its response, the client reports
+an unsupported-server error instead of returning an unfiltered pipeline.
+
+Use short keywords rather than a whole question. Each hit's `searchMatch` lists
+the fields that matched the query and sector. `search.has_more: true` means the
+results are truncated; refine the query before giving an exhaustive answer.
+Zero matches are not proof of absence: try a broader sector or alternative
+wording, then read candidate Deals to verify specific categories and claims.
+Search reads current Page data directly, so updates and clears are reflected
+immediately without a separate indexing job or manual tag maintenance.
+
 ### Create
 
 ```json

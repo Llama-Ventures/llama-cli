@@ -49,11 +49,15 @@ function listMcpTools() {
 }
 
 test("MCP publishes exactly four Deal tools", async () => {
-  const names = (await listMcpTools()).map((tool) => tool.name);
+  const tools = await listMcpTools();
+  const names = tools.map((tool) => tool.name);
   const dealTools = names.filter((name) =>
     ["search_deals", "read_deal", "create_deal", "write_deal"].includes(name),
   );
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
+  const search = tools.find((tool) => tool.name === "search_deals");
+  assert.equal(search.inputSchema.properties.sector.maxLength, 200);
+  assert.match(search.description, /description, sector\/subsector or founder/);
 });
 
 test("MCP publishes Deal Memory as a separate two-tool domain", async () => {
@@ -134,9 +138,14 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     let raw = "";
     for await (const chunk of req) raw += chunk;
     res.setHeader("content-type", "application/json");
+    const sector = new URL(req.url, "http://localhost").searchParams.get("sector");
     res.end(JSON.stringify({
       ok: true,
       workflow_guidance: guidance,
+      ...(sector && sector !== "unsupported" ? {
+        search: { filters: { sector }, has_more: true },
+        deals: [{ id: dealId, searchMatch: { queryFields: [], sectorFields: ["sector"] } }],
+      } : {}),
       result: { page: { id: dealId, revision: 2, page: { notes: "large body" } } },
     }));
   });
@@ -159,6 +168,7 @@ test("MCP preserves server guidance for all four Deal actions, including compact
   await client.connect(transport);
   for (const [name, args] of [
     ["search_deals", { q: "Example" }],
+    ["search_deals", { sector: "robotics", state: "archived", limit: 3 }],
     ["read_deal", { dealId }],
     ["create_deal", { companyName: "Example", origin: { kind: "agent" } }],
     ["write_deal", { command: { operation: "page.patch", dealId, patch: { website: "https://example.test" }, origin: { kind: "agent" } } }],
@@ -167,9 +177,16 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     assert.ok(!result.isError, JSON.stringify(result));
     const body = JSON.parse(result.content.find(block => block.type === "text").text);
     assert.equal(body.workflow_guidance, guidance, name);
+    if (name === "search_deals" && args.sector) {
+      assert.equal(body.search.has_more, true);
+      assert.deepEqual(body.deals[0].searchMatch.sectorFields, ["sector"]);
+    }
     if (name === "write_deal") {
       assert.equal(body.result.page.page, undefined, "large Page is compacted");
       assert.equal(body.result.verify.dealId, dealId);
     }
   }
+  const oldServer = await client.callTool({ name: "search_deals", arguments: { sector: "unsupported" } });
+  assert.equal(oldServer.isError, true);
+  assert.match(oldServer.content.find(block => block.type === "text").text, /Core did not confirm/);
 });

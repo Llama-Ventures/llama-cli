@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildDealReadPath,
   buildDealSearchPath,
+  verifyDealSearchResult,
   compactDealWriteResult,
   ensureIdempotencyKey,
   prepareDealCommand,
@@ -71,6 +72,27 @@ test("builds progressive Deal read and search paths", () => {
   assert.equal(buildDealSearchPath("Acme AI", { state: "active", limit: 5 }), "/api/occam/deals?q=Acme+AI&state=active&limit=5");
   assert.equal(buildDealReadPath("deal/id", "overview"), "/api/occam/deals/deal%2Fid");
   assert.equal(buildDealReadPath("deal-id", "all"), "/api/occam/deals/deal-id?expand=information,artifacts,chat,feed");
+});
+
+test("encodes composable sector search and rejects missing filter values", () => {
+  const url = new URL(buildDealSearchPath("humanoid", { sector: "机器人 & AI", state: "archived", limit: 3 }), "http://localhost");
+  assert.equal(url.searchParams.get("q"), "humanoid");
+  assert.equal(url.searchParams.get("sector"), "机器人 & AI");
+  assert.equal(url.searchParams.get("state"), "archived");
+  assert.equal(url.searchParams.get("limit"), "3");
+  assert.equal(buildDealSearchPath("", { sector: " robotics " }), "/api/occam/deals?sector=robotics");
+  for (const sector of [true, "", "   ", "x".repeat(201)]) {
+    assert.throws(() => buildDealSearchPath("", { sector }), /--sector requires/);
+  }
+});
+
+test("never accepts an unfiltered response from a server without sector support", () => {
+  const old = { deals: [{ companyName: "Unfiltered Example" }] };
+  assert.equal(verifyDealSearchResult(old), old, "old-server compatibility without new filters");
+  assert.throws(() => verifyDealSearchResult(old, { sector: "robotics" }), /Core did not confirm/);
+  assert.throws(() => verifyDealSearchResult({ search: { filters: { sector: "other" } } }, { sector: "robotics" }), /Core did not confirm/);
+  const current = { deals: [], search: { filters: { sector: "robotics" } } };
+  assert.equal(verifyDealSearchResult(current, { sector: " robotics " }), current);
 });
 
 test("derives a stable idempotency key independent of object key order", () => {
