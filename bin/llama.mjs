@@ -36,6 +36,7 @@ import {
   DEAL_ACTIONS,
   buildDealReadPath,
   buildDealSearchPath,
+  verifyDealSearchResult,
   compactDealWriteResult,
   prepareDealCommand,
   readJsonInput,
@@ -53,7 +54,7 @@ const { version: PKG_VERSION } = requireFromHere("../package.json");
 const HELP_ROOT = `Llama Command CLI 2 — small authenticated tools for agents.
 
 Deal has exactly four actions:
-  llama deal search "<company or founder>" [--state active|archived|trashed] [--limit 10]
+  llama deal search [query] [--sector <text>] [--state active|archived|trashed] [--limit 10]
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
@@ -86,10 +87,18 @@ Run \`llama help deal\` for the mutation contract.`;
 const HELP_DEAL = `Llama Command CLI 2 — Deal contract
 
 Exactly four actions:
-  llama deal search [query] [--state active|archived|trashed] [--limit 10]
+  llama deal search [query] [--sector <text>] [--state active|archived|trashed] [--limit 10]
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
+
+Search keywords match company names/keys, descriptions, sectors/subsectors and
+founder names, in either stored language (case-insensitive literal substrings).
+Combine --sector with a query/state/limit, or search a sector without a query:
+  llama deal search --sector "robotics" --limit 20
+  llama deal search "humanoid" --sector "robotics"
+Metadata search and --sector require Core API 5.41.0 or newer. A sector filter
+must be confirmed by Core; old unfiltered responses are rejected.
 
 Read original source content:
   llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
@@ -737,9 +746,10 @@ async function main() {
   }
 
   if (area === "deal" && action === "search") {
-    const { flags, positional } = parseFlags(rest, ["state", "limit"]);
+    const { flags, positional } = parseFlags(rest, ["state", "limit", "sector"]);
     // @core-api-operation GET /api/occam/deals
-    print(await request("GET", buildDealSearchPath(positional.join(" ").trim(), flags)));
+    const result = await request("GET", buildDealSearchPath(positional.join(" ").trim(), flags));
+    print(verifyDealSearchResult(result, flags));
     return;
   }
   if (area === "deal" && action === "read") {

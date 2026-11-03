@@ -67,7 +67,12 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
       }));
       return;
     }
-    res.end(JSON.stringify({ workflow_guidance: guidance, ok: true, request: { method: req.method, url: req.url, body } }));
+    const url = new URL(req.url, "http://localhost");
+    const sector = url.searchParams.get("sector");
+    res.end(JSON.stringify({
+      workflow_guidance: guidance, ok: true, request: { method: req.method, url: req.url, body },
+      ...(sector && sector !== "unsupported" ? { search: { filters: { sector } } } : {}),
+    }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());
@@ -78,6 +83,20 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.equal(search.code, 0, search.stderr);
   assert.equal(JSON.parse(search.stdout).workflow_guidance, guidance);
   assert.equal(JSON.parse(search.stdout).request.url, "/api/occam/deals?q=Example&limit=3");
+
+  const category = await runCli(baseUrl, ["deal", "search", "humanoid", "--sector", "Robotics", "--state", "archived", "--limit", "3"]);
+  assert.equal(category.code, 0, category.stderr);
+  const categoryUrl = new URL(JSON.parse(category.stdout).request.url, baseUrl);
+  assert.equal(categoryUrl.searchParams.get("sector"), "Robotics");
+  assert.equal(categoryUrl.searchParams.get("q"), "humanoid");
+  assert.equal(categoryUrl.searchParams.get("state"), "archived");
+  assert.equal(categoryUrl.searchParams.get("limit"), "3");
+  const oldServer = await runCli(baseUrl, ["deal", "search", "--sector", "unsupported"]);
+  assert.notEqual(oldServer.code, 0);
+  assert.match(oldServer.stderr, /Core did not confirm/);
+  const invalidSector = await runCli(baseUrl, ["deal", "search", "--sector"]);
+  assert.notEqual(invalidSector.code, 0);
+  assert.match(invalidSector.stderr, /--sector requires/);
 
   const bootstrap = await runCli(baseUrl, ["agent", "bootstrap"]);
   assert.equal(bootstrap.code, 0, bootstrap.stderr);

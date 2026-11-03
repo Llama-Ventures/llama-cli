@@ -8,6 +8,10 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- Filter Deal discovery with `llama deal search --sector <text>` or MCP
+  `search_deals.sector`, alone or combined with query/state/limit. Core API
+  5.41.0+ searches current descriptions, sectors/subsectors and founder names
+  alongside company names. Sector filtering fails visibly on an older Core.
 - Resolve a feedback report with `llama feedback resolve <id> --note "..."`
   or MCP `feedback_resolve`. Core API 5.34.0 enforces reviewer identity, write
   permission, a required resolution note, and attributed retry-safe closure.

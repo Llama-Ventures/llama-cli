@@ -49,6 +49,22 @@ llama deal read <dealId> --detail all
 
 Live Deal Page 永远返回；只有任务需要时才展开其他内容。
 
+### 按主题或行业查找
+
+Core API 5.41.0 起，关键词会匹配公司名、公司 key、简介、行业、细分行业和
+创始人姓名，覆盖已保存的中英文文本。匹配方式是不区分大小写的字面子串，
+不会推断同义词。公司名匹配优先；筛选在结果数量限制之前执行。
+
+```bash
+llama deal search "embodied" --limit 20
+llama deal search --sector "robotics" --limit 20
+llama deal search "humanoid" --sector "robotics" --state active
+```
+
+`--sector` 同时匹配行业和细分行业，也可以单独使用。MCP `search_deals` 接受
+同样的 `q`、`sector`、`state` 和 `limit`。如果服务器没有确认应用行业筛选，
+客户端会报错，避免把未筛选的结果当成行业结果。
+
 ### 创建 Deal
 
 ```json

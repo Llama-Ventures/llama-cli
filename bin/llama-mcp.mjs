@@ -23,6 +23,7 @@ import {
 import {
   buildDealReadPath,
   buildDealSearchPath,
+  verifyDealSearchResult,
   compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
@@ -142,15 +143,19 @@ const writeDealCommandSchema = z.discriminatedUnion("operation", [
 server.registerTool(
   "search_deals",
   {
-    description: "Search compact Live Deal Page candidates. Always use this before creating a company.",
+    description: "Search compact Deal candidates by company name/key, description, sector/subsector or founder name, in either stored language. Query is a case-insensitive literal substring, not semantic search. Combine q with sector/state/limit, or use sector alone to discover a category without listing the whole pipeline. Sector matches sector/subsector before limit and requires a supporting Core server. Always search before creating a company.",
     inputSchema: {
       q: z.string().optional(),
+      sector: z.string().trim().min(1).max(200).optional(),
       state: z.enum(["active", "archived", "trashed"]).optional(),
       limit: z.number().int().min(1).max(2000).optional(),
     },
   },
   // @core-api-operation GET /api/occam/deals
-  async ({ q, state, limit } = {}) => callApi("GET", buildDealSearchPath(q, { state, limit })),
+  async ({ q, sector, state, limit } = {}) => callApi(
+    "GET", buildDealSearchPath(q, { sector, state, limit }), undefined,
+    (result) => verifyDealSearchResult(result, { sector }),
+  ),
 );
 
 server.registerTool(
