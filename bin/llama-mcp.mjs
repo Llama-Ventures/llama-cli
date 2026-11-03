@@ -143,7 +143,7 @@ const writeDealCommandSchema = z.discriminatedUnion("operation", [
 server.registerTool(
   "search_deals",
   {
-    description: "Search compact Deal candidates by company name/key, description, sector/subsector or founder name, in either stored language. Query is a case-insensitive literal substring, not semantic search. Combine q with sector/state/limit, or use sector alone to discover a category without listing the whole pipeline. Sector matches sector/subsector before limit and requires a supporting Core server. Always search before creating a company.",
+    description: "Search current Deal metadata by company name/key, description, sector/subsector or founder name in either stored language. Use short keywords; matching is a case-insensitive literal substring, not semantic search. Combine q with sector/state/limit, or use sector alone for category discovery. Sector filters before limit and requires a supporting Core server. Exact names rank first. Inspect searchMatch fields and search.has_more; truncated results are not exhaustive. On zero matches, try broader or alternative wording before concluding no Deal exists. Read candidates to verify specific categories and claims. Always search before creating a company.",
     inputSchema: {
       q: z.string().optional(),
       sector: z.string().trim().min(1).max(200).optional(),

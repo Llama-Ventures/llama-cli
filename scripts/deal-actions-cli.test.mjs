@@ -71,7 +71,10 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
     const sector = url.searchParams.get("sector");
     res.end(JSON.stringify({
       workflow_guidance: guidance, ok: true, request: { method: req.method, url: req.url, body },
-      ...(sector && sector !== "unsupported" ? { search: { filters: { sector } } } : {}),
+      ...(sector && sector !== "unsupported" ? {
+        search: { filters: { sector }, has_more: true, returned: 1, guidance: "Refine before claiming an exhaustive list." },
+        deals: [{ id: "candidate", searchMatch: { queryFields: ["subsector"], sectorFields: ["sector"] } }],
+      } : {}),
     }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -85,6 +88,9 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.equal(JSON.parse(search.stdout).request.url, "/api/occam/deals?q=Example&limit=3");
 
   const category = await runCli(baseUrl, ["deal", "search", "humanoid", "--sector", "Robotics", "--state", "archived", "--limit", "3"]);
+  const categoryBody = JSON.parse(category.stdout);
+  assert.equal(categoryBody.search.has_more, true);
+  assert.deepEqual(categoryBody.deals[0].searchMatch.queryFields, ["subsector"]);
   assert.equal(category.code, 0, category.stderr);
   const categoryUrl = new URL(JSON.parse(category.stdout).request.url, baseUrl);
   assert.equal(categoryUrl.searchParams.get("sector"), "Robotics");

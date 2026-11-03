@@ -12,6 +12,9 @@ this project adheres to [Semantic Versioning](https://semver.org).
   `search_deals.sector`, alone or combined with query/state/limit. Core API
   5.41.0+ searches current descriptions, sectors/subsectors and founder names
   alongside company names. Sector filtering fails visibly on an older Core.
+- Return current-field match evidence and truncation guidance from Core search;
+  prefer exact company names before partial names and topic hits. Agent help
+  explains how to broaden a zero-match query and verify candidate categories.
 - Resolve a feedback report with `llama feedback resolve <id> --note "..."`
   or MCP `feedback_resolve`. Core API 5.34.0 enforces reviewer identity, write
   permission, a required resolution note, and attributed retry-safe closure.

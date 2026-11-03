@@ -99,6 +99,9 @@ Combine --sector with a query/state/limit, or search a sector without a query:
   llama deal search "humanoid" --sector "robotics"
 Metadata search and --sector require Core API 5.41.0 or newer. A sector filter
 must be confirmed by Core; old unfiltered responses are rejected.
+Use short keywords. searchMatch lists matched fields; search.has_more means
+results are truncated. On zero matches, try broader or alternative wording.
+Read candidate Deals to verify categories and substantive claims.
 
 Read original source content:
   llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]

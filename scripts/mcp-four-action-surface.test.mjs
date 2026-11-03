@@ -142,7 +142,10 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     res.end(JSON.stringify({
       ok: true,
       workflow_guidance: guidance,
-      ...(sector && sector !== "unsupported" ? { search: { filters: { sector } } } : {}),
+      ...(sector && sector !== "unsupported" ? {
+        search: { filters: { sector }, has_more: true },
+        deals: [{ id: dealId, searchMatch: { queryFields: [], sectorFields: ["sector"] } }],
+      } : {}),
       result: { page: { id: dealId, revision: 2, page: { notes: "large body" } } },
     }));
   });
@@ -174,6 +177,10 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     assert.ok(!result.isError, JSON.stringify(result));
     const body = JSON.parse(result.content.find(block => block.type === "text").text);
     assert.equal(body.workflow_guidance, guidance, name);
+    if (name === "search_deals" && args.sector) {
+      assert.equal(body.search.has_more, true);
+      assert.deepEqual(body.deals[0].searchMatch.sectorFields, ["sector"]);
+    }
     if (name === "write_deal") {
       assert.equal(body.result.page.page, undefined, "large Page is compacted");
       assert.equal(body.result.verify.dealId, dealId);

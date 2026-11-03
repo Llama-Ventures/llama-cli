@@ -91,7 +91,8 @@ record `input.received` even if no Page or Information update follows.
 Before researching or creating a company:
 
 1. `llama deal search "<company, founder or topic>"`. Core API 5.41.0+ also searches descriptions and sector/subsector in either stored language. Use `--sector "robotics"` alone or combine it with a query and `--state`/`--limit`; filters apply before the limit. These are literal substrings, not semantic synonyms. A sector filter requires server confirmation; never treat an older unfiltered response as sector-filtered results.
-2. Read the best candidate with `--detail overview`.
+   Use short keywords. Inspect `searchMatch` fields and `search.has_more`; truncated results are not exhaustive. On zero matches, broaden the sector or wording. Current Page updates are immediately searchable without manual index or tag maintenance.
+2. Read the best candidate with `--detail overview` and verify its specific category; a broad sector match does not establish a narrower classification.
 3. Expand only the resource needed for the task.
 4. Create only when no existing company matches.
 
