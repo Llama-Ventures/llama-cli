@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-02
+
 ### Added
 
 - Filter Deal discovery with `llama deal search --sector <text>` or MCP
