@@ -68,6 +68,15 @@ llama deal search "humanoid" --sector "robotics" --state active
 ```
 
 `--sector` searches sector and subsector and can be used without a query.
+`--status` matches the current pipeline status exactly (any of a comma list)
+and also works alone; with Core API 5.42.0+ it enumerates, for example, every
+invested Deal in one bounded query:
+
+```bash
+llama deal search --status Invested --limit 200
+```
+
+Results carry `investmentDate` and `markedInvestedAt` for ordering.
 MCP `search_deals` accepts the same optional `q`, `sector`, `state` and `limit`.
 If Core does not confirm the sector filter in its response, the client reports
 an unsupported-server error instead of returning an unfiltered pipeline.

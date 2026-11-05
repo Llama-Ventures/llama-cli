@@ -71,6 +71,15 @@ llama deal search "humanoid" --sector "robotics" --state active
 Page 数据，更新和清空立即生效，无需另外维护索引或标签。
 
 
+`--status` 按当前 pipeline 状态精确匹配（可用逗号给多个），也可以单独使用。
+Core API 5.42.0 及以上版本可以一次列出所有已投 Deal：
+
+```bash
+llama deal search --status Invested --limit 200
+```
+
+结果里带 `investmentDate` 和 `markedInvestedAt`，可以按投资时间排序。
+
 ### 按需读取 Information
 
 Core API 5.42.0 及以上版本可以只读需要的 Information，不必用 `--detail memory`

@@ -17,6 +17,11 @@ this project adheres to [Semantic Versioning](https://semver.org).
   values for id reads and snippets for text reads, omits values over 8,000
   characters in text/type reads, and echoes the applied filter; responses from
   an older Core that ignored the filter are rejected.
+- Filter Deal search by pipeline status with `llama deal search --status
+  Invested[,Diligence]` or MCP `search_deals.status`, alone or combined with a
+  query, sector, state and limit, so "every invested Deal" is one bounded query
+  instead of a guess. Core API 5.42.0+ echoes the applied statuses; an older
+  Core is rejected.
 
 ## [2.6.0] - 2026-11-02
 

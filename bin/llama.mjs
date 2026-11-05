@@ -56,7 +56,7 @@ const { version: PKG_VERSION } = requireFromHere("../package.json");
 const HELP_ROOT = `Llama Command CLI 2 — small authenticated tools for agents.
 
 Deal has exactly four actions:
-  llama deal search [query] [--sector <text>] [--state active|archived|trashed] [--limit 10]
+  llama deal search [query] [--sector <text>] [--status <status>] [--state active|archived|trashed] [--limit 10]
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
@@ -89,7 +89,7 @@ Run \`llama help deal\` for the mutation contract.`;
 const HELP_DEAL = `Llama Command CLI 2 — Deal contract
 
 Exactly four actions:
-  llama deal search [query] [--sector <text>] [--state active|archived|trashed] [--limit 10]
+  llama deal search [query] [--sector <text>] [--status <status>] [--state active|archived|trashed] [--limit 10]
   llama deal read <dealId> [--detail overview|memory|files|conversation|history|all]
   llama deal create --json <file|->
   llama deal write --json <file|->
@@ -101,6 +101,10 @@ Combine --sector with a query/state/limit, or search a sector without a query:
   llama deal search "humanoid" --sector "robotics"
 Metadata search and --sector require Core API 5.41.0 or newer. A sector filter
 must be confirmed by Core; old unfiltered responses are rejected.
+--status matches the current pipeline status exactly (any of a comma list) and
+works alone; it requires Core API 5.42.0+. To list every invested Deal:
+  llama deal search --status Invested --limit 200
+then order by investmentDate / markedInvestedAt.
 Use short keywords. searchMatch lists matched fields; search.has_more means
 results are truncated. On zero matches, try broader or alternative wording.
 Read candidate Deals to verify categories and substantive claims.
@@ -760,7 +764,7 @@ async function main() {
   }
 
   if (area === "deal" && action === "search") {
-    const { flags, positional } = parseFlags(rest, ["state", "limit", "sector"]);
+    const { flags, positional } = parseFlags(rest, ["state", "limit", "sector", "status"]);
     // @core-api-operation GET /api/occam/deals
     const result = await request("GET", buildDealSearchPath(positional.join(" ").trim(), flags));
     print(verifyDealSearchResult(result, flags));

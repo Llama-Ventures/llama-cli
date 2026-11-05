@@ -236,3 +236,15 @@ test("never accepts an unfiltered Information read from an older Core", () => {
   const current = { information: [], informationFilter: { q: "ARR", matched: 0, returned: 0 } };
   assert.equal(verifyInformationReadResult(current, filter), current);
 });
+
+test("filters search by pipeline status and requires Core to confirm it", () => {
+  const url = new URL(buildDealSearchPath("", { status: "Invested, Diligence", limit: 200 }), "http://localhost");
+  assert.equal(url.searchParams.get("status"), "Invested,Diligence");
+  assert.equal(url.searchParams.get("limit"), "200");
+  assert.throws(() => buildDealSearchPath("", { status: true }), /--status requires/);
+  assert.throws(() => buildDealSearchPath("", { status: " , " }), /--status requires/);
+  const old = { deals: [{ companyName: "Unfiltered Example" }], search: { filters: { sector: null } } };
+  assert.throws(() => verifyDealSearchResult(old, { status: "Invested" }), /did not confirm the requested status filter/);
+  const current = { deals: [], search: { filters: { status: ["Invested"] } } };
+  assert.equal(verifyDealSearchResult(current, { status: ["Invested"] }), current);
+});

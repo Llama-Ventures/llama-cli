@@ -57,6 +57,8 @@ test("MCP publishes exactly four Deal tools", async () => {
   assert.deepEqual(dealTools, ["search_deals", "read_deal", "create_deal", "write_deal"]);
   const search = tools.find((tool) => tool.name === "search_deals");
   assert.equal(search.inputSchema.properties.sector.maxLength, 200);
+  assert.equal(search.inputSchema.properties.status.maxItems, 10);
+  assert.match(search.description, /status filters by exact pipeline status/);
   assert.match(search.description, /description, sector\/subsector or founder/);
   const read = tools.find((tool) => tool.name === "read_deal");
   assert.equal(read.inputSchema.properties.informationIds.maxItems, 50);

@@ -70,11 +70,16 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
     const url = new URL(req.url, "http://localhost");
     const sector = url.searchParams.get("sector");
     const informationQ = url.searchParams.get("information_q");
+    const status = url.searchParams.get("status");
     res.end(JSON.stringify({
       workflow_guidance: guidance, ok: true, request: { method: req.method, url: req.url, body },
       ...(informationQ && informationQ !== "unsupported" ? {
         information: [{ id: "record", match: { snippets: ["…ARR is $1.2M…"] } }],
         informationFilter: { q: informationQ, matched: 1, returned: 1, valueInlineMaxChars: 8000 },
+      } : {}),
+      ...(status && status !== "unsupported" ? {
+        search: { filters: { status: status.split(",") }, has_more: false, returned: 1 },
+        deals: [{ id: "invested", pipelineStatus: "Invested", investmentDate: "2026-10-09" }],
       } : {}),
       ...(sector && sector !== "unsupported" ? {
         search: { filters: { sector }, has_more: true, returned: 1, guidance: "Refine before claiming an exhaustive list." },
@@ -105,6 +110,12 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   const oldServer = await runCli(baseUrl, ["deal", "search", "--sector", "unsupported"]);
   assert.notEqual(oldServer.code, 0);
   assert.match(oldServer.stderr, /Core did not confirm/);
+  const invested = await runCli(baseUrl, ["deal", "search", "--status", "Invested", "--limit", "200"]);
+  assert.equal(invested.code, 0, invested.stderr);
+  assert.equal(new URL(JSON.parse(invested.stdout).request.url, baseUrl).searchParams.get("status"), "Invested");
+  const oldStatusServer = await runCli(baseUrl, ["deal", "search", "--status", "unsupported"]);
+  assert.notEqual(oldStatusServer.code, 0);
+  assert.match(oldStatusServer.stderr, /did not confirm the requested status filter/);
   const targeted = await runCli(baseUrl, ["deal", "read", "deal-1", "--information-q", "ARR"]);
   assert.equal(targeted.code, 0, targeted.stderr);
   const targetedBody = JSON.parse(targeted.stdout);
