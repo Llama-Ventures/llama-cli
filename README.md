@@ -80,6 +80,27 @@ wording, then read candidate Deals to verify specific categories and claims.
 Search reads current Page data directly, so updates and clears are reflected
 immediately without a separate indexing job or manual tag maintenance.
 
+
+### Read Information selectively
+
+With Core API 5.42.0 or newer, read only the Information you need instead of
+`--detail memory` (which can return megabytes on a large Deal):
+
+```bash
+llama deal read <dealId> --information-q "ARR"
+llama deal read <dealId> --information-type founder_claim,team
+llama deal read <dealId> --information-id <recordId>,<recordId>
+```
+
+`--information-q` matches literal text in a record's type, subject, labels and
+value and returns `match.snippets` around each hit. In text and type reads, a
+value over 8,000 characters comes back as `{ omitted, chars }`; read that record
+with `--information-id` for its full value. Filters combine with AND, return at
+most 50 records, and `informationFilter` echoes what Core applied
+(`matched > returned` means narrow the filter). MCP `read_deal` accepts the same
+filters as `informationIds`, `informationTypes` and `informationQuery`. If Core
+does not confirm the filter, the client reports an unsupported-server error
+instead of returning unfiltered memory.
 ### Create
 
 ```json

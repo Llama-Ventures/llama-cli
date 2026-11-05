@@ -70,6 +70,25 @@ llama deal search "humanoid" --sector "robotics" --state active
 更宽的行业或其他措辞，再读取候选 Deal 核实具体分类和结论。搜索直接读取当前
 Page 数据，更新和清空立即生效，无需另外维护索引或标签。
 
+
+### 按需读取 Information
+
+Core API 5.42.0 及以上版本可以只读需要的 Information，不必用 `--detail memory`
+（大 Deal 可能一次返回数 MB）：
+
+```bash
+llama deal read <dealId> --information-q "ARR"
+llama deal read <dealId> --information-type founder_claim,team
+llama deal read <dealId> --information-id <recordId>,<recordId>
+```
+
+`--information-q` 在记录的 type、subject、labels 和 value 中做字面匹配，并在
+`match.snippets` 里返回命中处的上下文。按文本或类型读取时，超过 8,000 字符的
+value 会以 `{ omitted, chars }` 返回，需要全文时用 `--information-id` 读取该记录。
+多个条件按 AND 组合，最多返回 50 条；`informationFilter` 回显 Core 实际应用的
+条件（`matched > returned` 表示需要再收窄）。MCP `read_deal` 用
+`informationIds`、`informationTypes`、`informationQuery` 接受同样的条件。如果
+Core 没有确认过滤条件，客户端会报"服务端不支持"，而不是返回未过滤的全部内容。
 ### 创建 Deal
 
 ```json

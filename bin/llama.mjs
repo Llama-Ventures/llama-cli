@@ -36,7 +36,9 @@ import {
   DEAL_ACTIONS,
   buildDealReadPath,
   buildDealSearchPath,
+  informationReadFilter,
   verifyDealSearchResult,
+  verifyInformationReadResult,
   compactDealWriteResult,
   prepareDealCommand,
   readJsonInput,
@@ -102,6 +104,15 @@ must be confirmed by Core; old unfiltered responses are rejected.
 Use short keywords. searchMatch lists matched fields; search.has_more means
 results are truncated. On zero matches, try broader or alternative wording.
 Read candidate Deals to verify categories and substantive claims.
+
+Read Information selectively (Core API 5.42.0+), instead of --detail memory:
+  llama deal read <dealId> --information-q "ARR"            literal text; returns snippets
+  llama deal read <dealId> --information-type founder_claim exact types, comma-separated
+  llama deal read <dealId> --information-id <id>[,<id>]     full values, up to 50
+Filters combine with AND. Values over 8,000 characters in a text or type read
+come back as { omitted, chars }; read that record by id. informationFilter
+echoes what Core applied; matched > returned means narrow the filter. An older
+Core that ignores the filter is rejected rather than shown as filtered.
 
 Read original source content:
   llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
@@ -757,16 +768,19 @@ async function main() {
   }
   if (area === "deal" && action === "read") {
     const dealId = rest[0];
-    const { flags } = parseFlags(rest.slice(1), ["detail", "artifact", "version", "format", "offset", "limit", "sha256", "output"]);
+    const { flags } = parseFlags(rest.slice(1), ["detail", "artifact", "version", "format", "offset", "limit", "sha256", "output", "information-id", "information-type", "information-q"]);
+    const filter = informationReadFilter({ ids: flags["information-id"], types: flags["information-type"], q: flags["information-q"] });
     if (flags.artifact !== undefined) {
       if (flags.detail !== undefined) throw new Error("Use --artifact or --detail, not both");
+      if (filter) throw new Error("Use --artifact or --information-*, not both");
       // @core-api-operation GET /api/occam/deals/{dealId}/artifacts/{artifactId}
       const result = await request("GET", buildArtifactReadPath(dealId, flags.artifact, flags));
       print(await saveContentSource(result, flags.output));
     } else {
       if (["version", "format", "offset", "limit", "sha256", "output"].some(key => flags[key] !== undefined)) throw new Error("Content options require --artifact");
       // @core-api-operation GET /api/occam/deals/{dealId}
-      print(await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview")));
+      const result = await request("GET", buildDealReadPath(dealId, flags.detail === true ? "overview" : flags.detail || "overview", filter));
+      print(verifyInformationReadResult(result, filter));
     }
     return;
   }

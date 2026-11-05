@@ -58,6 +58,11 @@ test("MCP publishes exactly four Deal tools", async () => {
   const search = tools.find((tool) => tool.name === "search_deals");
   assert.equal(search.inputSchema.properties.sector.maxLength, 200);
   assert.match(search.description, /description, sector\/subsector or founder/);
+  const read = tools.find((tool) => tool.name === "read_deal");
+  assert.equal(read.inputSchema.properties.informationIds.maxItems, 50);
+  assert.equal(read.inputSchema.properties.informationQuery.maxLength, 200);
+  assert.ok(read.inputSchema.properties.informationTypes);
+  assert.match(read.description, /Prefer these over detail=memory/);
 });
 
 test("MCP publishes Deal Memory as a separate two-tool domain", async () => {
@@ -139,9 +144,14 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     for await (const chunk of req) raw += chunk;
     res.setHeader("content-type", "application/json");
     const sector = new URL(req.url, "http://localhost").searchParams.get("sector");
+    const informationQ = new URL(req.url, "http://localhost").searchParams.get("information_q");
     res.end(JSON.stringify({
       ok: true,
       workflow_guidance: guidance,
+      ...(informationQ && informationQ !== "unsupported" ? {
+        information: [{ id: "record", match: { snippets: ["…ARR…"] } }],
+        informationFilter: { q: informationQ, matched: 1, returned: 1 },
+      } : {}),
       ...(sector && sector !== "unsupported" ? {
         search: { filters: { sector }, has_more: true },
         deals: [{ id: dealId, searchMatch: { queryFields: [], sectorFields: ["sector"] } }],
@@ -170,6 +180,7 @@ test("MCP preserves server guidance for all four Deal actions, including compact
     ["search_deals", { q: "Example" }],
     ["search_deals", { sector: "robotics", state: "archived", limit: 3 }],
     ["read_deal", { dealId }],
+    ["read_deal", { dealId, informationQuery: "ARR" }],
     ["create_deal", { companyName: "Example", origin: { kind: "agent" } }],
     ["write_deal", { command: { operation: "page.patch", dealId, patch: { website: "https://example.test" }, origin: { kind: "agent" } } }],
   ]) {
@@ -186,6 +197,9 @@ test("MCP preserves server guidance for all four Deal actions, including compact
       assert.equal(body.result.verify.dealId, dealId);
     }
   }
+  const oldInformation = await client.callTool({ name: "read_deal", arguments: { dealId, informationQuery: "unsupported" } });
+  assert.equal(oldInformation.isError, true);
+  assert.match(oldInformation.content.find(block => block.type === "text").text, /Core did not confirm the requested Information filter/);
   const oldServer = await client.callTool({ name: "search_deals", arguments: { sector: "unsupported" } });
   assert.equal(oldServer.isError, true);
   assert.match(oldServer.content.find(block => block.type === "text").text, /Core did not confirm/);

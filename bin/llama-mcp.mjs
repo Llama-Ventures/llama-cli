@@ -24,6 +24,8 @@ import {
   buildDealReadPath,
   buildDealSearchPath,
   verifyDealSearchResult,
+  informationReadFilter,
+  verifyInformationReadResult,
   compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
@@ -161,7 +163,7 @@ server.registerTool(
 server.registerTool(
   "read_deal",
   {
-    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Use artifactId to read original source text with page/paragraph anchors. Continue with nextOffset and source.sha256. Page field semantics come from agent_bootstrap, not every Deal read.",
+    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Read Information selectively with informationIds (full values, up to 50), informationTypes, and/or informationQuery (literal text; returns match.snippets, and values over 8,000 characters as { omitted, chars }: then read that id). Prefer these over detail=memory, which returns up to ~2 MB. Use artifactId to read original source text with page/paragraph anchors. Continue with nextOffset and source.sha256. Page field semantics come from agent_bootstrap, not every Deal read.",
     inputSchema: {
       dealId: z.string().min(1),
       detail: z.enum(["overview", "memory", "files", "conversation", "history", "all"]).optional(),
@@ -170,17 +172,23 @@ server.registerTool(
       offset: z.number().int().min(0).optional(),
       limit: z.number().int().min(1).max(50000).optional(),
       sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      informationIds: z.array(z.string().uuid()).min(1).max(50).optional(),
+      informationTypes: z.array(z.string().min(1).max(120)).min(1).max(20).optional(),
+      informationQuery: z.string().min(2).max(200).optional(),
     },
   },
-  async ({ dealId, detail, artifactId, ...options }) => {
+  async ({ dealId, detail, artifactId, informationIds, informationTypes, informationQuery, ...options }) => {
+    const filter = informationReadFilter({ ids: informationIds, types: informationTypes, q: informationQuery });
     if (artifactId) {
       if (detail) throw new Error("Use artifactId or detail, not both");
+      if (filter) throw new Error("Use artifactId or information filters, not both");
       // @core-api-operation GET /api/occam/deals/{dealId}/artifacts/{artifactId}
       return callApi("GET", buildArtifactReadPath(dealId, artifactId, options));
     }
     if (Object.values(options).some(value => value !== undefined)) throw new Error("Content options require artifactId");
     // @core-api-operation GET /api/occam/deals/{dealId}
-    return callApi("GET", buildDealReadPath(dealId, detail || "overview"));
+    return callApi("GET", buildDealReadPath(dealId, detail || "overview", filter), undefined,
+      (result) => verifyInformationReadResult(result, filter));
   },
 );
 
