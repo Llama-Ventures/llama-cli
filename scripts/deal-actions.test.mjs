@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 
 import {
   buildDealReadPath,
@@ -223,7 +224,7 @@ test("builds targeted Information reads and validates their inputs", () => {
   assert.throws(() => informationReadFilter({ ids: "not-a-uuid" }), /UUIDs/);
   assert.throws(() => informationReadFilter({ q: "a" }), /2-200/);
   assert.throws(() => informationReadFilter({ q: true }), /requires text/);
-  assert.throws(() => informationReadFilter({ ids: Array.from({ length: 51 }, () => crypto.randomUUID()) }), /at most 50/);
+  assert.throws(() => informationReadFilter({ ids: Array.from({ length: 51 }, () => randomUUID()) }), /at most 50/);
 });
 
 test("never accepts an unfiltered Information read from an older Core", () => {
