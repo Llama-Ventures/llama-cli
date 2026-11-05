@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 
 import {
   buildDealReadPath,
   buildDealSearchPath,
   verifyDealSearchResult,
+  informationReadFilter,
+  verifyInformationReadResult,
   compactDealWriteResult,
   ensureIdempotencyKey,
   prepareDealCommand,
@@ -205,4 +208,43 @@ test("compacts page.patch success into a revision receipt plus targeted read-bac
       },
     },
   });
+});
+
+test("builds targeted Information reads and validates their inputs", () => {
+  const id = "11111111-2222-4333-8444-555555555555";
+  const filter = informationReadFilter({ ids: `${id.toUpperCase()},${id}`, types: "founder_claim, team", q: " ARR " });
+  assert.deepEqual(filter, { ids: [id], types: ["founder_claim", "team"], q: "ARR" });
+  const url = new URL(buildDealReadPath("deal-1", "overview", filter), "http://localhost");
+  assert.equal(url.searchParams.get("information_id"), id);
+  assert.equal(url.searchParams.get("information_type"), "founder_claim,team");
+  assert.equal(url.searchParams.get("information_q"), "ARR");
+  assert.equal(url.searchParams.get("expand"), null);
+  assert.equal(informationReadFilter({}), undefined);
+  assert.equal(buildDealReadPath("deal-1", "memory"), "/api/occam/deals/deal-1?expand=information");
+  assert.throws(() => informationReadFilter({ ids: "not-a-uuid" }), /UUIDs/);
+  assert.throws(() => informationReadFilter({ q: "a" }), /2-200/);
+  assert.throws(() => informationReadFilter({ q: true }), /requires text/);
+  assert.throws(() => informationReadFilter({ ids: Array.from({ length: 51 }, () => randomUUID()) }), /at most 50/);
+});
+
+test("never accepts an unfiltered Information read from an older Core", () => {
+  const filter = { q: "ARR" };
+  const old = { page: {}, information: [{ id: "x" }] };
+  assert.equal(verifyInformationReadResult(old, undefined), old);
+  assert.throws(() => verifyInformationReadResult(old, filter), /Core did not confirm/);
+  assert.throws(() => verifyInformationReadResult({ informationFilter: { q: "other" } }, filter), /Core did not confirm/);
+  const current = { information: [], informationFilter: { q: "ARR", matched: 0, returned: 0 } };
+  assert.equal(verifyInformationReadResult(current, filter), current);
+});
+
+test("filters search by pipeline status and requires Core to confirm it", () => {
+  const url = new URL(buildDealSearchPath("", { status: "Invested, Diligence", limit: 200 }), "http://localhost");
+  assert.equal(url.searchParams.get("status"), "Invested,Diligence");
+  assert.equal(url.searchParams.get("limit"), "200");
+  assert.throws(() => buildDealSearchPath("", { status: true }), /--status requires/);
+  assert.throws(() => buildDealSearchPath("", { status: " , " }), /--status requires/);
+  const old = { deals: [{ companyName: "Unfiltered Example" }], search: { filters: { sector: null } } };
+  assert.throws(() => verifyDealSearchResult(old, { status: "Invested" }), /did not confirm the requested status filter/);
+  const current = { deals: [], search: { filters: { status: ["Invested"] } } };
+  assert.equal(verifyDealSearchResult(current, { status: ["Invested"] }), current);
 });

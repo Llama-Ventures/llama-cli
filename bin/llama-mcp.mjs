@@ -24,6 +24,8 @@ import {
   buildDealReadPath,
   buildDealSearchPath,
   verifyDealSearchResult,
+  informationReadFilter,
+  verifyInformationReadResult,
   compactDealWriteResult,
   prepareDealCommand,
 } from "../lib/deal-actions.mjs";
@@ -143,25 +145,26 @@ const writeDealCommandSchema = z.discriminatedUnion("operation", [
 server.registerTool(
   "search_deals",
   {
-    description: "Search current Deal metadata by company name/key, description, sector/subsector or founder name in either stored language. Use short keywords; matching is a case-insensitive literal substring, not semantic search. Combine q with sector/state/limit, or use sector alone for category discovery. Sector filters before limit and requires a supporting Core server. Exact names rank first. Inspect searchMatch fields and search.has_more; truncated results are not exhaustive. On zero matches, try broader or alternative wording before concluding no Deal exists. Read candidates to verify specific categories and claims. Always search before creating a company.",
+    description: "Search current Deal metadata by company name/key, description, sector/subsector or founder name in either stored language. Use short keywords; matching is a case-insensitive literal substring, not semantic search. Combine q with sector/status/state/limit, or use sector alone for category discovery. status filters by exact pipeline status (e.g. [\"Invested\"]); to list every invested Deal use status [\"Invested\"] with limit 200 and order by investmentDate/markedInvestedAt, instead of guessing from names. Sector filters before limit and requires a supporting Core server. Exact names rank first. Inspect searchMatch fields and search.has_more; truncated results are not exhaustive. On zero matches, try broader or alternative wording before concluding no Deal exists. Read candidates to verify specific categories and claims. Always search before creating a company.",
     inputSchema: {
       q: z.string().optional(),
       sector: z.string().trim().min(1).max(200).optional(),
+      status: z.array(z.string().min(1).max(60)).min(1).max(10).optional(),
       state: z.enum(["active", "archived", "trashed"]).optional(),
       limit: z.number().int().min(1).max(2000).optional(),
     },
   },
   // @core-api-operation GET /api/occam/deals
-  async ({ q, sector, state, limit } = {}) => callApi(
-    "GET", buildDealSearchPath(q, { sector, state, limit }), undefined,
-    (result) => verifyDealSearchResult(result, { sector }),
+  async ({ q, sector, status, state, limit } = {}) => callApi(
+    "GET", buildDealSearchPath(q, { sector, status, state, limit }), undefined,
+    (result) => verifyDealSearchResult(result, { sector, status }),
   ),
 );
 
 server.registerTool(
   "read_deal",
   {
-    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Use artifactId to read original source text with page/paragraph anchors. Continue with nextOffset and source.sha256. Page field semantics come from agent_bootstrap, not every Deal read.",
+    description: "Read one Deal. Live Page is current human-visible state; Information is memory and never updates Page automatically. Read Information selectively with informationIds (full values, up to 50), informationTypes, and/or informationQuery (literal text; returns match.snippets, and values over 8,000 characters as { omitted, chars }: then read that id). Prefer these over detail=memory, which returns up to ~2 MB. Use artifactId to read original source text with page/paragraph anchors. Continue with nextOffset and source.sha256. Page field semantics come from agent_bootstrap, not every Deal read.",
     inputSchema: {
       dealId: z.string().min(1),
       detail: z.enum(["overview", "memory", "files", "conversation", "history", "all"]).optional(),
@@ -170,17 +173,23 @@ server.registerTool(
       offset: z.number().int().min(0).optional(),
       limit: z.number().int().min(1).max(50000).optional(),
       sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      informationIds: z.array(z.string().uuid()).min(1).max(50).optional(),
+      informationTypes: z.array(z.string().min(1).max(120)).min(1).max(20).optional(),
+      informationQuery: z.string().min(2).max(200).optional(),
     },
   },
-  async ({ dealId, detail, artifactId, ...options }) => {
+  async ({ dealId, detail, artifactId, informationIds, informationTypes, informationQuery, ...options }) => {
+    const filter = informationReadFilter({ ids: informationIds, types: informationTypes, q: informationQuery });
     if (artifactId) {
       if (detail) throw new Error("Use artifactId or detail, not both");
+      if (filter) throw new Error("Use artifactId or information filters, not both");
       // @core-api-operation GET /api/occam/deals/{dealId}/artifacts/{artifactId}
       return callApi("GET", buildArtifactReadPath(dealId, artifactId, options));
     }
     if (Object.values(options).some(value => value !== undefined)) throw new Error("Content options require artifactId");
     // @core-api-operation GET /api/occam/deals/{dealId}
-    return callApi("GET", buildDealReadPath(dealId, detail || "overview"));
+    return callApi("GET", buildDealReadPath(dealId, detail || "overview", filter), undefined,
+      (result) => verifyInformationReadResult(result, filter));
   },
 );
 
