@@ -277,7 +277,7 @@ server.registerTool(
 server.registerTool(
   "agent_bootstrap",
   {
-    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain (Investment Framework V3 + Llama Command operating skill), a compact Live Deal Page schema index, runtime contract, and visible Llama OS skills. Read exact Page fields separately with get_live_deal_page_schema.",
+    description: "Mandatory before Llama work: fetch the authenticated two-part private Brain (Investment Framework V3 + Llama Command operating skill), a compact Live Deal Page schema index, runtime contract including Wiki publishing guidance, and visible Llama OS skills. Read exact Page fields separately with get_live_deal_page_schema.",
     inputSchema: { limit: z.number().int().min(1).max(100).optional() },
   },
   async ({ limit } = {}) => {
@@ -419,17 +419,18 @@ server.registerTool(
 server.registerTool(
   "wiki_save",
   {
-    description: "Create or update cross-Deal institutional knowledge, not Deal data.",
+    description: "Publish institutional knowledge when authorized. Follow agent_bootstrap contract.wiki_publishing. New pages default to complete self-contained HTML with embedded rendering assets and full report content/interactions; set content_type=html. Honor explicit Markdown requests. Read the same slug/lang before edits and preserve its format unless conversion is authorized. Verify the receipt, canonical page and interactions before reporting completion.",
     inputSchema: {
       slug: z.string().min(1),
       title: z.string().min(1),
-      content: z.string(),
+      content: z.string().describe("Complete page source. For HTML, include the full document and embedded rendering dependencies."),
       sources: z.array(z.string()).min(1),
-      content_type: z.enum(["markdown", "html"]).optional(),
+      content_type: z.enum(["markdown", "html"]).optional().describe("Set html for HTML publications. Use markdown for an explicit Markdown request or an existing Markdown article."),
+      lang: z.enum(["en", "zh"]).optional().describe("Article language; Core defaults to en when omitted."),
     },
   },
-  async ({ slug, title, content, sources, content_type }) =>
-    callApi("POST", "/api/wiki/save", { slug, title, content, sources, content_type }),
+  async ({ slug, title, content, sources, content_type, lang }) =>
+    callApi("POST", "/api/wiki/save", { slug, title, content, sources, content_type, lang }),
 );
 
 server.registerTool(

@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-11-10
+
+### Added
+
+- Add `llama help wiki`, save usage guidance, and MCP publishing descriptions
+  that lead agents to the current authenticated Wiki publishing contract and
+  complete self-contained HTML. Existing Markdown save behavior is preserved.
+- Allow MCP `wiki_save` to send `lang`, matching CLI and Core support for
+  language-specific publications and updates.
+
 ## [2.7.0] - 2026-11-05
 
 ### Added
