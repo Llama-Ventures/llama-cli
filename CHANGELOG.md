@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-11-10
+
 ### Added
 
 - Add `llama help wiki`, save usage guidance, and MCP publishing descriptions
