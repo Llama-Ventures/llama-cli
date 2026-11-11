@@ -84,7 +84,34 @@ Separate preserved domains:
   llama admin auth-events|deal-events|agent-events|feedback
   llama pitch start|say|upload|status|finalize|end
 
-Run \`llama help deal\` for the mutation contract.`;
+Run \`llama help deal\` for the mutation contract and \`llama help wiki\` for publishing.`;
+
+const HELP_WIKI = `Llama Wiki — publish complete institutional knowledge pages
+
+  llama agent bootstrap
+  llama wiki search <query>
+  llama wiki read <slug> [--lang en|zh]
+  llama wiki save <slug> --title "..." --file page.html --content-type html --lang en --sources "url1;url2"
+  llama wiki delete <slug> [--lang en|zh]
+  llama wiki restore <slug> [--lang en|zh]
+
+Follow the current authenticated contract.wiki_publishing guidance. New
+publications default to complete self-contained HTML. Preserve the report's
+full content, charts, interactions and existing language/version controls.
+Embed CSS, JavaScript, chart data and rendering assets in the HTML.
+
+--file reads the full file; .html/.htm selects HTML automatically. When sending
+HTML through --content, explicitly set --content-type html. Use --lang zh for
+Chinese content. Sources are required; separate them with semicolons or pipes.
+
+Honor an explicit Markdown request with --content-type markdown. Read an
+existing slug and language before editing and preserve its content_type.
+Format conversion or replacement needs authorization for that change.
+
+Read the receipt's canonical_url, content_type, langs_available, verified and
+warnings, then read back the article and check the rendered page and its
+interactions before reporting completion. Report any checks still pending.
+Wiki publication requires the user's request or authorization.`;
 
 const HELP_DEAL = `Llama Command CLI 2 — Deal contract
 
@@ -283,6 +310,7 @@ function usage(area) {
     area === "memory" ? HELP_MEMORY :
     area === "page-schema" ? HELP_PAGE_SCHEMA :
     area === "feedback" ? HELP_FEEDBACK :
+    area === "wiki" ? HELP_WIKI :
     HELP_ROOT,
   );
 }
@@ -555,7 +583,7 @@ async function handleWiki(action, rest) {
   }
   if (action === "save") {
     if (!slug || typeof flags.title !== "string" || typeof flags.sources !== "string") {
-      throw new Error('Usage: llama wiki save <slug> --title "..." --content "..."|--file <path> --sources "url1;url2"');
+      throw new Error('Usage: llama wiki save <slug> --title "..." --file page.html --content-type html --sources "url1;url2". See llama help wiki for HTML and Markdown publishing.');
     }
     if (flags.content && flags.file) throw new Error("Use either --content or --file, not both.");
     const content = flags.file ? await readFile(String(flags.file), "utf8") : flags.content;

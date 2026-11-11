@@ -254,6 +254,17 @@ request, and verify the exact Artifact version and hash through Command.
   separate domains. Deal Memory is also separate. None expands the four-action
   Occam Deal space.
 
+## Wiki publishing
+
+Read `contract.wiki_publishing` from authenticated bootstrap and use
+`llama help wiki` for the save commands. New authorized publications default
+to complete self-contained HTML. Preserve full report content, charts,
+interactions and existing language/version markers, with rendering assets
+embedded. Read the exact slug and language before edits and preserve its
+format. Honor explicit Markdown requests. For MCP, set `content_type: html`
+and the intended `lang`. Verify the save receipt and canonical page before
+reporting completion.
+
 ## Report UX friction
 
 When a user, agent or both encounter a concrete obstacle (including a task that

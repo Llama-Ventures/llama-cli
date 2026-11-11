@@ -45,6 +45,7 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
         briefing: "PRIVATE LIVE CONTRACT\nInformation never updates Page automatically.\nallFieldsAgentWritable=true",
         brain: { version: "test-brain" },
         live_deal_page: { version: "test-page-contract" },
+        contract: { wiki_publishing: { default_content_type: "html", rules: [guidance] } },
       }));
       return;
     }
@@ -143,6 +144,9 @@ test("real CLI exposes exactly four Deal actions against the Core boundary", asy
   assert.equal(structuredBootstrap.briefing, undefined);
   assert.equal(structuredBootstrap.brain.version, "test-brain");
   assert.equal(structuredBootstrap.live_deal_page.version, "test-page-contract");
+  assert.deepEqual(structuredBootstrap.contract.wiki_publishing, {
+    default_content_type: "html", rules: [guidance],
+  });
 
   const read = await runCli(baseUrl, ["deal", "read", "deal-1", "--detail", "memory"]);
   assert.equal(read.code, 0, read.stderr);
