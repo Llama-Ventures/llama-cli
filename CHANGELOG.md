@@ -6,6 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-12
+
+### Added
+
+- Export the API-backed MCP tool catalog from `lib/mcp-api-tools.mjs`.
+  `registerApiTools(server, { request, formatError, version, only })` registers
+  the Deal, Deal Memory, bootstrap, Page schema, skills, preference and Wiki
+  tools against an injected request function, so a remote MCP host can serve
+  the same catalog as the stdio server. The module also exports
+  `writeDealCommandSchema`. Tools that need local credentials or files stay in
+  `llama-mcp`. No tool name, schema or behavior changed for stdio users.
+
+### Changed
+
+- `write_deal` and `wiki_save` descriptions each name the other as the
+  alternative destination: a file or HTML about one company is a Deal
+  Artifact; knowledge not tied to one company belongs in the Wiki.
+
 ## [2.7.1] - 2026-11-10
 
 ### Added
