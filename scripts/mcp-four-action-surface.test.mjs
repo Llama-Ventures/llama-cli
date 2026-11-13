@@ -206,3 +206,13 @@ test("MCP preserves server guidance for all four Deal actions, including compact
   assert.equal(oldServer.isError, true);
   assert.match(oldServer.content.find(block => block.type === "text").text, /Core did not confirm/);
 });
+
+test("write_deal and wiki_save each name the other as the alternative destination", async () => {
+  const tools = await listMcpTools();
+  const writeDeal = tools.find((tool) => tool.name === "write_deal");
+  const wikiSave = tools.find((tool) => tool.name === "wiki_save");
+  assert.match(writeDeal.description, /about one company belongs here as artifact\.put/);
+  assert.match(writeDeal.description, /not tied to one company belongs in wiki_save/);
+  assert.match(wikiSave.description, /not tied to one company/);
+  assert.match(wikiSave.description, /Deal Artifact \(write_deal artifact\.put\)/);
+});
