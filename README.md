@@ -13,6 +13,11 @@ sign-in. Logout, administrator revocation, or account deactivation can end acces
 sooner. On systems without a credential store, credentials are stored in a local
 file readable only by your user.
 
+The sign-in stays open for 15 minutes even if the command stops (a closed
+terminal, or an agent tool that times out): run `llama auth login` again and it
+picks up the same sign-in, or the approval you already gave. Set
+`LLAMA_NO_BROWSER=1` to print the link instead of opening a browser.
+
 ## Install or upgrade
 
 ```bash

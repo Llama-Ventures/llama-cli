@@ -28,8 +28,10 @@ import {
   startExternalSession,
   uploadExternalFile,
 } from "../lib/external.mjs";
-import { LLAMA_CLI_CLIENT_ID, pkceLoopbackFlow, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
-import { deleteBundle, detectBackend, readBundle, writeBundle } from "../lib/oauth-storage.mjs";
+import { fileURLToPath } from "node:url";
+import { LLAMA_CLI_CLIENT_ID, revokeToken as revokeOAuthToken } from "../lib/oauth-flow.mjs";
+import { liveLogin, readPending, runLoginListener, startOrResumeLogin } from "../lib/oauth-background.mjs";
+import { deleteBundle, detectBackend, readBundle } from "../lib/oauth-storage.mjs";
 import { getBuildInfo } from "../lib/build-info.mjs";
 import { getUpdateNudge, maybeNudgeUpdate } from "../lib/version-check.mjs";
 import {
@@ -516,6 +518,7 @@ async function handleAuth(area, action, rest) {
       }
     }
     const oauthBackend = oauth ? await detectBackend() : null;
+    const pendingLogin = readPending();
     print({
       baseUrl: getBaseUrl(),
       activeMethod: oauth?.access_token ? "oauth" : bearer ? "gcloud-bearer" : token ? "llama-token" : "none",
@@ -524,6 +527,9 @@ async function handleAuth(area, action, rest) {
       llamaToken: token ? `${token.slice(0, 8)}...${token.slice(-4)}` : "absent",
       llamaTokenSource: process.env.LLAMA_TOKEN ? "$LLAMA_TOKEN" : readCanonicalToken() ? "~/.llama/token" : null,
       serverCheck,
+      ...(liveLogin(pendingLogin, getBaseUrl())
+        ? { pendingLogin: { waitingForApproval: true, url: pendingLogin.url, expiresAt: new Date(pendingLogin.expires_at).toISOString() } }
+        : {}),
     });
     return true;
   }
@@ -531,18 +537,16 @@ async function handleAuth(area, action, rest) {
     const { flags } = parseFlags(rest, ["scope"]);
     const scope = typeof flags.scope === "string" ? flags.scope : "read write";
     const baseUrl = getBaseUrl();
-    const bundle = await pkceLoopbackFlow({ baseUrl, scope, resource: baseUrl });
-    const stored = await writeBundle({
-      access_token: bundle.access_token,
-      refresh_token: bundle.refresh_token,
-      expires_at: Date.now() + (bundle.expires_in ?? 3600) * 1000,
-      scope: bundle.scope,
-      client_id: bundle.client_id,
-      issuer: bundle.issuer,
-      resource: bundle.resource,
-      created_at: Date.now(),
-    });
-    print({ ok: true, client_id: LLAMA_CLI_CLIENT_ID, storage: stored.backend, scope: bundle.scope });
+    // The listener is a detached helper, so this login survives this command
+    // being closed or killed; see lib/oauth-background.mjs.
+    const result = await startOrResumeLogin({ baseUrl, scope, cliEntry: fileURLToPath(import.meta.url) });
+    print({ ok: true, client_id: LLAMA_CLI_CLIENT_ID, storage: result.storage, scope: result.scope, ...(result.resumed ? { resumed: true } : {}) });
+    return true;
+  }
+  if (area === "auth" && action === "login-listener") {
+    // Internal: the detached helper started by `llama auth login`.
+    const { flags } = parseFlags(rest, ["scope"]);
+    await runLoginListener({ baseUrl: getBaseUrl(), scope: typeof flags.scope === "string" ? flags.scope : "read write" });
     return true;
   }
   if (area === "auth" && action === "logout") {
