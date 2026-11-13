@@ -6,6 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-13
+
+### Changed
+
+- `llama auth login` no longer has to be running at the moment you approve in
+  the browser. The loopback listener is now a detached helper that stays open
+  for 15 minutes, finishes the sign-in when you approve, and stores the
+  credentials. If the command stops first (closed terminal, slow approval, an
+  agent tool that kills long commands), run `llama auth login` again: it picks
+  up the sign-in that is still waiting, or the approval you already gave,
+  instead of leaving the browser on a dead `127.0.0.1` page.
+- `llama auth status` reports a sign-in that is waiting for approval.
+
+### Added
+
+- `LLAMA_NO_BROWSER=1` makes `llama auth login` print the sign-in link instead
+  of opening a browser.
+
 ## [2.8.0] - 2026-11-12
 
 ### Added
