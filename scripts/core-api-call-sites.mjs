@@ -315,7 +315,9 @@ function endpointPath(raw, helpers) {
 }
 
 function isKnownTransportIndirection(file, callee, methodRaw, endpointRaw) {
-  if (file === "bin/llama-mcp.mjs" && callee !== "fetch") {
+  // callApi(method, path) is the generic wrapper every MCP tool goes through.
+  // It is defined in the stdio server and in the shared tool catalog.
+  if ((file === "bin/llama-mcp.mjs" || file === "lib/mcp-api-tools.mjs") && callee !== "fetch") {
     return methodRaw === "method" && endpointRaw === "path";
   }
   if (file === "lib/client.mjs") {
