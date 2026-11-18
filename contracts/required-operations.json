@@ -60,6 +60,10 @@
     },
     {
       "method": "GET",
+      "path": "/api/linked-portal/{dealId}/status"
+    },
+    {
+      "method": "GET",
       "path": "/api/me"
     },
     {
