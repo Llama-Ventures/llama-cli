@@ -30,3 +30,13 @@ test("the tool description names no portal, URL or person (the package is public
   const text = tools.get("get_linked_portal_status").spec.description;
   assert.doesNotMatch(text, /dx|onrender|https?:\/\/|@/i);
 });
+
+test("handoff_deal_to_linked_portal POSTs the user's terms to the Core handoff route", async () => {
+  const { tools, seen } = capture();
+  const tool = tools.get("handoff_deal_to_linked_portal");
+  assert.ok(tool, "tool is registered");
+  await tool.handler({ dealId: DEAL_ID, check_size: 200000, owner_email: "owner@example.test" });
+  assert.deepEqual(seen, [{ method: "POST", path: `/api/linked-portal/${DEAL_ID}/handoff`, body: { check_size: 200000, owner_email: "owner@example.test" } }]);
+  assert.doesNotMatch(tool.spec.description, /dx|onrender|https?:\/\//i);
+  assert.match(tool.spec.description, /ask the user/i);
+});

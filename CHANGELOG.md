@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-18
+
+### Added
+
+- MCP tool `handoff_deal_to_linked_portal`: create a Deal's deal in the partner
+  portal linked to Llama Command (the user supplies the check and owner; the
+  company name comes from the Command Deal). Writes only to the portal; the four
+  Deal tools are unchanged. Requires Core API 5.50.0.
+
 ## [2.10.0] - 2026-11-18
 
 ### Added
