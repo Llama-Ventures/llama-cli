@@ -124,6 +124,10 @@
     },
     {
       "method": "POST",
+      "path": "/api/linked-portal/{dealId}/handoff"
+    },
+    {
+      "method": "POST",
       "path": "/api/oauth/revoke"
     },
     {

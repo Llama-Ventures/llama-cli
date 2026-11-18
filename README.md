@@ -263,6 +263,8 @@ a fifth Deal action.
 `get_linked_portal_status` reads a Deal's status in the partner portal linked
 to Llama Command, when the server has one configured; it is read-only,
 portal-sourced data and not a Deal action.
+`handoff_deal_to_linked_portal` creates the Deal's deal in that portal when the
+user asks (they give the check and owner); it writes only to the portal.
 
 ## Agent bootstrap
 
