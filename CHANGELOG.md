@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-11-18
+
+### Added
+
+- MCP tools `list_linked_portal_files` and `copy_linked_portal_files_to_deal`:
+  list the founder's submitted files in the partner portal linked to Llama
+  Command, and copy the ones the user approves into the Deal as Artifacts
+  (Core stores them in the Deal's Drive folder). Requires Core API 5.51.0.
+
 ## [2.11.0] - 2026-11-18
 
 ### Added
