@@ -260,6 +260,9 @@ MCP tools, `get_deal_memory` and `update_deal_memory`; it does not add a fifth
 Occam Deal tool. `get_live_deal_page_schema` progressively reads the Page
 schema index, exact fields, or one section; it is read-only context rather than
 a fifth Deal action.
+`get_linked_portal_status` reads a Deal's status in the partner portal linked
+to Llama Command, when the server has one configured; it is read-only,
+portal-sourced data and not a Deal action.
 
 ## Agent bootstrap
 

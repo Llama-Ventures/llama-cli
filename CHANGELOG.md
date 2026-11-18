@@ -6,6 +6,14 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-18
+
+### Added
+
+- MCP tool `get_linked_portal_status`: read a Deal's status in the partner portal
+  linked to Llama Command (read-only; Core holds the portal configuration). A
+  separate read domain like Deal Memory; the four Deal tools are unchanged.
+
 ## [2.9.0] - 2026-11-13
 
 ### Changed
