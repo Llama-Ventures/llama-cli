@@ -265,6 +265,9 @@ to Llama Command, when the server has one configured; it is read-only,
 portal-sourced data and not a Deal action.
 `handoff_deal_to_linked_portal` creates the Deal's deal in that portal when the
 user asks (they give the check and owner); it writes only to the portal.
+`list_linked_portal_files` lists the founder's submitted files in that portal,
+and `copy_linked_portal_files_to_deal` copies the ones the user approves into
+the Deal as Artifacts (stored in the Deal's Drive folder).
 
 ## Agent bootstrap
 

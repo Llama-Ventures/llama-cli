@@ -64,6 +64,10 @@
     },
     {
       "method": "GET",
+      "path": "/api/linked-portal/{dealId}/files"
+    },
+    {
+      "method": "GET",
       "path": "/api/me"
     },
     {
@@ -125,6 +129,10 @@
     {
       "method": "POST",
       "path": "/api/linked-portal/{dealId}/handoff"
+    },
+    {
+      "method": "POST",
+      "path": "/api/linked-portal/{dealId}/files/copy"
     },
     {
       "method": "POST",
