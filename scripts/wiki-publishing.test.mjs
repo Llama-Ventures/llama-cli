@@ -82,3 +82,50 @@ test("Wiki CLI and MCP preserve complete HTML, language and explicit Markdown", 
   }
   assert.equal(seen.length, 3);
 });
+
+test("Wiki share CLI reads status, switches public/private, and manages the password", async t => {
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    // Client telemetry is not part of the share contract.
+    if (req.url !== "/api/agent/client-events") {
+      seen.push({ method: req.method, url: req.url, body: raw ? JSON.parse(raw) : null });
+    }
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ slug: "ai-map", isPublic: true, url: "https://share.example.test/ai-map-ABCDEFGHIJKL" }));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const env = {
+    ...process.env,
+    LLAMA_API_URL: `http://127.0.0.1:${server.address().port}`,
+    LLAMA_TOKEN: "llc_local_wiki_share_test",
+    LLAMA_NO_TELEMETRY: "1",
+    LLAMA_NO_UPDATE_CHECK: "1",
+  };
+
+  const status = await cli(env, ["wiki", "share", "ai-map"]);
+  assert.equal(status.code, 0, status.stderr);
+  assert.deepEqual(seen.at(-1), { method: "GET", url: "/api/wiki/ai-map/share", body: null });
+
+  const on = await cli(env, ["wiki", "share", "ai-map", "--public", "--password", "hunter22", "--lang", "zh"]);
+  assert.equal(on.code, 0, on.stderr);
+  assert.equal(seen.at(-1).method, "PUT");
+  assert.deepEqual(seen.at(-1).body, { isPublic: true, password: "hunter22", defaultLang: "zh", surface: "cli" });
+
+  const off = await cli(env, ["wiki", "share", "ai-map", "--private", "--remove-password"]);
+  assert.equal(off.code, 0, off.stderr);
+  assert.deepEqual(seen.at(-1).body, { isPublic: false, password: null, surface: "cli" });
+
+  const list = await cli(env, ["wiki", "shares"]);
+  assert.equal(list.code, 0, list.stderr);
+  assert.equal(seen.at(-1).url, "/api/wiki/shares");
+
+  const before = seen.length;
+  for (const bad of [["--public", "--private"], ["--password"], ["--password", "x1234", "--remove-password"], ["--lang", "fr"], ["--expires", "1d"]]) {
+    const result = await cli(env, ["wiki", "share", "ai-map", ...bad]);
+    assert.notEqual(result.code, 0, `expected failure for ${bad.join(" ")}`);
+  }
+  assert.equal(seen.length, before, "invalid flags must not reach the server");
+});

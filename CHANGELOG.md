@@ -6,6 +6,16 @@ this project adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-11-25
+
+### Added
+
+- `llama wiki share <slug> --public|--private [--password <pw>|--remove-password] [--lang en|zh]`,
+  `llama wiki share <slug>` (status) and `llama wiki shares` (list public pages):
+  switch a Wiki page's public link for people outside Llama Ventures, with an
+  optional server-checked password. MCP tool `wiki_share` does the same.
+  Requires Core API 5.57.0.
+
 ## [2.12.0] - 2026-11-18
 
 ### Added

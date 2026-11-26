@@ -92,7 +92,15 @@
     },
     {
       "method": "GET",
+      "path": "/api/wiki/shares"
+    },
+    {
+      "method": "GET",
       "path": "/api/wiki/{slug}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/wiki/{slug}/share"
     },
     {
       "method": "PATCH",
@@ -157,6 +165,10 @@
     {
       "method": "PUT",
       "path": "/api/deal-memory/{dealId}/story"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/wiki/{slug}/share"
     }
   ]
 }
