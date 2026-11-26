@@ -79,7 +79,7 @@ Separate preserved domains:
   llama explain <url-or-object>
   llama deal read <dealId> --artifact <artifactId> [--version N] [--offset N --sha256 HASH] [--limit N] [--output <file>]
   llama wiki read <slug> --format text [--attachment <referenceId>] [--offset N --sha256 HASH] [--output <file>]
-  llama wiki search|read|save|delete|restore
+  llama wiki search|read|save|delete|restore|share|shares
   llama feedback submit --title "..." --body "..." [--experienced-by user|agent|both]
   llama feedback show <id>
   llama feedback resolve <id> --note "What was fixed and verified"
@@ -96,6 +96,17 @@ const HELP_WIKI = `Llama Wiki — publish complete institutional knowledge pages
   llama wiki save <slug> --title "..." --file page.html --content-type html --lang en --sources "url1;url2"
   llama wiki delete <slug> [--lang en|zh]
   llama wiki restore <slug> [--lang en|zh]
+
+Public sharing (for people outside Llama Ventures):
+  llama wiki share <slug>                                  show the page's share status
+  llama wiki share <slug> --public [--password <pw>] [--lang en|zh]
+  llama wiki share <slug> --private                        turn the public link off
+  llama wiki share <slug> --remove-password
+  llama wiki shares                                        list every public page
+
+A public page is live at https://share.llamaventures.vc/<id>: later edits are
+visible outside immediately. Get the user's explicit approval before making a
+page public, and follow contract.wiki_sharing.
 
 Follow the current authenticated contract.wiki_publishing guidance. New
 publications default to complete self-contained HTML. Preserve the report's
@@ -617,7 +628,38 @@ async function handleWiki(action, rest) {
     }
     return;
   }
-  throw new Error("Wiki actions: search, read, save, delete, restore.");
+  if (action === "shares") {
+    // @core-api-operation GET /api/wiki/shares
+    print(await request("GET", "/api/wiki/shares"));
+    return;
+  }
+  if (action === "share") {
+    const usage = "Usage: llama wiki share <slug> [--public|--private] [--password <pw>|--remove-password] [--lang en|zh]";
+    if (!slug) throw new Error(usage);
+    const allowed = ["public", "private", "password", "remove-password", "lang"];
+    const unknown = Object.keys(flags).filter((key) => !allowed.includes(key));
+    if (unknown.length) throw new Error(`Unknown flag(s): ${unknown.map((key) => `--${key}`).join(", ")}. ${usage}`);
+    if (flags.public && flags.private) throw new Error("Use either --public or --private, not both.");
+    if (flags.password !== undefined && flags["remove-password"]) throw new Error("Use either --password or --remove-password, not both.");
+    if (flags.password === true) throw new Error("--password needs a value.");
+    if (flags.lang !== undefined && flags.lang !== "en" && flags.lang !== "zh") throw new Error("--lang must be en or zh.");
+    const change = {};
+    if (flags.public) change.isPublic = true;
+    if (flags.private) change.isPublic = false;
+    if (typeof flags.password === "string") change.password = flags.password;
+    if (flags["remove-password"]) change.password = null;
+    if (flags.lang) change.defaultLang = flags.lang;
+    const path = `/api/wiki/${encodeURIComponent(slug)}/share`;
+    if (Object.keys(change).length === 0) {
+      // @core-api-operation GET /api/wiki/{slug}/share
+      print(await request("GET", path));
+    } else {
+      // @core-api-operation PUT /api/wiki/{slug}/share
+      print(await request("PUT", path, { ...change, surface: "cli" }));
+    }
+    return;
+  }
+  throw new Error("Wiki actions: search, read, save, delete, restore, share, shares.");
 }
 
 async function main() {
